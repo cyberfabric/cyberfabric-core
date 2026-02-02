@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.response.success.v1~",
+  "title": "SuccessResponse",
+  "description": "Generic success response wrapper for completed requests",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Request identifier this response corresponds to"
+    },
+    "result": {
+      "type": "object",
+      "description": "Action-specific result data",
+      "additionalProperties": true
+    }
+  },
+  "required": ["request_id", "result"],
+  "additionalProperties": false
+}

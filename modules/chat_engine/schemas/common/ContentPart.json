@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.content_part.v1~",
+  "title": "ContentPart",
+  "description": "Polymorphic content part that can be text, code, image, audio, video, or document",
+  "oneOf": [
+    { "$ref": "./TextContent.json" },
+    { "$ref": "./CodeContent.json" },
+    { "$ref": "./ImageContent.json" },
+    { "$ref": "./AudioContent.json" },
+    { "$ref": "./VideoContent.json" },
+    { "$ref": "./DocumentContent.json" }
+  ],
+  "discriminator": {
+    "propertyName": "type"
+  }
+}

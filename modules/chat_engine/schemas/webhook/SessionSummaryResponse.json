@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_summary_response.v1~",
+  "title": "SessionSummaryResponse",
+  "description": "Webhook response with generated session summary",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Generated session summary text"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Summary metadata",
+      "additionalProperties": true
+    }
+  },
+  "required": ["summary"],
+  "additionalProperties": false
+}

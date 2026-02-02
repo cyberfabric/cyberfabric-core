@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.push.session_updated_event.v1~",
+  "title": "SessionUpdatedEvent",
+  "description": "Server push event when session data is updated",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Updated session identifier"
+    },
+    "updates": {
+      "type": "object",
+      "description": "Fields that were updated",
+      "additionalProperties": true
+    }
+  },
+  "required": ["session_id", "updates"],
+  "additionalProperties": false
+}

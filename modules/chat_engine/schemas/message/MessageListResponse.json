@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.list_response.v1~",
+  "title": "MessageListResponse",
+  "description": "Response with list of messages in a session",
+  "type": "object",
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "description": "List of messages"
+    }
+  },
+  "required": ["messages"],
+  "additionalProperties": false
+}

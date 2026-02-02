@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.error_code.v1~",
+  "title": "ErrorCode",
+  "description": "Error codes used throughout the Chat Engine API",
+  "type": "string",
+  "enum": [
+    "AUTH_REQUIRED",
+    "SESSION_NOT_FOUND",
+    "MESSAGE_NOT_FOUND",
+    "INVALID_REQUEST",
+    "BACKEND_TIMEOUT",
+    "BACKEND_ERROR",
+    "RATE_LIMIT_EXCEEDED",
+    "INTERNAL_ERROR"
+  ]
+}

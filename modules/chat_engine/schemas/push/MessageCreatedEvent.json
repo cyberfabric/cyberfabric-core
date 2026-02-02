@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.push.message_created_event.v1~",
+  "title": "MessageCreatedEvent",
+  "description": "Server push event when a new message is created (e.g., from another client)",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "message": {
+      "$ref": "../common/Message.json",
+      "description": "The newly created message"
+    }
+  },
+  "required": ["session_id", "message"],
+  "additionalProperties": false
+}

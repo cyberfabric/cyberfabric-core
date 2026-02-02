@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.export_response.v1~",
+  "title": "SessionExportResponse",
+  "description": "Response with download URL for exported session data",
+  "type": "object",
+  "properties": {
+    "download_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "URL to download the exported file"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Expiration timestamp for the download URL",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["download_url", "expires_at"],
+  "additionalProperties": false
+}

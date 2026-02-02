@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.search_response.v1~",
+  "title": "SessionSearchResponse",
+  "description": "Response with search results within a session",
+  "type": "object",
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": { "$ref": "../common/SearchResult.json" },
+      "description": "Search results matching the query"
+    }
+  },
+  "required": ["results"],
+  "additionalProperties": false
+}

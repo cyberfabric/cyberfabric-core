@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.capability.v1~",
+  "title": "Capability",
+  "description": "A capability provided by a session type backend (e.g., web_search, image_generation)",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique capability identifier",
+      "examples": ["web_search", "image_generation", "code_execution"]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable capability name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed capability description"
+    },
+    "enabled_by_default": {
+      "type": "boolean",
+      "description": "Whether this capability is enabled by default"
+    }
+  },
+  "required": ["id", "name", "enabled_by_default"],
+  "additionalProperties": false
+}

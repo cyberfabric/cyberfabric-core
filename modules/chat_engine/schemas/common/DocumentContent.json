@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.document_content.v1~",
+  "title": "DocumentContent",
+  "description": "Document content part in a message",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "document",
+      "description": "Content type discriminator"
+    },
+    "document_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "URL to the document file"
+    },
+    "mime_type": {
+      "type": "string",
+      "description": "MIME type of the document",
+      "examples": ["application/pdf", "application/msword", "text/plain"]
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original filename of the document"
+    }
+  },
+  "required": ["type", "document_url"],
+  "additionalProperties": false
+}

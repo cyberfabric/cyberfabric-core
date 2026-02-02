@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.message_recreate_response.v1~",
+  "title": "MessageRecreateResponse",
+  "description": "Webhook response for message.recreate event with regenerated message",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Regenerated message identifier"
+    },
+    "role": {
+      "$ref": "../common/Role.json"
+    },
+    "content": {
+      "type": "array",
+      "items": { "$ref": "../common/ContentPart.json" },
+      "minItems": 1,
+      "description": "Regenerated message content parts"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Message metadata",
+      "properties": {
+        "usage": {
+          "oneOf": [
+            { "$ref": "../common/Usage.json" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["message_id", "role", "content"],
+  "additionalProperties": false
+}

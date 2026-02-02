@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.delete_response.v1~",
+  "title": "SessionDeleteResponse",
+  "description": "Response after deleting a session",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "boolean",
+      "const": true,
+      "description": "Confirmation that session was deleted"
+    }
+  },
+  "required": ["deleted"],
+  "additionalProperties": false
+}

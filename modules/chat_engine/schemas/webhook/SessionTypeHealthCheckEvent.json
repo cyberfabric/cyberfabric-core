@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_type_health_check_event.v1~",
+  "title": "SessionTypeHealthCheckEvent",
+  "description": "Webhook event sent to check session type backend health",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session_type.health_check",
+      "description": "Event type identifier"
+    },
+    "session_type_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session type identifier to check"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_type_id", "timestamp"],
+  "additionalProperties": false
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.get_variants_request.v1~",
+  "title": "MessageGetVariantsRequest",
+  "description": "Request to retrieve all variant messages at a conversation branch point",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier to get variants for"
+    }
+  },
+  "required": ["message_id"],
+  "additionalProperties": false
+}

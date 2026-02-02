@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.streaming.chunk_event.v1~",
+  "title": "StreamingChunkEvent",
+  "description": "Event emitted for each chunk of streaming message content",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Request identifier for this streaming operation"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier being generated"
+    },
+    "chunk": {
+      "$ref": "../common/ContentPart.json",
+      "description": "Content chunk (can be text, code, or other content types)"
+    }
+  },
+  "required": ["request_id", "message_id", "chunk"],
+  "additionalProperties": false
+}

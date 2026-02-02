@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.send_request.v1~",
+  "title": "MessageSendRequest",
+  "description": "Request to send a new message in a session (returns streaming response)",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "content": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Simple text content"
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "../common/ContentPart.json" },
+          "minItems": 1,
+          "description": "Multipart content"
+        }
+      ]
+    },
+    "file_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https?://"
+      },
+      "description": "Attached file URLs"
+    },
+    "parent_message_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Parent message for branching conversations"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "List of capability IDs to enable for this message"
+    }
+  },
+  "required": ["session_id", "content"],
+  "additionalProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.core.request_payload.v1~",
+  "title": "RequestPayload",
+  "description": "Base payload structure for WebSocket client requests",
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Action to perform (e.g., 'session.create', 'message.send')",
+      "examples": [
+        "session.create",
+        "session.get",
+        "message.send",
+        "message.list"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this request (for matching responses)"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Action-specific payload data",
+      "additionalProperties": true
+    }
+  },
+  "required": ["action", "request_id", "payload"],
+  "additionalProperties": false
+}

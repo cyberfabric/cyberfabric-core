@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.text_content.v1~",
+  "title": "TextContent",
+  "description": "Text content part in a message",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "text",
+      "description": "Content type discriminator"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Text content"
+    }
+  },
+  "required": ["type", "text"],
+  "additionalProperties": false
+}

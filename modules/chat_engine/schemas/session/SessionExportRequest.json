@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.export_request.v1~",
+  "title": "SessionExportRequest",
+  "description": "Request to export session data in a specific format",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier to export"
+    },
+    "format": {
+      "$ref": "../common/ExportFormat.json"
+    },
+    "scope": {
+      "$ref": "../common/ExportScope.json"
+    }
+  },
+  "required": ["session_id", "format", "scope"],
+  "additionalProperties": false
+}

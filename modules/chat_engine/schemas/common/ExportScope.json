@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.export_scope.v1~",
+  "title": "ExportScope",
+  "description": "Scope of data to include in session export",
+  "type": "string",
+  "enum": ["active", "all"]
+}

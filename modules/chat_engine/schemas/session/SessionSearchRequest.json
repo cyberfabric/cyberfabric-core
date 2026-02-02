@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.search_request.v1~",
+  "title": "SessionSearchRequest",
+  "description": "Request to search messages within a specific session",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier to search within"
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Search query string"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum number of results to return"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offset for pagination"
+    }
+  },
+  "required": ["session_id", "query"],
+  "additionalProperties": false
+}

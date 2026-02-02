@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.session_type.v1~",
+  "title": "SessionType",
+  "description": "Session type configuration defining the backend and capabilities",
+  "type": "object",
+  "properties": {
+    "session_type_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Unique session type identifier"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable session type name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the session type"
+    },
+    "webhook_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "Webhook endpoint for this session type"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "./Capability.json" },
+      "description": "Capabilities provided by this session type"
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "description": "Request timeout in seconds"
+    }
+  },
+  "required": ["session_type_id", "name", "webhook_url", "capabilities"],
+  "additionalProperties": false
+}

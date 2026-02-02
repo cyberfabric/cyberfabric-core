@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.get_response.v1~",
+  "title": "SessionGetResponse",
+  "description": "Response containing full session details",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Session owner"
+    },
+    "session_type_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Current session type"
+    },
+    "available_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Available capabilities for this session"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Session metadata",
+      "additionalProperties": true
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Session creation timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["session_id", "client_id", "session_type_id", "available_capabilities", "created_at"],
+  "additionalProperties": false
+}

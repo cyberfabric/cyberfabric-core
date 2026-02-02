@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.sessions_search_request.v1~",
+  "title": "SessionsSearchRequest",
+  "description": "Request to search across all user sessions",
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Search query string"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum number of sessions to return"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Offset for pagination"
+    }
+  },
+  "required": ["query"],
+  "additionalProperties": false
+}

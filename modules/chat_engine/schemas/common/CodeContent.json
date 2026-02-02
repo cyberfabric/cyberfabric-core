@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.code_content.v1~",
+  "title": "CodeContent",
+  "description": "Code content part in a message",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "code",
+      "description": "Content type discriminator"
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Code content"
+    },
+    "language": {
+      "type": "string",
+      "description": "Programming language identifier",
+      "examples": ["python", "javascript", "rust", "go"]
+    }
+  },
+  "required": ["type", "code"],
+  "additionalProperties": false
+}

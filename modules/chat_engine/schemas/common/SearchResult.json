@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.search_result.v1~",
+  "title": "SearchResult",
+  "description": "Search result for a message within a session",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier"
+    },
+    "content": {
+      "type": "string",
+      "description": "Matched content snippet"
+    },
+    "context": {
+      "type": "string",
+      "description": "Surrounding context for the match"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Relevance score (0-1)"
+    }
+  },
+  "required": ["message_id", "content", "context"],
+  "additionalProperties": false
+}

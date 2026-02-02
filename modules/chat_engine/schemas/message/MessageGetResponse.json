@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.get_response.v1~",
+  "title": "MessageGetResponse",
+  "description": "Response with full message details",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier"
+    },
+    "role": {
+      "$ref": "../common/Role.json"
+    },
+    "content": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Simple text content"
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "../common/ContentPart.json" },
+          "minItems": 1,
+          "description": "Multipart content"
+        }
+      ]
+    },
+    "file_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https?://"
+      },
+      "description": "Attached file URLs"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Message metadata",
+      "additionalProperties": true
+    },
+    "variant_info": {
+      "oneOf": [
+        { "$ref": "../common/VariantInfo.json" },
+        { "type": "null" }
+      ],
+      "description": "Variant information if applicable"
+    }
+  },
+  "required": ["message_id", "role", "content"],
+  "additionalProperties": false
+}

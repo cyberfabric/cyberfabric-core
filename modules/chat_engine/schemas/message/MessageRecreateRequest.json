@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.recreate_request.v1~",
+  "title": "MessageRecreateRequest",
+  "description": "Request to regenerate an assistant message (returns streaming response)",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier to recreate"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "List of capability IDs to enable for recreation"
+    }
+  },
+  "required": ["message_id", "enabled_capabilities"],
+  "additionalProperties": false
+}

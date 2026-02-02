@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_created_event.v1~",
+  "title": "SessionCreatedEvent",
+  "description": "Webhook event sent when a new session is created",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session.created",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Newly created session identifier"
+    },
+    "session_type_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session type identifier"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Client identifier who created the session"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_id", "session_type_id", "client_id", "timestamp"],
+  "additionalProperties": false
+}

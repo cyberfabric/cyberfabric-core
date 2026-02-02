@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.get_variants_response.v1~",
+  "title": "MessageGetVariantsResponse",
+  "description": "Response with all variant messages at a branch point",
+  "type": "object",
+  "properties": {
+    "variants": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "minItems": 1,
+      "description": "List of all message variants"
+    },
+    "current_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Index of the currently active variant"
+    }
+  },
+  "required": ["variants", "current_index"],
+  "additionalProperties": false
+}

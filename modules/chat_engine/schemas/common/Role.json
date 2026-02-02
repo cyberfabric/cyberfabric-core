@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.role.v1~",
+  "title": "Role",
+  "description": "Message role indicating the sender type in a conversation",
+  "type": "string",
+  "enum": ["user", "assistant", "system"]
+}

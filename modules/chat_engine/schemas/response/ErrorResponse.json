@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.response.error.v1~",
+  "title": "ErrorResponse",
+  "description": "Generic error response wrapper for failed requests",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Request identifier this response corresponds to"
+    },
+    "error_code": {
+      "$ref": "../common/ErrorCode.json"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable error message"
+    },
+    "details": {
+      "type": "object",
+      "description": "Additional error details",
+      "additionalProperties": true
+    }
+  },
+  "required": ["request_id", "error_code", "message"],
+  "additionalProperties": false
+}

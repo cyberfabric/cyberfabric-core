@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.stop_response.v1~",
+  "title": "MessageStopResponse",
+  "description": "Response after stopping a streaming message",
+  "type": "object",
+  "properties": {
+    "stopped": {
+      "type": "boolean",
+      "const": true,
+      "description": "Confirmation that streaming was stopped"
+    },
+    "partial_message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "ID of the partial message saved before stopping"
+    }
+  },
+  "required": ["stopped", "partial_message_id"],
+  "additionalProperties": false
+}

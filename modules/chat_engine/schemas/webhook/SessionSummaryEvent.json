@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_summary_event.v1~",
+  "title": "SessionSummaryEvent",
+  "description": "Webhook event sent to request session summarization",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session.summary",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier to summarize"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Capabilities enabled for summarization"
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "description": "Session message history"
+    },
+    "summarization_settings": {
+      "oneOf": [
+        { "$ref": "../common/SummarizationSettings.json" },
+        { "type": "null" }
+      ],
+      "description": "Optional summarization settings"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_id", "history", "timestamp"],
+  "additionalProperties": false
+}

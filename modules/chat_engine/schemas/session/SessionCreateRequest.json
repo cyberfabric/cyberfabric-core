@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.create_request.v1~",
+  "title": "SessionCreateRequest",
+  "description": "Request to create a new chat session",
+  "type": "object",
+  "properties": {
+    "session_type_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "ID of the session type to use for this session"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Client identifier who owns this session"
+    }
+  },
+  "required": ["session_type_id", "client_id"],
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.message_recreate_event.v1~",
+  "title": "MessageRecreateEvent",
+  "description": "Webhook event sent when a message regeneration is requested",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "message.recreate",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier to recreate"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Capabilities enabled for recreation"
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "description": "Message history up to the recreation point"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_id", "message_id", "history", "timestamp"],
+  "additionalProperties": false
+}

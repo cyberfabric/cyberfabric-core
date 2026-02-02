@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.message_new_event.v1~",
+  "title": "MessageNewEvent",
+  "description": "Webhook event sent when user sends a new message",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "message.new",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Unique message identifier"
+    },
+    "session_metadata": {
+      "type": "object",
+      "description": "Optional session metadata",
+      "additionalProperties": true
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Capabilities enabled for this message"
+    },
+    "message": {
+      "type": "object",
+      "properties": {
+        "role": { "$ref": "../common/Role.json" },
+        "content": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "items": { "$ref": "../common/ContentPart.json" }
+            }
+          ]
+        },
+        "file_urls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://"
+          }
+        }
+      },
+      "required": ["role", "content"],
+      "additionalProperties": false
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "description": "Previous messages in the session"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_id", "message_id", "message", "history", "timestamp"],
+  "additionalProperties": false
+}

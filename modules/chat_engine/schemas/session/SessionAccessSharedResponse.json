@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.access_shared_response.v1~",
+  "title": "SessionAccessSharedResponse",
+  "description": "Response with shared session data (read-only)",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "messages": {
+      "type": "array",
+      "items": { "$ref": "../common/Message.json" },
+      "description": "Messages in the shared session"
+    },
+    "read_only": {
+      "type": "boolean",
+      "const": true,
+      "description": "Indicates this is a read-only view"
+    }
+  },
+  "required": ["session_id", "messages", "read_only"],
+  "additionalProperties": false
+}

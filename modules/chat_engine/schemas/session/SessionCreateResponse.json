@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.create_response.v1~",
+  "title": "SessionCreateResponse",
+  "description": "Response after creating a new chat session",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Newly created session identifier"
+    },
+    "available_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Capabilities available for this session"
+    }
+  },
+  "required": ["session_id", "available_capabilities"],
+  "additionalProperties": false
+}

@@ -1,0 +1,484 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.api.webhook_protocol.v1~",
+  "title": "Chat Engine Webhook Protocol",
+  "description": "Complete Webhook API protocol specification for Chat Engine. Defines all webhook operations (HTTP POST) between Chat Engine and backend services.",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "chat_engine_webhook",
+      "description": "Protocol identifier"
+    },
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Protocol version"
+    },
+    "transport": {
+      "type": "string",
+      "const": "http",
+      "description": "Transport type (HTTP POST)"
+    },
+    "http_config": {
+      "type": "object",
+      "description": "HTTP protocol configuration",
+      "properties": {
+        "method": {
+          "type": "string",
+          "const": "POST",
+          "description": "HTTP method for all webhook calls"
+        },
+        "content_type": {
+          "type": "string",
+          "const": "application/json",
+          "description": "Request content type"
+        },
+        "accept": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["application/json", "text/event-stream"]
+          },
+          "description": "Accepted response content types (JSON for standard, SSE for streaming)"
+        }
+      },
+      "required": ["method", "content_type", "accept"]
+    },
+    "operations": {
+      "type": "array",
+      "description": "All webhook operations (event types sent to backends)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "description": "Unique operation identifier"
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Event type value in webhook payload"
+          },
+          "description": {
+            "type": "string",
+            "description": "Operation description"
+          },
+          "request": {
+            "type": "object",
+            "description": "Request specification (sent to webhook backend)",
+            "properties": {
+              "schema": {
+                "type": "string",
+                "description": "Path to request schema (relative $ref path)"
+              }
+            },
+            "required": ["schema"]
+          },
+          "response": {
+            "type": "object",
+            "description": "Response specification (received from webhook backend)",
+            "properties": {
+              "streaming": {
+                "type": "boolean",
+                "description": "Whether backend can stream the response"
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Whether response is required or fire-and-forget"
+              },
+              "schema": {
+                "type": "string",
+                "description": "Path to response schema (if response is required)"
+              }
+            },
+            "required": ["streaming", "required"]
+          },
+          "timeout": {
+            "type": "object",
+            "description": "Timeout configuration",
+            "properties": {
+              "default_seconds": {
+                "type": "integer",
+                "description": "Default timeout in seconds",
+                "minimum": 5,
+                "maximum": 300
+              },
+              "configurable": {
+                "type": "boolean",
+                "description": "Whether timeout can be configured per session type"
+              },
+              "max_seconds": {
+                "type": "integer",
+                "description": "Maximum allowed timeout if configurable",
+                "minimum": 5,
+                "maximum": 300
+              }
+            },
+            "required": ["default_seconds", "configurable"]
+          },
+          "error_handling": {
+            "type": "object",
+            "description": "Error handling configuration",
+            "properties": {
+              "retry": {
+                "type": "boolean",
+                "description": "Whether failed requests should be retried"
+              },
+              "circuit_breaker": {
+                "type": "boolean",
+                "description": "Whether circuit breaker is enabled for this operation"
+              }
+            },
+            "required": ["retry", "circuit_breaker"]
+          }
+        },
+        "required": ["operation_id", "event_type", "description", "request", "response", "timeout", "error_handling"]
+      },
+      "minItems": 7,
+      "contains": [
+        {
+          "properties": {
+            "operation_id": {"const": "session_created"},
+            "event_type": {"const": "session.created"},
+            "description": {"const": "Notify backend when a new session is created"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/SessionCreatedEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": false},
+                "required": {"const": true},
+                "schema": {"const": "../schemas/webhook/SessionCreatedResponse.json"}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 30},
+                "configurable": {"const": true},
+                "max_seconds": {"const": 60}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": true},
+                "circuit_breaker": {"const": true}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "message_new"},
+            "event_type": {"const": "message.new"},
+            "description": {"const": "Send user message to backend for processing"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/MessageNewEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": true},
+                "required": {"const": true},
+                "schema": {"const": "../schemas/webhook/MessageNewResponse.json"}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 120},
+                "configurable": {"const": true},
+                "max_seconds": {"const": 300}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": false},
+                "circuit_breaker": {"const": true}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "message_recreate"},
+            "event_type": {"const": "message.recreate"},
+            "description": {"const": "Request backend to regenerate a message"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/MessageRecreateEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": true},
+                "required": {"const": true},
+                "schema": {"const": "../schemas/webhook/MessageRecreateResponse.json"}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 120},
+                "configurable": {"const": true},
+                "max_seconds": {"const": 300}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": false},
+                "circuit_breaker": {"const": true}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "message_aborted"},
+            "event_type": {"const": "message.aborted"},
+            "description": {"const": "Notify backend that message streaming was cancelled"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/MessageAbortedEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": false},
+                "required": {"const": false}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 10},
+                "configurable": {"const": false}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": false},
+                "circuit_breaker": {"const": false}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "session_deleted"},
+            "event_type": {"const": "session.deleted"},
+            "description": {"const": "Notify backend that session was deleted"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/SessionDeletedEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": false},
+                "required": {"const": false}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 10},
+                "configurable": {"const": false}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": false},
+                "circuit_breaker": {"const": false}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "session_summary"},
+            "event_type": {"const": "session.summary"},
+            "description": {"const": "Request backend to generate session summary"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/SessionSummaryEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": true},
+                "required": {"const": true},
+                "schema": {"const": "../schemas/webhook/SessionSummaryResponse.json"}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 60},
+                "configurable": {"const": true},
+                "max_seconds": {"const": 120}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": false},
+                "circuit_breaker": {"const": true}
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation_id": {"const": "session_type_health_check"},
+            "event_type": {"const": "session_type.health_check"},
+            "description": {"const": "Check backend health and capabilities"},
+            "request": {
+              "properties": {
+                "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckEvent.json"}
+              }
+            },
+            "response": {
+              "properties": {
+                "streaming": {"const": false},
+                "required": {"const": true},
+                "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckResponse.json"}
+              }
+            },
+            "timeout": {
+              "properties": {
+                "default_seconds": {"const": 5},
+                "configurable": {"const": false}
+              }
+            },
+            "error_handling": {
+              "properties": {
+                "retry": {"const": true},
+                "circuit_breaker": {"const": true}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "streaming_protocol": {
+      "type": "object",
+      "description": "Server-Sent Events (SSE) streaming for webhook responses",
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "text/event-stream",
+          "description": "Content-Type for streaming responses"
+        },
+        "event_format": {
+          "type": "object",
+          "description": "SSE event format",
+          "properties": {
+            "event_field": {
+              "type": "string",
+              "const": "event: <event_type>",
+              "description": "SSE event type field"
+            },
+            "data_field": {
+              "type": "string",
+              "const": "data: <json_payload>",
+              "description": "SSE data field (JSON payload)"
+            }
+          }
+        },
+        "event_types": {
+          "type": "array",
+          "description": "Event types in streaming responses",
+          "items": {
+            "type": "string",
+            "enum": ["chunk", "complete", "error"]
+          },
+          "const": ["chunk", "complete", "error"]
+        },
+        "chunk_structure": {
+          "type": "object",
+          "description": "Structure of content chunks in streaming",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["text", "code", "image", "audio", "video", "document"],
+              "description": "Content type"
+            },
+            "content": {
+              "type": "string",
+              "description": "Content payload (varies by type)"
+            }
+          }
+        }
+      },
+      "required": ["format", "event_format", "event_types", "chunk_structure"]
+    },
+    "resilience": {
+      "type": "object",
+      "description": "Resilience patterns for webhook calls",
+      "properties": {
+        "retry_policy": {
+          "type": "object",
+          "description": "Retry configuration for failed webhook calls",
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "const": 3,
+              "description": "Maximum retry attempts"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "const": "exponential",
+              "description": "Backoff strategy (exponential with jitter)"
+            },
+            "initial_delay_ms": {
+              "type": "integer",
+              "const": 100,
+              "description": "Initial retry delay in milliseconds"
+            },
+            "max_delay_ms": {
+              "type": "integer",
+              "const": 5000,
+              "description": "Maximum retry delay in milliseconds"
+            }
+          }
+        },
+        "circuit_breaker": {
+          "type": "object",
+          "description": "Circuit breaker configuration",
+          "properties": {
+            "failure_threshold": {
+              "type": "integer",
+              "const": 5,
+              "description": "Number of failures before opening circuit"
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "const": 60000,
+              "description": "Time circuit stays open (milliseconds)"
+            },
+            "half_open_max_calls": {
+              "type": "integer",
+              "const": 3,
+              "description": "Test calls allowed in half-open state"
+            }
+          }
+        },
+        "timeout_handling": {
+          "type": "object",
+          "description": "How timeouts are handled",
+          "properties": {
+            "behavior": {
+              "type": "string",
+              "const": "abort_and_notify",
+              "description": "Timeout behavior (abort request and send error to client)"
+            },
+            "partial_content": {
+              "type": "boolean",
+              "const": true,
+              "description": "Whether partial streaming content is preserved on timeout"
+            }
+          }
+        }
+      },
+      "required": ["retry_policy", "circuit_breaker", "timeout_handling"]
+    }
+  },
+  "required": ["protocol", "version", "transport", "http_config", "operations", "streaming_protocol", "resilience"]
+}

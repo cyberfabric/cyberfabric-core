@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.variant_info.v1~",
+  "title": "VariantInfo",
+  "description": "Information about message variants in a conversation tree",
+  "type": "object",
+  "properties": {
+    "variant_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Index of this message among its variants (0-based)"
+    },
+    "total_variants": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of variants at this position"
+    },
+    "parent_message_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Parent message ID for this variant group"
+    }
+  },
+  "required": ["variant_index", "total_variants"],
+  "additionalProperties": false
+}

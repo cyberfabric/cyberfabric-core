@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_created_response.v1~",
+  "title": "SessionCreatedResponse",
+  "description": "Webhook response for session.created event",
+  "type": "object",
+  "properties": {
+    "available_capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Capabilities this backend provides for the session"
+    }
+  },
+  "required": ["available_capabilities"],
+  "additionalProperties": false
+}

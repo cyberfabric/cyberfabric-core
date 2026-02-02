@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.session_type_health_check_response.v1~",
+  "title": "SessionTypeHealthCheckResponse",
+  "description": "Webhook response with session type backend health status",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "unhealthy"],
+      "description": "Backend health status"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Backend version",
+      "examples": ["1.0.0"]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "../common/Capability.json" },
+      "description": "Current capabilities available"
+    }
+  },
+  "required": ["status", "version", "capabilities"],
+  "additionalProperties": false
+}

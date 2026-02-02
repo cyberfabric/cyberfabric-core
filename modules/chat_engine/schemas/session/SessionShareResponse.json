@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.share_response.v1~",
+  "title": "SessionShareResponse",
+  "description": "Response with share token and URL for accessing the session",
+  "type": "object",
+  "properties": {
+    "share_token": {
+      "type": "string",
+      "minLength": 32,
+      "description": "Unique token for accessing the shared session"
+    },
+    "share_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "Complete URL for accessing the shared session"
+    }
+  },
+  "required": ["share_token", "share_url"],
+  "additionalProperties": false
+}

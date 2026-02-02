@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.session.summarize_request.v1~",
+  "title": "SessionSummarizeRequest",
+  "description": "Request to generate a summary of session content (returns streaming response)",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier to summarize"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "List of capability IDs to enable for summarization"
+    }
+  },
+  "required": ["session_id", "enabled_capabilities"],
+  "additionalProperties": false
+}
