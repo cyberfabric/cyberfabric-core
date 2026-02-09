@@ -28,6 +28,9 @@ def run_cmd_allow_fail(cmd, env=None, cwd=None):
 def step(msg):
     print(f"\n== {msg}")
 
+def is_windows():
+    """Check if running on Windows"""
+    return sys.platform == "win32" or os.name == "nt"
 
 def cmd_fmt(args):
     step("Running cargo fmt")
@@ -269,6 +272,30 @@ def check_pytest():
 def kill_existing_server(port):
     """Kill any existing server process on the specified port"""
     try:
+        if is_windows():
+            # Windows: Use netstat to find PID and taskkill to terminate
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                port_str = str(port)
+                for line in result.stdout.splitlines():
+                    if "LISTENING" not in line:
+                        continue
+                    parts = line.split()
+                    if len(parts) < 5:
+                        continue
+                    local_addr = parts[1]
+                    local_port = local_addr.rsplit(":", 1)[-1]
+                    if local_port != port_str:
+                        continue
+                    pid = parts[-1]
+                    print(f"Killing existing server process {pid} on port {port}")
+                    run_cmd_allow_fail(["taskkill", "/F", "/PID", pid])
+                    time.sleep(1)  # Give it time to die
+            return  # Windows handling complete
         # Find process using the port
         if sys.platform == "darwin":  # macOS
             result = run_cmd_allow_fail(["lsof", "-ti", f":{port}"])
@@ -360,16 +387,19 @@ def cmd_e2e(args):
 
             # Start server in background with logs redirected to files
             server_cmd = [
-                "cargo",
-                "run",
-                "--bin",
-                "hyperspot-server",
-                "--features",
-                "users-info-example,tenant-resolver-example",
-                "--",
-                "--config",
-                "config/e2e-local.yaml",
+                    "cargo",
+                    "run",
+                    "--bin",
+                    "hyperspot-server",
+                    "--features",
+                    "users-info-example,tenant-resolver-example",
+                    "--",
+                    "--config",
             ]
+            if is_windows():
+                server_cmd.append("config/e2e-local-windows.yaml")
+            else:
+                server_cmd.append("config/e2e-local.yaml")
 
             # Redirect stdout and stderr to log files
             server_log_file = os.path.join(

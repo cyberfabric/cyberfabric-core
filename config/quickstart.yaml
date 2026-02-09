@@ -180,7 +180,7 @@ modules:
       audit_base_url: "http://localhost:9090"
       notifications_base_url: "http://localhost:9091"
 
-  tenant-resolver:
+  tenant-resolver-gw:
     config:
       vendor: "Fabrikam"
   contoso-tr-plugin:

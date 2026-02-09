@@ -74,15 +74,8 @@ logging:
     file: "logs/sql.log"
     file_level: debug
   api-gateway:
-    console_level: info
-    file: "logs/api.log"
-    file_level: debug
-    max_age_days: 28
-    max_backups: 3
-    max_size_mb: 100
-  calculator:
     console_level: debug
-    file: "logs/calculator-oop.log"
+    file: "logs/api.log"
     file_level: debug
     max_age_days: 28
     max_backups: 3
@@ -92,8 +85,9 @@ logging:
 # Per-module configurations using new structure
 modules:
   api-gateway:
+    # No database needed for api-gateway
     config:
-      bind_addr: "0.0.0.0:8087"
+      bind_addr: "127.0.0.1:8087"
       enable_docs: true
       cors_enabled: false
       
@@ -102,8 +96,15 @@ modules:
         title: "HyperSpot API"
         version: "0.1.0"
         description: "HyperSpot Server API Documentation"
-      
+      defaults:
+        body_limit_bytes: 64000000
+        rate_limit:
+          rps: 1000
+          burst: 200
+          in_flight: 64
+
       # Authentication Configuration
+      # For local development, auth is disabled (uses root context)
       auth_disabled: true
       require_auth_by_default: true
 
@@ -113,26 +114,16 @@ modules:
 
   grpc-hub:
     config:
-      # Use ephemeral port; OoP modules receive the actual bound address from master host
-      listen_addr: "127.0.0.1:0"
+      # Fixed port for Windows; OoP modules receive the actual bound address from master host
+      listen_addr: "127.0.0.1:50051"
 
-  calculator:
-    runtime:
-      type: oop
-      execution:
-        executable_path: "calculator-oop.exe"
-        # CLI arguments passed to OoP module. Use --config to pass module's own config file:
-        # args: ["--config", "config/oop-example.yaml"]
-        # The local config file is used to:
-        #   - Configure system modules for OoP process (e.g., grpc_hub.listen_addr)
-        #   - Override settings from master (MODKIT_MODULE_CONFIG)
-        #   - Run in standalone mode (without master host)
-        args: [ "--config", "./config/oop-example.yaml" ]
-        working_directory: "."
-        environment: { }
+  simple-user-settings:
+    # Module-specific database configuration
+    database:
+      server: "sqlite_users"
+      file: "settings.db"
     config:
-      some_setting: "value"
-
+      max_field_length: 100
 
   users-info:
     # Module-specific database configuration
@@ -166,7 +157,7 @@ modules:
       default_page_size: 5
       max_page_size: 100
 
-  tenant-resolver:
+  tenant-resolver-gw:
     config:
       vendor: "Fabrikam"
   contoso-tr-plugin:
@@ -179,36 +170,37 @@ modules:
       tenants:
         # Root tenant (company level)
         - id: "00000000000000000000000000000001"
+          parent_id: null
           status: ACTIVE
           is_accessible_by_parent: true
 
         # Division 1: Engineering
-        - id: "00000000000000000000000000000010"
+        - id: "00000000000000000000000000000002"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
 
         # Division 2: Sales
-        - id: "00000000000000000000000000000011"
+        - id: "00000000000000000000000000000005"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
 
-        # Department under Engineering: Backend
-        - id: "00000000000000000000000000000100"
-          parent_id: "00000000000000000000000000000010"
-          status: ACTIVE
-          is_accessible_by_parent: true
-
         # Department under Engineering: Frontend (soft-deleted, not accessible)
-        - id: "00000000000000000000000000000101"
-          parent_id: "00000000000000000000000000000010"
+        - id: "00000000000000000000000000000003"
+          parent_id: "00000000000000000000000000000002"
           status: SOFT_DELETED
           is_accessible_by_parent: false
 
+        # Department under Engineering: Backend
+        - id: "00000000000000000000000000000004"
+          parent_id: "00000000000000000000000000000002"
+          status: ACTIVE
+          is_accessible_by_parent: true
+
         # Department under Sales: Enterprise
-        - id: "00000000000000000000000000000110"
-          parent_id: "00000000000000000000000000000011"
+        - id: "00000000000000000000000000000006"
+          parent_id: "00000000000000000000000000000005"
           status: ACTIVE
           is_accessible_by_parent: true
 
@@ -235,7 +227,7 @@ tracing:
 
   # Sampling configuration
   sampler:
-    parent_based_ratio: # parentbased_always_on | parent_based_ratio | always_on | always_off
+    parent_based_ratio: # parent_based_always_on | parent_based_ratio | always_on | always_off
       ratio: 1.0  # Sample 20% of traces (only used with ratio strategies)
 
   # Propagation configuration
