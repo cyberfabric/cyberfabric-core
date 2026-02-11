@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.error_details.v1~",
+  "title": "ErrorDetails",
+  "description": "Safe error details for client consumption",
+  "type": "object",
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Trace identifier for support correlation",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "validation_errors": {
+      "type": "array",
+      "description": "Field-level validation errors (for INVALID_REQUEST)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "Field path (e.g., 'content', 'session_type_id')"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable validation message"
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable validation code"
+          }
+        },
+        "required": ["field", "message"],
+        "additionalProperties": false
+      }
+    },
+    "retry_after_seconds": {
+      "type": "integer",
+      "description": "Seconds to wait before retrying (for RATE_LIMIT_EXCEEDED)",
+      "minimum": 0
+    },
+    "limit_type": {
+      "type": "string",
+      "description": "Type of rate limit (for RATE_LIMIT_EXCEEDED)",
+      "enum": ["per_second", "per_minute", "per_hour", "per_day", "concurrent"]
+    },
+    "quota_reset_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When quota resets (for RATE_LIMIT_EXCEEDED)"
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "description": "Configured timeout in milliseconds (for BACKEND_TIMEOUT)",
+      "minimum": 0
+    },
+    "resource_id": {
+      "type": "string",
+      "description": "Requested resource identifier (for SESSION_NOT_FOUND, MESSAGE_NOT_FOUND)",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  },
+  "additionalProperties": false
+}

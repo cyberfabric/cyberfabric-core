@@ -975,6 +975,7 @@
       },
       "Error": {
         "type": "object",
+        "required": ["error_code", "message"],
         "properties": {
           "error_code": {
             "type": "string",
@@ -993,7 +994,7 @@
             "type": "string"
           },
           "details": {
-            "type": "object"
+            "$ref": "../schemas/common/ErrorDetails.json"
           }
         }
       }

@@ -59,4 +59,4 @@ Chosen option: "Per-session-type timeout in database", because it enables backen
 
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - HTTP timeout for backend requests
-* ADR-0007 (Circuit Breaker) - Timeout failures contribute to circuit breaker state
+* ADR-0011 (Circuit Breaker per Webhook Backend) - Timeout failures contribute to circuit breaker state

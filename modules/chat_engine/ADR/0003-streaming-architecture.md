@@ -63,5 +63,5 @@ Chosen option: "Streaming-first with HTTP/WebSocket", because it minimizes time-
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - HTTP streaming from backends via chunked encoding
 * ADR-0007 (WebSocket Client Protocol) - WebSocket for client-side streaming
-* ADR-0007 (Streaming Cancellation) - Client cancellation mechanism
-* ADR-0007 (Backpressure Handling) - Buffer management and flow control strategy
+* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation mechanism
+* ADR-0012 (Streaming Backpressure with Buffer Limits) - Buffer management and flow control strategy

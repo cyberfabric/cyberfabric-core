@@ -62,5 +62,5 @@ Chosen option: "PostgreSQL tsvector with GIN indexes", because it provides built
 * WebSocket session.search and sessions.search events
 
 **Related ADRs**:
-* ADR-0007 (Database Architecture) - PostgreSQL full-text search features
-* ADR-0007 (Session Metadata) - Search includes metadata fields (title, tags)
+* ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL full-text search features
+* ADR-0020 (Session Metadata JSONB for Extensibility) - Search includes metadata fields (title, tags)

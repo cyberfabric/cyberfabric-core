@@ -59,6 +59,6 @@ Chosen option: "Immutable tree with parent_message_id", because it provides natu
 * `fdd-chat-engine-design-context-tree-traversal` - Implementation details for traversal queries
 
 **Related ADRs**:
-* ADR-0007 (Variant Management) - Depends on this tree structure
-* ADR-0007 (Recreation vs New Branch) - Uses parent_message_id to create variants
-* ADR-0007 (Conversation Branching) - Leverages tree structure for branching
+* ADR-0014 (Message Variants with Index and Active Flag) - Depends on this tree structure
+* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Uses parent_message_id to create variants
+* ADR-0017 (Conversation Branching from Any Historical Message) - Leverages tree structure for branching

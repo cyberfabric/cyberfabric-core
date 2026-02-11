@@ -64,5 +64,5 @@ Chosen option: "Parent reference with history truncation", because it preserves 
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Tree structure enables branching
-* ADR-0007 (Variant Management) - Variants vs branches distinction
-* ADR-0007 (Recreation vs New Branch) - Branching creates children (not variants)
+* ADR-0014 (Message Variants with Index and Active Flag) - Variants vs branches distinction
+* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Branching creates children (not variants)

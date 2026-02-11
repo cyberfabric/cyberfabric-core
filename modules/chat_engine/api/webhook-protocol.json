@@ -135,222 +135,236 @@
         "required": ["operation_id", "event_type", "description", "request", "response", "timeout", "error_handling"]
       },
       "minItems": 7,
-      "contains": [
+      "allOf": [
         {
-          "properties": {
-            "operation_id": {"const": "session_created"},
-            "event_type": {"const": "session.created"},
-            "description": {"const": "Notify backend when a new session is created"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/SessionCreatedEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": false},
-                "required": {"const": true},
-                "schema": {"const": "../schemas/webhook/SessionCreatedResponse.json"}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 30},
-                "configurable": {"const": true},
-                "max_seconds": {"const": 60}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": true},
-                "circuit_breaker": {"const": true}
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_created"},
+              "event_type": {"const": "session.created"},
+              "description": {"const": "Notify backend when a new session is created"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionCreatedEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": true},
+                  "schema": {"const": "../schemas/webhook/SessionCreatedResponse.json"}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 30},
+                  "configurable": {"const": true},
+                  "max_seconds": {"const": 60}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": true},
+                  "circuit_breaker": {"const": true}
+                }
               }
             }
           }
         },
         {
-          "properties": {
-            "operation_id": {"const": "message_new"},
-            "event_type": {"const": "message.new"},
-            "description": {"const": "Send user message to backend for processing"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/MessageNewEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": true},
-                "required": {"const": true},
-                "schema": {"const": "../schemas/webhook/MessageNewResponse.json"}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 120},
-                "configurable": {"const": true},
-                "max_seconds": {"const": 300}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": false},
-                "circuit_breaker": {"const": true}
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "operation_id": {"const": "message_recreate"},
-            "event_type": {"const": "message.recreate"},
-            "description": {"const": "Request backend to regenerate a message"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/MessageRecreateEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": true},
-                "required": {"const": true},
-                "schema": {"const": "../schemas/webhook/MessageRecreateResponse.json"}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 120},
-                "configurable": {"const": true},
-                "max_seconds": {"const": 300}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": false},
-                "circuit_breaker": {"const": true}
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "message_new"},
+              "event_type": {"const": "message.new"},
+              "description": {"const": "Send user message to backend for processing"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/MessageNewEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": true},
+                  "required": {"const": true},
+                  "schema": {"const": "../schemas/webhook/MessageNewResponse.json"}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 120},
+                  "configurable": {"const": true},
+                  "max_seconds": {"const": 300}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": true}
+                }
               }
             }
           }
         },
         {
-          "properties": {
-            "operation_id": {"const": "message_aborted"},
-            "event_type": {"const": "message.aborted"},
-            "description": {"const": "Notify backend that message streaming was cancelled"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/MessageAbortedEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": false},
-                "required": {"const": false}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 10},
-                "configurable": {"const": false}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": false},
-                "circuit_breaker": {"const": false}
-              }
-            }
-          }
-        },
-        {
-          "properties": {
-            "operation_id": {"const": "session_deleted"},
-            "event_type": {"const": "session.deleted"},
-            "description": {"const": "Notify backend that session was deleted"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/SessionDeletedEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": false},
-                "required": {"const": false}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 10},
-                "configurable": {"const": false}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": false},
-                "circuit_breaker": {"const": false}
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "message_recreate"},
+              "event_type": {"const": "message.recreate"},
+              "description": {"const": "Request backend to regenerate a message"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/MessageRecreateEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": true},
+                  "required": {"const": true},
+                  "schema": {"const": "../schemas/webhook/MessageRecreateResponse.json"}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 120},
+                  "configurable": {"const": true},
+                  "max_seconds": {"const": 300}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": true}
+                }
               }
             }
           }
         },
         {
-          "properties": {
-            "operation_id": {"const": "session_summary"},
-            "event_type": {"const": "session.summary"},
-            "description": {"const": "Request backend to generate session summary"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/SessionSummaryEvent.json"}
-              }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": true},
-                "required": {"const": true},
-                "schema": {"const": "../schemas/webhook/SessionSummaryResponse.json"}
-              }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 60},
-                "configurable": {"const": true},
-                "max_seconds": {"const": 120}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": false},
-                "circuit_breaker": {"const": true}
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "message_aborted"},
+              "event_type": {"const": "message.aborted"},
+              "description": {"const": "Notify backend that message streaming was cancelled"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/MessageAbortedEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
               }
             }
           }
         },
         {
-          "properties": {
-            "operation_id": {"const": "session_type_health_check"},
-            "event_type": {"const": "session_type.health_check"},
-            "description": {"const": "Check backend health and capabilities"},
-            "request": {
-              "properties": {
-                "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckEvent.json"}
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_deleted"},
+              "event_type": {"const": "session.deleted"},
+              "description": {"const": "Notify backend that session was deleted"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionDeletedEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
               }
-            },
-            "response": {
-              "properties": {
-                "streaming": {"const": false},
-                "required": {"const": true},
-                "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckResponse.json"}
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_summary"},
+              "event_type": {"const": "session.summary"},
+              "description": {"const": "Request backend to generate session summary"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionSummaryEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": true},
+                  "required": {"const": true},
+                  "schema": {"const": "../schemas/webhook/SessionSummaryResponse.json"}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 60},
+                  "configurable": {"const": true},
+                  "max_seconds": {"const": 120}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": true}
+                }
               }
-            },
-            "timeout": {
-              "properties": {
-                "default_seconds": {"const": 5},
-                "configurable": {"const": false}
-              }
-            },
-            "error_handling": {
-              "properties": {
-                "retry": {"const": true},
-                "circuit_breaker": {"const": true}
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_type_health_check"},
+              "event_type": {"const": "session_type.health_check"},
+              "description": {"const": "Check backend health and capabilities"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": true},
+                  "schema": {"const": "../schemas/webhook/SessionTypeHealthCheckResponse.json"}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 5},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": true},
+                  "circuit_breaker": {"const": true}
+                }
               }
             }
           }

@@ -63,6 +63,6 @@ Chosen option: "HTTP POST with chunked streaming", because it provides simple in
 
 **Related ADRs**:
 * ADR-0003 (Streaming Architecture) - Depends on HTTP streaming from backends
-* ADR-0007 (Webhook Event Types) - Defines event schemas sent via this protocol
-* ADR-0007 (Circuit Breaker) - Resilience pattern for webhook failures
-* ADR-0007 (Timeout Configuration) - Per-backend timeout management
+* ADR-0008 (Webhook Event Schema with Typed Events) - Defines event schemas sent via this protocol
+* ADR-0011 (Circuit Breaker per Webhook Backend) - Resilience pattern for webhook failures
+* ADR-0013 (Per-Session-Type Timeout Configuration) - Per-backend timeout management

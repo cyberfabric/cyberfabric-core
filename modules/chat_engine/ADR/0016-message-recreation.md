@@ -59,6 +59,6 @@ Chosen option: "Recreation = variant (sibling), Branch = child", because it pres
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Tree structure enables both operations
-* ADR-0007 (Variant Management) - Recreation creates variants using variant_index
-* ADR-0007 (Conversation Branching) - Branching creates children in tree
-* ADR-0007 (Webhook Event Types) - Different events for recreation vs branching
+* ADR-0014 (Message Variants with Index and Active Flag) - Recreation creates variants using variant_index
+* ADR-0017 (Conversation Branching from Any Historical Message) - Branching creates children in tree
+* ADR-0008 (Webhook Event Schema with Typed Events) - Different events for recreation vs branching

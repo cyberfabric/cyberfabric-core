@@ -60,5 +60,5 @@ Chosen option: "Circuit breaker per session_type_id", because it isolates backen
 
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - HTTP protocol for backend communication
-* ADR-0007 (Stateless Scaling) - Circuit state per instance (not shared)
-* ADR-0007 (Timeout Configuration) - Timeout settings per session type
+* ADR-0010 (Stateless Horizontal Scaling with Database State) - Circuit state per instance (not shared)
+* ADR-0013 (Per-Session-Type Timeout Configuration) - Timeout settings per session type

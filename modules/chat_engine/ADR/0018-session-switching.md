@@ -63,4 +63,4 @@ Chosen option: "Update session_type_id, route next message to new backend", beca
 **Related ADRs**:
 * ADR-0002 (Capability Model) - New backend returns updated capabilities
 * ADR-0006 (Webhook Protocol) - New backend receives message.new with full history
-* ADR-0007 (Per-Request Capabilities) - Client can enable/disable capabilities per message
+* ADR-0022 (Per-Request Capability Filtering) - Client can enable/disable capabilities per message

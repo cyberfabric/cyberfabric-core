@@ -244,6 +244,7 @@ All Chat Engine instances share a single database cluster. No local caching of s
 - **SessionSearchResult** - Session match (session_id, metadata, matched_messages)
 - **Role** - Enum: user, assistant, system
 - **ErrorCode** - Enum: AUTH_REQUIRED, SESSION_NOT_FOUND, MESSAGE_NOT_FOUND, INVALID_REQUEST, BACKEND_TIMEOUT, BACKEND_ERROR, RATE_LIMIT_EXCEEDED, INTERNAL_ERROR
+- **ErrorDetails** - Safe error details (trace_id, validation_errors, retry_after_seconds, limit_type, quota_reset_at, timeout_ms, resource_id)
 - **ExportFormat** - Enum: json, markdown, txt
 - **ExportScope** - Enum: active, all
 - **SummarizationSettings** - Summary config (enabled, service_url, config)
@@ -893,4 +894,27 @@ Chat Engine never stores file content. Clients upload directly to file storage (
 
 <!-- fdd-id-content -->
 Session type webhook URLs are stored in plaintext in database. Webhook backends must implement their own authentication (API keys, mutual TLS). Chat Engine does not validate webhook responses beyond HTTP status codes. Malicious webhook backends can return arbitrary content. Session type creation should be restricted to admin users only.
+<!-- fdd-id-content -->
+
+#### Context: Error Response Security Pattern
+
+**ID**: `fdd-chat-engine-design-context-error-security`
+
+<!-- fdd-id-content -->
+Error responses use the `ErrorDetails` schema to prevent leaking internal implementation details to clients. The schema enforces `additionalProperties: false` and defines explicit fields for each error scenario:
+
+**Error Code to Details Mapping**:
+- `INVALID_REQUEST` → validation_errors (field-level validation failures)
+- `RATE_LIMIT_EXCEEDED` → retry_after_seconds, limit_type, quota_reset_at
+- `BACKEND_TIMEOUT` → timeout_ms
+- `SESSION_NOT_FOUND` / `MESSAGE_NOT_FOUND` → resource_id (UUID format only)
+- `AUTH_REQUIRED` / `BACKEND_ERROR` / `INTERNAL_ERROR` → trace_id only (for support correlation)
+
+**Security Constraints**:
+- No arbitrary data allowed in error details (prevents stack trace leaks)
+- trace_id limited to alphanumeric characters (no file paths or SQL fragments)
+- resource_id validated as UUID format only
+- Sensitive debugging information (stack traces, database errors, internal paths) must only appear in secure internal logs via `tracing::error!(error = ?e, ...)` infrastructure
+
+This pattern follows RFC 9457 (Problem Details) and ensures compliance with security requirements for user-facing errors while maintaining full debugging capability through internal logging.
 <!-- fdd-id-content -->

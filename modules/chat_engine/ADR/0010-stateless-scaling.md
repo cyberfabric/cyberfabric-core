@@ -61,6 +61,6 @@ Chosen option: "Stateless instances with database state", because it enables sim
 * All components designed as stateless services
 
 **Related ADRs**:
-* ADR-0007 (Database Architecture) - Database provides all persistent state
+* ADR-0010 (Stateless Horizontal Scaling with Database State) - Database provides all persistent state
 * ADR-0007 (WebSocket Client Protocol) - WebSocket connections per instance
-* ADR-0007 (Circuit Breaker) - Circuit breaker state per instance (not shared)
+* ADR-0011 (Circuit Breaker per Webhook Backend) - Circuit breaker state per instance (not shared)

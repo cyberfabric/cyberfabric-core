@@ -60,5 +60,5 @@ Chosen option: "JSONB metadata column", because it enables schema-free extensibi
 * WebSocket session.get returns metadata
 
 **Related ADRs**:
-* ADR-0007 (Database Architecture) - PostgreSQL JSONB support
-* ADR-0007 (Search Strategy) - Full-text search includes metadata fields
+* ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL JSONB support
+* ADR-0023 (PostgreSQL Full-Text Search with GIN Indexes) - Full-text search includes metadata fields

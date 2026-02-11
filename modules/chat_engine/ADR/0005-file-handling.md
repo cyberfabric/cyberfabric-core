@@ -62,4 +62,4 @@ Chosen option: "Separate File Storage service", because it eliminates file handl
 
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - File URLs forwarded to backends in message payload
-* ADR-0007 (Database Architecture) - Database not used for file content storage
+* ADR-0010 (Stateless Horizontal Scaling with Database State) - Database not used for file content storage

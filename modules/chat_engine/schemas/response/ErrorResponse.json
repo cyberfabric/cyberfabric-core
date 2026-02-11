@@ -19,9 +19,8 @@
       "description": "Human-readable error message"
     },
     "details": {
-      "type": "object",
-      "description": "Additional error details",
-      "additionalProperties": true
+      "$ref": "../common/ErrorDetails.json",
+      "description": "Additional error details (safe for client consumption)"
     }
   },
   "required": ["request_id", "error_code", "message"],

@@ -62,5 +62,5 @@ Chosen option: "Cryptographic share token with separate table", because it provi
 * Sequence diagram S10 (Share Session)
 
 **Related ADRs**:
-* ADR-0007 (Conversation Branching) - Recipients branch from last message
-* ADR-0007 (Session Type Switching) - Branched sessions use original session type
+* ADR-0017 (Conversation Branching from Any Historical Message) - Recipients branch from last message
+* ADR-0018 (Session Type Switching with Capability Updates) - Branched sessions use original session type

@@ -61,5 +61,5 @@ Chosen option: "variant_index + is_active flags", because it provides determinis
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Variants are siblings in tree
-* ADR-0007 (Variant Index Navigation) - UI navigation using variant_index
-* ADR-0007 (Recreation vs New Branch) - Recreation creates variant (same parent)
+* ADR-0015 (Variant Index for Sequential Navigation) - UI navigation using variant_index
+* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Recreation creates variant (same parent)

@@ -65,4 +65,4 @@ Chosen option: "enabled_capabilities array per message", because it provides per
 **Related ADRs**:
 * ADR-0002 (Capability Model) - Backend defines available_capabilities
 * ADR-0006 (Webhook Protocol) - enabled_capabilities forwarded in webhook events
-* ADR-0007 (Session Type Switching) - Capabilities update when switching backends
+* ADR-0018 (Session Type Switching with Capability Updates) - Capabilities update when switching backends

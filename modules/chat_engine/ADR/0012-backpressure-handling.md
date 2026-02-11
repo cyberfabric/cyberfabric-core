@@ -62,4 +62,4 @@ Chosen option: "Per-stream buffer with limit and pause", because it prevents mem
 **Related ADRs**:
 * ADR-0003 (Streaming Architecture) - Streaming design depends on backpressure handling
 * ADR-0006 (Webhook Protocol) - HTTP/2 flow control for backend pause
-* ADR-0007 (Streaming Cancellation) - Client cancellation releases buffer
+* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation releases buffer

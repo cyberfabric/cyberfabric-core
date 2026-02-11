@@ -58,5 +58,5 @@ Chosen option: "Backend returns capabilities (webhook authority)", because it gi
 
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - Defines session.created event returning capabilities
-* ADR-0007 (Session Type Switching) - Capability updates when switching backends
-* ADR-0007 (Per-Request Capabilities) - Client specifies enabled_capabilities per message
+* ADR-0018 (Session Type Switching with Capability Updates) - Capability updates when switching backends
+* ADR-0022 (Per-Request Capability Filtering) - Client specifies enabled_capabilities per message

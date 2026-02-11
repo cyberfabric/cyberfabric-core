@@ -62,4 +62,4 @@ Chosen option: "Typed events with event field", because it provides clear type d
 
 **Related ADRs**:
 * ADR-0006 (Webhook Protocol) - HTTP protocol carrying these events
-* ADR-0007 (Recreation vs New Branch) - message.recreate event semantics
+* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - message.recreate event semantics

@@ -61,4 +61,4 @@ Chosen option: "Zero business logic (pure routing)", because it decouples infras
 **Related ADRs**:
 * ADR-0002 (Capability Model) - Backends define capabilities, not Chat Engine
 * ADR-0006 (Webhook Protocol) - Protocol passes content unchanged
-* ADR-0007 (Webhook Event Types) - Events carry full context without interpretation
+* ADR-0008 (Webhook Event Schema with Typed Events) - Events carry full context without interpretation
