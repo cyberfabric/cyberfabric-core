@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.common.reaction_type.v1~",
+  "title": "ReactionType",
+  "description": "Type of reaction a user can apply to a message",
+  "type": "string",
+  "enum": ["like", "dislike", "none"]
+}

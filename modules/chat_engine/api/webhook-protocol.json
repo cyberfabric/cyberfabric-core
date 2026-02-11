@@ -134,7 +134,7 @@
         },
         "required": ["operation_id", "event_type", "description", "request", "response", "timeout", "error_handling"]
       },
-      "minItems": 7,
+      "minItems": 8,
       "allOf": [
         {
           "contains": {
@@ -364,6 +364,38 @@
                 "properties": {
                   "retry": {"const": true},
                   "circuit_breaker": {"const": true}
+                }
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "message_reaction"},
+              "event_type": {"const": "message.reaction"},
+              "description": {"const": "Notify backend when a user reacts to a message"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/MessageReactionEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
                 }
               }
             }

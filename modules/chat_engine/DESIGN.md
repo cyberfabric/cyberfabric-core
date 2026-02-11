@@ -248,6 +248,11 @@ All Chat Engine instances share a single database cluster. No local caching of s
 - **ExportFormat** - Enum: json, markdown, txt
 - **ExportScope** - Enum: active, all
 - **SummarizationSettings** - Summary config (enabled, service_url, config)
+- **ReactionType** - Enum: like, dislike, none
+- **MessageReaction** - Reaction record (message_id, user_id, reaction_type, created_at, updated_at)
+- **MessageReactionRequest** - HTTP request (reaction_type: ReactionType)
+- **MessageReactionResponse** - HTTP response (message_id, reaction_type, applied: boolean)
+- **MessageReactionEvent** - Webhook event (event, session_id, message_id, user_id, reaction_type, previous_reaction_type, timestamp)
 
 **Relationships**:
 
@@ -284,6 +289,9 @@ Common Types:
 - Message → Usage: optional in metadata
 - SessionType → SummarizationSettings: optional config
 - ContentPart ← TextContent, CodeContent, ImageContent, AudioContent, VideoContent, DocumentContent: polymorphic
+- MessageReaction → Message: references via message_id
+- MessageReaction → ReactionType: uses type enum
+- MessageReactionEvent → MessageReaction: notifies on change
 
 ### 3.2 Architecture Overview
 
@@ -375,6 +383,25 @@ Chat Engine provides conversation export functionality that traverses the messag
 **ADRs**: ADR-0023 (search strategy)
 
 Chat Engine provides full-text search capabilities across messages. It implements session-scoped and cross-session search with ranking, pagination, and context window retrieval.
+<!-- fdd-id-content -->
+
+#### Message Reactions
+
+**ID**: `fdd-chat-engine-message-reactions`
+
+<!-- fdd-id-content -->
+**ADRs**: ADR-0024 (message reactions design)
+
+Chat Engine allows users to react to messages with simple like/dislike feedback. Reactions are stored per-user per-message with UPSERT semantics, and backend systems are notified via fire-and-forget webhook events.
+
+**Key Features**:
+- One reaction per user per message (can be changed or removed)
+- UPSERT semantics: changing reaction overwrites previous
+- HTTP API: `POST /messages/{id}/reaction` with `{reaction_type: "like"|"dislike"|"none"}`
+- Webhook notification: `message.reaction` event sent to backend after storage
+- Fire-and-forget pattern: webhook failures don't affect client response
+- Database: Composite primary key (message_id, user_id) ensures uniqueness
+- Cascade delete: reactions removed when message is deleted
 <!-- fdd-id-content -->
 
 **Key Interactions**:
@@ -835,6 +862,67 @@ sequenceDiagram
         Chat Engine-->>Client: response.error event
     end
 ```
+
+#### S14: Add Message Reaction (HTTP)
+
+**Use Case**: `fdd-chat-engine-fr-message-reactions`
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant CE as Chat Engine
+    participant WH as Webhook Backend
+
+    C->>CE: Submit reaction (reaction_type)
+    CE->>CE: Extract user_id from JWT
+    CE->>CE: Validate message exists and user has access
+
+    alt Add or change reaction
+        CE->>CE: Store reaction (UPSERT)
+        CE->>C: Return confirmation (applied)
+    else Remove reaction
+        CE->>CE: Remove reaction
+        CE->>C: Return confirmation (removed)
+    end
+
+    Note over CE: Client response sent before webhook
+
+    CE->>WH: Send reaction notification (event: message.reaction)
+    Note over WH: Backend processes reaction event
+```
+
+**Flow**:
+1. Client submits reaction with reaction_type
+2. Chat Engine validates JWT and message access
+3. Database stores or removes reaction based on type
+4. Client receives immediate confirmation
+5. Webhook notification sent asynchronously (fire-and-forget)
+
+#### S15: Remove Message with Reactions (Cascade Delete)
+
+**Use Case**: Message deletion with reaction cleanup
+**Actors**: `fdd-chat-engine-actor-client`
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant CE as Chat Engine
+
+    C->>CE: Request message deletion
+    CE->>CE: Validate user owns session
+    CE->>CE: Delete message record
+
+    Note over CE: CASCADE DELETE cleanup
+
+    CE->>CE: Remove associated reactions
+    CE->>C: Return deletion confirmation
+```
+
+**Flow**:
+1. Client requests message deletion
+2. Database CASCADE DELETE automatically removes all reactions
+3. No orphaned reactions remain in database
 
 ## 4. Additional Context
 

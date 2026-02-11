@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.message.reaction_response.v1~",
+  "title": "MessageReactionResponse",
+  "description": "Response after processing a message reaction",
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier"
+    },
+    "reaction_type": {
+      "$ref": "../common/ReactionType.json"
+    },
+    "applied": {
+      "type": "boolean",
+      "description": "Whether the reaction was successfully applied (true) or removed (false)"
+    }
+  },
+  "required": ["message_id", "reaction_type", "applied"],
+  "additionalProperties": false
+}

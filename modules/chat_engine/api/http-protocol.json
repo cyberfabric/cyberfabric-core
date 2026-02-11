@@ -607,6 +607,52 @@
         }
       }
     },
+    "/messages/{id}/reaction": {
+      "post": {
+        "summary": "Add or update message reaction",
+        "operationId": "reactToMessage",
+        "tags": ["Message Operations"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MessageId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageReactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reaction applied successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageReactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/messages/{id}/variants": {
       "get": {
         "summary": "Get message variants",
@@ -995,6 +1041,33 @@
           },
           "details": {
             "$ref": "../schemas/common/ErrorDetails.json"
+          }
+        }
+      },
+      "MessageReactionRequest": {
+        "type": "object",
+        "required": ["reaction_type"],
+        "properties": {
+          "reaction_type": {
+            "type": "string",
+            "enum": ["like", "dislike", "none"]
+          }
+        }
+      },
+      "MessageReactionResponse": {
+        "type": "object",
+        "required": ["message_id", "reaction_type", "applied"],
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reaction_type": {
+            "type": "string",
+            "enum": ["like", "dislike", "none"]
+          },
+          "applied": {
+            "type": "boolean"
           }
         }
       }

@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.webhook.message_reaction_event.v1~",
+  "title": "MessageReactionEvent",
+  "description": "Webhook event sent when a user reacts to a message",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "message.reaction",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Message identifier"
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "User identifier (from JWT client_id)"
+    },
+    "reaction_type": {
+      "$ref": "../common/ReactionType.json"
+    },
+    "previous_reaction_type": {
+      "oneOf": [
+        { "$ref": "../common/ReactionType.json" },
+        { "type": "null" }
+      ],
+      "description": "Previous reaction type (null if first reaction)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp",
+      "examples": ["2024-01-15T10:30:00Z"]
+    }
+  },
+  "required": ["event", "session_id", "message_id", "user_id", "reaction_type", "timestamp"],
+  "additionalProperties": false
+}
