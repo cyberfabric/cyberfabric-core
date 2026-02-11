@@ -243,9 +243,9 @@ Client Request: POST /api/oagw/v1/upstreams
 └─→ API Handler
     ├─ Incoming authentication (validate Bearer token)
     ├─ Incoming rate limiting
-    └─ Route to Control Plane (oagw-dp)
+    └─ Route to Control Plane (oagw-cp)
         │
-        └─→ Control Plane (oagw-dp)
+        └─→ Control Plane (oagw-cp)
             ├─ Validate request (permissions, schema)
             ├─ Write to database
             ├─ Invalidate caches (L1, L2)
@@ -262,13 +262,13 @@ Client Request: GET /api/oagw/v1/proxy/openai/v1/chat/completions
 └─→ API Handler
     ├─ Incoming authentication
     ├─ Incoming rate limiting
-    └─ Route to Data Plane (oagw-cp)
+    └─ Route to Data Plane (oagw-dp)
         │
-        └─→ Data Plane (oagw-cp) - Proxy Orchestration
+        └─→ Data Plane (oagw-dp) - Proxy Orchestration
             ├─ Check DP L1 cache for upstream config
             │  └─ (miss) → Call CP.resolve_upstream("openai", tenant_id)
             │                │
-            │                └─→ Control Plane (oagw-dp) - Config Resolution
+            │                └─→ Control Plane (oagw-cp) - Config Resolution
             │                    ├─ Check CP L1 cache
             │                    ├─ Check CP L2 cache (Redis, if enabled)
             │                    ├─ Query database (if cache miss)
@@ -297,33 +297,31 @@ OAGW is organized into separate library crates, allowing modkit to wire them tog
 
 ```
 modules/system/oagw/
-├── oagw-sdk/          # Public API traits, models, errors
+├── oagw-sdk/          # Public API traits, models, errors, service interfaces
 │                      # Exports: OAGWClientV1, AuthPlugin, GuardPlugin, TransformPlugin traits
-│                      # Used by: external consumers, other modules
-│
-├── oagw-core/         # Shared internals: plugin traits, utilities
 │                      # Exports: ControlPlaneService, DataPlaneService traits
-│                      # Used by: oagw-api, oagw-cp, oagw-dp, plugin modules
+│                      # Used by: external consumers, other modules, oagw-cp, oagw-dp
 │
-├── oagw-api/          # API Handler implementation
+├── oagw/              # Main module crate (composition root)
 │                      # Implements: request routing, incoming auth/rate limiting
-│                      # Routes: /proxy/* → CP, /upstreams/* → DP
+│                      # Routes: /upstreams/* → CP, /proxy/* → DP
+│                      # Wires CP + DP via modkit
 │
-├── oagw-cp/           # Data Plane implementation
+├── oagw-cp/           # Control Plane implementation
 │                      # Implements: ControlPlaneService trait
-│                      # Responsibilities: proxy orchestration, plugin execution
-│                      # Includes: built-in plugins (auth, guard, transform)
+│                      # Responsibilities: config CRUD, caching, alias resolution
 │
-└── oagw-dp/           # Control Plane implementation
+└── oagw-dp/           # Data Plane implementation
                        # Implements: DataPlaneService trait
-                       # Responsibilities: config CRUD, L1/L2 caching, DB access
+                       # Responsibilities: proxy orchestration, plugin execution
+                       # Includes: built-in plugins (auth, guard, transform)
 ```
 
 **Crate Naming Conventions**:
 
-- Directory names: hyphenated (`oagw-sdk`, `oagw-cp`)
-- Package names: `cf-` prefix (`cf-oagw-sdk`, `cf-oagw-cp`)
-- Library names: underscored (`oagw_sdk`, `oagw_cp`)
+- Directory names: hyphenated (`oagw-sdk`, `oagw`, `oagw-cp`, `oagw-dp`)
+- Package names: `cf-` prefix (`cf-oagw-sdk`, `cf-oagw`, `cf-oagw-cp`, `cf-oagw-dp`)
+- Library names: underscored (`oagw_sdk`, `oagw`, `oagw_cp`, `oagw_dp`)
 
 **Plugin Modules** (external):
 
@@ -385,7 +383,7 @@ The `:authority` pseudo-header does NOT replace `X-OAGW-Target-Host` for routing
 
 OAGW provides a plugin system for extending request/response processing. Plugins are executed by Data Plane during proxy operations.
 
-**Plugin Types** (defined in `oagw-core`):
+**Plugin Types** (defined in `oagw-sdk`):
 
 1. **AuthPlugin** (`gts.x.core.oagw.plugin.auth.v1~*`)
     - Purpose: Inject authentication credentials into requests

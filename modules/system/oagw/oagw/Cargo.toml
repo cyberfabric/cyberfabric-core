@@ -1,0 +1,48 @@
+[package]
+name = "cf-oagw"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "oagw"
+path = "src/lib.rs"
+
+[features]
+test-utils = ["axum/ws", "dep:async-stream", "dep:futures", "tokio/net", "tokio/sync", "tokio/rt"]
+
+[dependencies]
+cf-oagw-sdk = { path = "../oagw-sdk" }
+modkit = { workspace = true }
+modkit-security = { workspace = true }
+modkit-macros = { workspace = true }
+inventory = { workspace = true }
+async-trait = "0.1"
+axum = "0.8"
+http = "1.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1", features = ["v4", "serde"] }
+bytes = "1"
+arc-swap = "1"
+anyhow = "1"
+tracing = "0.1"
+gts = { workspace = true }
+# CP deps
+dashmap = "6.1"
+thiserror = "2.0"
+# DP deps
+reqwest = { version = "0.12", features = ["stream"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["time"] }
+# test-utils optional deps
+async-stream = { version = "0.3", optional = true }
+futures = { version = "0.3", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+cf-oagw = { path = ".", features = ["test-utils"] }
+tower = { version = "0.5", features = ["util"] }
+hyper = "1.5"
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4"] }

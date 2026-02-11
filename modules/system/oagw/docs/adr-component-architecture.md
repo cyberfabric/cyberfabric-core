@@ -30,30 +30,19 @@ OAGW is composed of three distinct components, packaged as separate library crat
 
 ### Components
 
-**1. API Handler (`oagw-api`)**
+**1. Main Module (`oagw`)**
 
-- **Responsibility**: Entry point for all HTTP requests
+- **Responsibility**: Entry point for all HTTP requests, composition root
 - **Functions**:
     - Incoming authentication (validate Bearer tokens)
     - Incoming rate limiting (protect gateway from overload)
     - Path-based routing to CP or DP
+    - Wires CP + DP services via modkit
 - **Routes**:
     - `/api/oagw/v1/proxy/*` → Data Plane
     - `/api/oagw/v1/upstreams/*`, `/routes/*`, `/plugins/*` → Control Plane
 
-**2. Data Plane (`oagw-cp`)**
-
-- **Responsibility**: Orchestrate proxy requests to external services
-- **Functions**:
-    - Call Control Plane for config resolution (upstream, route)
-    - Execute auth plugins (credential injection)
-    - Execute guard plugins (validation, rate limiting)
-    - Execute transform plugins (request/response mutation)
-    - Make HTTP calls to external services
-    - L1 cache for hot configs (1000 entries, LRU)
-- **Dependencies**: Control Plane (config resolution), cred_store (secret retrieval)
-
-**3. Control Plane (`oagw-dp`)**
+**2. Control Plane (`oagw-cp`)**
 
 - **Responsibility**: Manage configuration data with multi-layer caching
 - **Functions**:
@@ -65,17 +54,28 @@ OAGW is composed of three distinct components, packaged as separate library crat
     - Cache invalidation on config writes
 - **Dependencies**: modkit-db (database), types_registry (schema validation)
 
+**3. Data Plane (`oagw-dp`)**
+
+- **Responsibility**: Orchestrate proxy requests to external services
+- **Functions**:
+    - Call Control Plane for config resolution (upstream, route)
+    - Execute auth plugins (credential injection)
+    - Execute guard plugins (validation, rate limiting)
+    - Execute transform plugins (request/response mutation)
+    - Make HTTP calls to external services
+    - L1 cache for hot configs (1000 entries, LRU)
+- **Dependencies**: Control Plane (config resolution), cred_store (secret retrieval)
+
 ### Module Structure
 
 ```
 modules/system/oagw/
-├── oagw-sdk/          # Public API traits, models, errors
-│                      # OAGWClientV1, AuthPlugin, GuardPlugin, TransformPlugin
-├── oagw-core/         # Shared internals, service traits
-│                      # ControlPlaneService, DataPlaneService
-├── oagw-api/          # API Handler implementation
-├── oagw-cp/           # Data Plane implementation
-├── oagw-dp/           # Control Plane implementation
+├── oagw-sdk/          # Public API traits, models, errors, service interfaces
+│                      # OAGWClientV1, ControlPlaneService, DataPlaneService
+│                      # AuthPlugin, GuardPlugin, TransformPlugin
+├── oagw/              # Main module crate (composition root)
+├── oagw-cp/           # Control Plane implementation
+├── oagw-dp/           # Data Plane implementation
 ```
 
 ### Communication Patterns

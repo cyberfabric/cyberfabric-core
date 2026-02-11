@@ -200,8 +200,8 @@ OAGW provides extensibility through a plugin system with three plugin types:
 **Component**: Data Plane executes all plugins during proxy request processing. Plugins are defined in Control Plane (CRUD via `/api/oagw/v1/plugins/*`) and loaded by Data Plane.
 
 **Plugin Types**:
-- **Built-in plugins**: Included in Data Plane crate (`oagw-cp`), implemented in Rust
-- **External plugins**: Separate modkit modules implementing plugin traits from `oagw-core`
+- **Built-in plugins**: Included in Data Plane crate (`oagw-dp`), implemented in Rust
+- **External plugins**: Separate modkit modules implementing plugin traits from `oagw-sdk`
 
 **Execution order**: Auth → Guards → Transform(request) → Upstream → Transform(response/error)
 

@@ -1,4 +1,9 @@
-# OAGW examples plan (E2E justification catalog)
+# OAGW Scenario Guide
+
+Practical companion to [DESIGN.md](../DESIGN.md). Organized in two sections:
+
+1. **How To** — what you CAN do with OAGW, organized by integration journey then by feature
+2. **Guardrails** — what is rejected, guarded, or explicitly unsupported
 
 Rules for all scenarios:
 - Use Management API to create upstreams/routes/plugins unless scenario explicitly tests invalid config.
@@ -13,1239 +18,777 @@ Legend (used in checks):
 
 ---
 
-## 1) Management API: authentication + authorization
+## 1. How To (Common Integration Scenarios)
 
-### [x] 1.1 Justification: All management endpoints require bearer auth
-- Scenario: [`negative-1.1-all-management-endpoints-require-bearer-auth.md`](management-api/auth/negative-1.1-all-management-endpoints-require-bearer-auth.md)
-- Why it matters:
-  - Prevents unauthenticated configuration tampering.
-- What to check:
-  - `POST /api/oagw/v1/upstreams` without `Authorization` returns `401`.
-  - `GET /api/oagw/v1/routes` without `Authorization` returns `401`.
-  - Errors are `PD` with stable `type`.
+> **Flow reference**: [Proxy Operations](flows/proxy-operations.md)
 
-### [x] 1.2 Justification: Permission gates for upstream/route/plugin CRUD
-- Scenario: [`negative-1.2-permission-gates-upstream-route-plugin-crud.md`](management-api/auth/negative-1.2-permission-gates-upstream-route-plugin-crud.md)
-- Why it matters:
-  - Prevents privilege escalation between operators/users.
-- What to check:
-  - Missing upstream permission returns `403`.
-  - Missing route permission returns `403`.
-  - Missing plugin permission returns `403`.
-  - With correct permission, same call succeeds.
+### Integration journey
 
-### [x] 1.3 Justification: Tenant scoping in management APIs
-- Scenario: [`negative-1.3-tenant-scoping-management-apis.md`](management-api/auth/negative-1.3-tenant-scoping-management-apis.md)
-- Why it matters:
-  - Avoid cross-tenant reads/writes.
-- What to check:
-  - Principal from tenant A cannot `GET /upstreams/{id}` created by tenant B.
-  - Listing endpoints only return tenant-visible resources.
+To proxy requests to an external service through OAGW, follow these steps in order. Each step links to the feature section with full scenario coverage.
 
----
+#### Step 1: Register the upstream
 
-## 2) Management API: upstream lifecycle
+Create an upstream pointing to your external service.
 
-### [x] 2.1 Justification: Create minimal HTTP upstream (single endpoint)
-- Scenario: [`positive-2.1-create-minimal-http-upstream.md`](management-api/upstreams/positive-2.1-create-minimal-http-upstream.md)
-- Why it matters:
-  - Base onboarding path.
-- What to check:
-  - `POST /upstreams` returns `201`.
-  - Returned upstream has `enabled=true` default.
-  - `alias` auto-generation follows rules for standard ports.
+- [Create minimal HTTP upstream](management-api/upstreams/positive-2.1-create-minimal-http-upstream.md) — `POST /upstreams` with host, scheme, port. Auto-generates alias from hostname.
+- For non-standard ports: [Alias auto-generation](management-api/upstreams/positive-2.2-alias-auto-generation-non-standard-port.md)
+- For multiple endpoints: [Multi-endpoint load balancing](management-api/upstreams/positive-2.10-multi-endpoint-load-balancing-distributes-requests.md)
+- See → [Upstream management](#upstream-management)
 
-### [x] 2.2 Justification: Alias auto-generation for non-standard port
-- Scenario: [`positive-2.2-alias-auto-generation-non-standard-port.md`](management-api/upstreams/positive-2.2-alias-auto-generation-non-standard-port.md)
-- Why it matters:
-  - Prevent collisions and ambiguous routing.
-- What to check:
-  - Endpoint `host=api.example.com, port=8443` yields alias `api.example.com:8443` (or requires explicit alias, per implementation).
+#### Step 2: Define routes
 
-### [x] 2.3 Justification: Explicit alias required for IP-based endpoints
-- Scenario: [`negative-2.3-explicit-alias-required-ip-based-endpoints.md`](management-api/upstreams/negative-2.3-explicit-alias-required-ip-based-endpoints.md)
-- Why it matters:
-  - Avoid unstable aliasing and SSRF ambiguity.
-- What to check:
-  - Create upstream with `host=10.0.0.1` and no alias is rejected (`400` `PD`).
+Create routes that map inbound method + path to outbound upstream calls.
 
-### [x] 2.4 Justification: Multi-endpoint upstream pool compatibility rules
-- Scenario: [`negative-2.4-multi-endpoint-upstream-pool-compatibility-rules.md`](management-api/upstreams/negative-2.4-multi-endpoint-upstream-pool-compatibility-rules.md)
-- Why it matters:
-  - Load balancing must not mix incompatible protocols/schemes/ports.
-- What to check:
-  - Creating pool with mismatched `scheme` fails (`400`).
-  - Creating pool with mismatched `port` fails (`400`).
-  - Creating pool with mismatched `protocol` fails (`400`).
+- [Create HTTP route with method + path](management-api/routes/positive-3.1-create-http-route-method-path.md) — `POST /routes` with methods, path, upstream_id
+- Configure path suffix mode: [append](management-api/routes/positive-3.5-path-suffix-mode-append.md) for REST prefixes
+- For gRPC: [Create gRPC route by service+method](management-api/routes/positive-3.8-create-grpc-route-service-method.md)
+- See → [Route configuration](#route-configuration)
 
-### [x] 2.5 Justification: Update upstream
-- Scenario: [`positive-2.5-update-upstream.md`](management-api/upstreams/positive-2.5-update-upstream.md)
-- Why it matters:
-  - Real systems change endpoints/auth/rate limits.
-- What to check:
-  - `PUT /upstreams/{id}` updates mutable fields.
-  - Versioning/immutability rules are respected (plugins immutable, but upstream references change).
+#### Step 3: Attach authentication
 
-### [x] 2.6 Justification: Disable upstream blocks proxy traffic (including descendants)
-- Scenario: [`negative-2.6-disable-upstream-blocks-proxy-traffic.md`](management-api/upstreams/negative-2.6-disable-upstream-blocks-proxy-traffic.md)
-- Why it matters:
-  - Emergency stop for compromised upstream.
-- What to check:
-  - With `enabled=false`, proxy requests return a gateway error (`503` `PD`, `ESrc=gateway`).
-  - If upstream disabled in ancestor, descendant sees it disabled too.
+Configure how OAGW authenticates to the external service.
 
-### [x] 2.7 Justification: Delete upstream cascades routes
-- Scenario: [`positive-2.7-delete-upstream-cascades-routes.md`](management-api/upstreams/positive-2.7-delete-upstream-cascades-routes.md)
-- Why it matters:
-  - Cleanup must not leave dangling config.
-- What to check:
-  - Deleting upstream removes dependent routes (or rejects delete with a clear error if cascade not implemented).
-  - Subsequent proxy requests return `404 UPSTREAM_NOT_FOUND` or `ROUTE_NOT_FOUND`.
+- [API key injection](proxy-api/authentication/positive-9.2-api-key-injection.md) — header-based key injection from `cred_store`
+- [OAuth2 client credentials](proxy-api/authentication/positive-9.5-oauth2-client-credentials.md) — automatic token fetch + cache + refresh
+- [Noop (public APIs)](proxy-api/authentication/positive-9.1-noop-auth-plugin-forwards-credential-injection.md) — no credential injection
+- See → [Injecting authentication](#injecting-authentication)
 
-### [x] 2.8 Justification: Alias uniqueness enforced per tenant
-- Scenario: [`negative-2.8-alias-uniqueness-enforced-per-tenant.md`](management-api/upstreams/negative-2.8-alias-uniqueness-enforced-per-tenant.md)
-- Why it matters:
-  - Prevents ambiguous routing.
-- What to check:
-  - Creating two upstreams with same `alias` in same tenant is rejected (conflict).
-  - Creating same `alias` in different tenants succeeds.
+#### Step 4: Invoke via proxy
 
-### [x] 2.9 Justification: Tags support discovery and filtering
-- Scenario: [`positive-2.9-tags-support-discovery-filtering.md`](management-api/upstreams/positive-2.9-tags-support-discovery-filtering.md)
-- Why it matters:
-  - Tenants need to find reusable upstreams (e.g., `openai`, `llm`).
-- What to check:
-  - Create upstream with `tags`.
-  - Listing/filtering returns expected upstreams (implementation-specific query parameter; if only OData `$filter` exists, use that).
+Call your external service through OAGW's proxy endpoint: `{METHOD} /api/oagw/v1/proxy/{alias}/{path_suffix}`
 
-### [x] 2.10 Justification: Multi-endpoint load balancing distributes requests
-- Scenario: [`positive-2.10-multi-endpoint-load-balancing-distributes-requests.md`](management-api/upstreams/positive-2.10-multi-endpoint-load-balancing-distributes-requests.md)
-- Why it matters:
-  - HA and capacity.
-- What to check:
-  - Over N requests, endpoints are selected round-robin (or documented strategy).
-  - Endpoint selection is stable across keep-alive connections (or explicitly not).
+- [Plain HTTP passthrough](protocols/http/positive-12.1-plain-http-request-response-passthrough.md)
+- [SSE streaming](protocols/sse/positive-13.1-sse-stream-forwarded-buffering.md)
+- [WebSocket upgrade](protocols/websocket/positive-14.1-websocket-upgrade-proxied.md)
+- [gRPC unary](protocols/grpc/positive-15.1-grpc-unary-request-proxied.md)
+- See → [E2E protocol examples](#e2e-protocol-examples)
 
-### [x] 2.11 Justification: Re-enable upstream restores proxy traffic
-- Scenario: [`positive-2.11-re-enable-upstream-restores-proxy-traffic.md`](management-api/upstreams/positive-2.11-re-enable-upstream-restores-proxy-traffic.md)
-- Why it matters:
-  - Maintenance windows should be reversible.
-- What to check:
-  - Upstream with `enabled=false` blocks traffic.
-  - `PUT /upstreams/{id}` with `enabled=true` restores traffic.
-  - Subsequent proxy requests succeed.
+#### Optional: Rate limits, plugins, transforms
 
-### [x] 2.12 Justification: List upstreams includes disabled resources
-- Scenario: [`positive-2.12-list-upstreams-includes-disabled-resources.md`](management-api/upstreams/positive-2.12-list-upstreams-includes-disabled-resources.md)
-- Why it matters:
-  - Operators need visibility into all config, not just active.
-- What to check:
-  - `GET /upstreams` returns both enabled and disabled upstreams.
-  - Response includes `enabled` field for each resource.
-  - Optional: `$filter=enabled eq true` can filter to active only.
+- [Token bucket rate limiting](rate-limiting/positive-18.1-token-bucket-sustained-burst.md) — see [Rate limiting](#rate-limiting)
+- [Request path rewrite](plugins/transforms/positive-11.1-request-path-rewrite-transform.md) — see [Transform plugins](#transform-plugins)
+- [Custom Starlark guard](plugins/guards/positive-10.2-built-cors-handling.md) — see [Guard plugins](#guard-plugins)
+- [Tags for discovery](management-api/upstreams/positive-2.9-tags-support-discovery-filtering.md) — see [Upstream management](#upstream-management)
 
 ---
 
-## 3) Management API: route lifecycle + matching fields
+### Upstream management
 
-### [x] 3.1 Justification: Create HTTP route with method + path
-- Scenario: [`positive-3.1-create-http-route-method-path.md`](management-api/routes/positive-3.1-create-http-route-method-path.md)
-- Why it matters:
-  - Core routing feature.
-- What to check:
-  - `POST /routes` returns `201`.
-  - Route is associated to the target upstream.
+> **Flow references**: [Management Operations](flows/management-operations.md) | [Cache Invalidation](flows/cache-invalidation.md)
 
-### [x] 3.2 Justification: Method allowlist enforcement
-- Scenario: [`negative-3.2-method-allowlist-enforcement.md`](management-api/routes/negative-3.2-method-allowlist-enforcement.md)
-- Why it matters:
-  - Prevents accidental exposure of unsafe methods.
-- What to check:
-  - Route allows `POST`; invoking `GET` returns `404 ROUTE_NOT_FOUND` or `400` (per spec), as a gateway error.
+#### Create a minimal HTTP upstream (single endpoint)
+- **Scenario**: [positive-2.1-create-minimal-http-upstream.md](management-api/upstreams/positive-2.1-create-minimal-http-upstream.md)
+- **Mechanism**: `POST /upstreams` with server endpoints and protocol. Returns `201` with auto-generated alias and `enabled=true` default. Alias follows hostname rules for standard ports.
 
-### [x] 3.3 Justification: Query allowlist enforcement
-- Scenario: [`negative-3.3-query-allowlist-enforcement.md`](management-api/routes/negative-3.3-query-allowlist-enforcement.md)
-- Why it matters:
-  - Prevents parameter smuggling and uncontrolled upstream behavior.
-- What to check:
-  - Allowed query param passes through.
-  - Unknown query param is rejected (`400` `PD`, `ESrc=gateway`).
+#### Alias auto-generation for non-standard port
+- **Scenario**: [positive-2.2-alias-auto-generation-non-standard-port.md](management-api/upstreams/positive-2.2-alias-auto-generation-non-standard-port.md)
+- **Mechanism**: Endpoint `host=api.example.com, port=8443` yields alias `api.example.com:8443`. Prevents collisions and ambiguous routing.
 
-### [x] 3.4 Justification: Path suffix mode = disabled
-- Scenario: [`negative-3.4-path-suffix-mode-disabled.md`](management-api/routes/negative-3.4-path-suffix-mode-disabled.md)
-- Why it matters:
-  - Ensures strict routing for sensitive endpoints.
-- What to check:
-  - Supplying any suffix returns a gateway validation error.
+#### Update upstream configuration
+- **Scenario**: [positive-2.5-update-upstream.md](management-api/upstreams/positive-2.5-update-upstream.md)
+- **Mechanism**: `PUT /upstreams/{id}` updates mutable fields. Versioning/immutability rules respected. Triggers cache invalidation across CP/DP layers.
 
-### [x] 3.5 Justification: Path suffix mode = append
-- Scenario: [`positive-3.5-path-suffix-mode-append.md`](management-api/routes/positive-3.5-path-suffix-mode-append.md)
-- Why it matters:
-  - Enables prefix routes for REST resources.
-- What to check:
-  - Suffix is appended to outbound path.
-  - Outbound path is normalized (no `//` surprises if suffix begins with `/`).
+#### Delete upstream with route cascade
+- **Scenario**: [positive-2.7-delete-upstream-cascades-routes.md](management-api/upstreams/positive-2.7-delete-upstream-cascades-routes.md)
+- **Mechanism**: Deleting upstream removes dependent routes (or rejects with clear error if cascade not implemented). Guardrail: subsequent proxy requests return `404 UPSTREAM_NOT_FOUND` or `ROUTE_NOT_FOUND`.
 
-### [x] 3.6 Justification: Route priority resolves ambiguities
-- Scenario: [`positive-3.6-route-priority-resolves-ambiguities.md`](management-api/routes/positive-3.6-route-priority-resolves-ambiguities.md)
-- Why it matters:
-  - Multiple routes may match; deterministic selection is required.
-- What to check:
-  - With two candidate routes, higher `priority` wins.
+#### Tags support discovery and filtering
+- **Scenario**: [positive-2.9-tags-support-discovery-filtering.md](management-api/upstreams/positive-2.9-tags-support-discovery-filtering.md)
+- **Mechanism**: Create upstream with `tags` array. Listing/filtering returns expected upstreams by tag.
 
-### [x] 3.7 Justification: Disable route blocks proxy traffic
-- Scenario: [`negative-3.7-disable-route-blocks-proxy-traffic.md`](management-api/routes/negative-3.7-disable-route-blocks-proxy-traffic.md)
-- Why it matters:
-  - Granular shutdown.
-- What to check:
-  - With `route.enabled=false`, request returns `404 ROUTE_NOT_FOUND` or `503` (implementation-defined), `ESrc=gateway`.
+#### Multi-endpoint load balancing distributes requests
+- **Scenario**: [positive-2.10-multi-endpoint-load-balancing-distributes-requests.md](management-api/upstreams/positive-2.10-multi-endpoint-load-balancing-distributes-requests.md)
+- **Mechanism**: Multiple endpoints in one upstream form a pool. Requests distributed round-robin. All endpoints must share same protocol/scheme/port.
 
-### [x] 3.8 Justification: Create gRPC route by service+method
-- Scenario: [`positive-3.8-create-grpc-route-service-method.md`](management-api/routes/positive-3.8-create-grpc-route-service-method.md)
-- Why it matters:
-  - gRPC routing is not path-based at config level.
-- What to check:
-  - `match.grpc.service` + `match.grpc.method` routes to HTTP/2 `:path` `/Service/Method`.
-  - Wrong service/method yields `404 ROUTE_NOT_FOUND` (gateway).
+#### Re-enable upstream restores proxy traffic
+- **Scenario**: [positive-2.11-re-enable-upstream-restores-proxy-traffic.md](management-api/upstreams/positive-2.11-re-enable-upstream-restores-proxy-traffic.md)
+- **Mechanism**: `PUT /upstreams/{id}` with `enabled=true` after maintenance. Subsequent proxy requests succeed.
 
-### [x] 3.9 Justification: Re-enable route restores proxy traffic
-- Scenario: [`positive-3.9-re-enable-route-restores-proxy-traffic.md`](management-api/routes/positive-3.9-re-enable-route-restores-proxy-traffic.md)
-- Why it matters:
-  - Route-level maintenance should be reversible.
-- What to check:
-  - Route with `enabled=false` is skipped in matching.
-  - `PUT /routes/{id}` with `enabled=true` restores matching.
-  - Subsequent proxy requests succeed.
-
-### [x] 3.10 Justification: List routes includes disabled resources
-- Scenario: [`positive-3.10-list-routes-includes-disabled-resources.md`](management-api/routes/positive-3.10-list-routes-includes-disabled-resources.md)
-- Why it matters:
-  - Operators need visibility into all route config.
-- What to check:
-  - `GET /routes` returns both enabled and disabled routes.
-  - Response includes `enabled` field for each resource.
-
-## 4) Management API: plugin lifecycle
-
-### [x] 4.1 Justification: Create custom Starlark guard plugin
-- Scenario: [`positive-4.1-create-custom-starlark-guard-plugin.md`](management-api/plugins/positive-4.1-create-custom-starlark-guard-plugin.md)
-- Why it matters:
-  - Tenant extensibility.
-- What to check:
-  - `POST /plugins` returns `201`.
-  - Returned plugin is addressable by anonymous GTS id `...~{uuid}`.
-  - `GET /plugins/{id}/source` returns `200 text/plain`.
-
-### [x] 4.2 Justification: Plugin immutability (no update)
-- Scenario: [`negative-4.2-plugin-immutability.md`](management-api/plugins/negative-4.2-plugin-immutability.md)
-- Why it matters:
-  - Ensures reproducibility and auditability.
-- What to check:
-  - `PUT /plugins/{id}` is not available (404/405).
-
-### [x] 4.3 Justification: Delete plugin succeeds only when unreferenced
-- Scenario: [`positive-4.3-delete-plugin-succeeds-only-unreferenced.md`](management-api/plugins/positive-4.3-delete-plugin-succeeds-only-unreferenced.md)
-- Why it matters:
-  - Prevents breaking active upstream/route configs.
-- What to check:
-  - Referenced plugin deletion returns `409` `PD` with `type` = `...plugin.in_use...`.
-  - Unlinked plugin deletion returns `204`.
-
-### [x] 4.4 Justification: Plugin type enforcement
-- Scenario: [`negative-4.4-plugin-type-enforcement.md`](management-api/plugins/negative-4.4-plugin-type-enforcement.md)
-- Why it matters:
-  - Prevents attaching a guard where auth is expected.
-- What to check:
-  - Attempt to attach `plugin.guard` as upstream auth fails at config validation (`400`).
-
-### [x] 4.5 Justification: Plugin resolution supports builtin named ids and custom UUID ids
-- Scenario: [`positive-4.5-plugin-resolution-supports-builtin-named-ids-custom-uuid.md`](management-api/plugins/positive-4.5-plugin-resolution-supports-builtin-named-ids-custom-uuid.md)
-- Why it matters:
-  - Mix builtin and custom plugins in the same chain.
-- What to check:
-  - Attaching builtin plugin id works without DB row.
-  - Attaching UUID plugin id requires DB row; missing DB row yields `503 PLUGIN_NOT_FOUND` (`PD`, `ESrc=gateway`).
-
-### [x] 4.6 Justification: Plugin sharing modes merge correctly across tenant hierarchy
-- Scenario: [`positive-4.6-plugin-sharing-modes-merge-correctly-across-tenant-hierarchy.md`](management-api/plugins/positive-4.6-plugin-sharing-modes-merge-correctly-across-tenant-hierarchy.md)
-- Why it matters:
-  - Partners share guard/transform baselines; customers extend them.
-- What to check:
-  - With parent `plugins.sharing=inherit` and child specifies plugins:
-    - Effective chain is `parent + child`.
-  - With parent `plugins.sharing=enforce`:
-    - Child cannot remove or replace parent plugins (only append if allowed by policy).
-  - With parent `plugins.sharing=private`:
-    - Child does not see parent plugins.
-
-### [x] 4.7 Justification: Plugin usage tracking and GC eligibility behavior
-- Scenario: [`positive-4.7-plugin-usage-tracking-gc-eligibility-behavior.md`](management-api/plugins/positive-4.7-plugin-usage-tracking-gc-eligibility-behavior.md)
-- Why it matters:
-  - Prevents plugin table growth and supports safe cleanup.
-- What to check:
-  - Link plugin to an upstream/route and invoke proxy:
-    - `last_used_at` updated.
-    - `gc_eligible_at` cleared.
-  - Unlink plugin from all references:
-    - `gc_eligible_at` set to `now + TTL`.
-  - After GC job runs (or via test hook): plugin deleted only when `gc_eligible_at < now`.
+#### List upstreams includes disabled resources
+- **Scenario**: [positive-2.12-list-upstreams-includes-disabled-resources.md](management-api/upstreams/positive-2.12-list-upstreams-includes-disabled-resources.md)
+- **Mechanism**: `GET /upstreams` returns both enabled and disabled upstreams with `enabled` field. Optional `$filter=enabled eq true` for active only.
 
 ---
 
-## 5) Proxy API: inbound authZ + tenant visibility
+### Route configuration
 
-### [x] 5.1 Justification: Proxy invoke permission required
-- Scenario: [`negative-5.1-proxy-invoke-permission-required.md`](proxy-api/authz/negative-5.1-proxy-invoke-permission-required.md)
-- Why it matters:
-  - Prevents unauthorized outbound traffic.
-- What to check:
-  - Missing `gts.x.core.oagw.proxy.v1~:invoke` returns `403`.
+#### Create HTTP route with method + path
+- **Scenario**: [positive-3.1-create-http-route-method-path.md](management-api/routes/positive-3.1-create-http-route-method-path.md)
+- **Mechanism**: `POST /routes` with `match.http.methods` and `match.http.path`. Returns `201`. Route is associated to the target upstream.
 
-### [x] 5.2 Justification: Proxy cannot access upstream not owned or shared
-- Scenario: [`negative-5.2-proxy-cannot-access-upstream-not-owned-shared.md`](proxy-api/authz/negative-5.2-proxy-cannot-access-upstream-not-owned-shared.md)
-- Why it matters:
-  - Tenant isolation.
-- What to check:
-  - Tenant A token invoking Tenant B private upstream returns `403` or `404` (must not leak existence).
+#### Path suffix mode = append (prefix routes for REST resources)
+- **Scenario**: [positive-3.5-path-suffix-mode-append.md](management-api/routes/positive-3.5-path-suffix-mode-append.md)
+- **Mechanism**: Suffix appended to outbound path. Outbound path normalized (no `//` surprises).
 
-### [x] 5.3 Justification: Upstream sharing via ancestor hierarchy
-- Scenario: [`positive-5.3-upstream-sharing-ancestor-hierarchy.md`](proxy-api/authz/positive-5.3-upstream-sharing-ancestor-hierarchy.md)
-- Why it matters:
-  - Partner → customer model.
-- What to check:
-  - Ancestor upstream visible to descendant when sharing mode permits.
-  - Descendant cannot see ancestor `private` configuration.
+#### Route priority resolves ambiguities
+- **Scenario**: [positive-3.6-route-priority-resolves-ambiguities.md](management-api/routes/positive-3.6-route-priority-resolves-ambiguities.md)
+- **Mechanism**: With two candidate routes, higher `priority` wins. Deterministic selection.
 
----
+#### Create gRPC route by service+method
+- **Scenario**: [positive-3.8-create-grpc-route-service-method.md](management-api/routes/positive-3.8-create-grpc-route-service-method.md)
+- **Mechanism**: `match.grpc.service` + `match.grpc.method` routes to HTTP/2 `:path` `/Service/Method`.
 
-## 6) Proxy API: alias resolution
+#### Re-enable route restores proxy traffic
+- **Scenario**: [positive-3.9-re-enable-route-restores-proxy-traffic.md](management-api/routes/positive-3.9-re-enable-route-restores-proxy-traffic.md)
+- **Mechanism**: Route with `enabled=false` is skipped in matching. `PUT /routes/{id}` with `enabled=true` restores matching.
 
-### [x] 6.1 Justification: Alias resolves by walking tenant hierarchy (shadowing)
-- Scenario: [`positive-6.1-alias-resolves-walking-tenant-hierarchy.md`](proxy-api/alias-resolution/positive-6.1-alias-resolves-walking-tenant-hierarchy.md)
-- Why it matters:
-  - Override is a first-class multi-tenant capability.
-- What to check:
-  - Child upstream with same alias overrides parent for routing.
-
-### [x] 6.2 Justification: Enforced ancestor limits still apply when alias shadowed
-- Scenario: [`negative-6.2-enforced-ancestor-limits-still-apply-alias-shadowed.md`](proxy-api/alias-resolution/negative-6.2-enforced-ancestor-limits-still-apply-alias-shadowed.md)
-- Why it matters:
-  - Prevents bypassing enforced policies by shadowing.
-- What to check:
-  - Parent `rate_limit.sharing=enforce` still constrains child effective limit.
-
-### [x] 6.3 Justification: Multi-endpoint common-suffix alias requires `X-OAGW-Target-Host` header
-- Scenario: [`negative-6.3-multi-endpoint-common-suffix-alias-requires-host-header.md`](proxy-api/alias-resolution/negative-6.3-multi-endpoint-common-suffix-alias-requires-host-header.md)
-- **Note**: This scenario filename uses legacy "host-header" terminology. The header is `X-OAGW-Target-Host`. See section 6.5 for comprehensive custom header routing scenarios.
-- Why it matters:
-  - Avoid ambiguous endpoint selection and SSRF-by-host-header tricks.
-- What to check:
-  - For alias `vendor.com` backed by endpoints `us.vendor.com`, `eu.vendor.com`:
-    - Missing `X-OAGW-Target-Host` header yields `400` error, `ESrc=gateway`.
-    - With valid `X-OAGW-Target-Host` header routes to that endpoint.
-    - With `X-OAGW-Target-Host` header value not in pool rejects.
-
-### [x] 6.4 Justification: Alias not found returns stable 404
-- Scenario: [`negative-6.4-alias-not-found-returns-stable-404.md`](proxy-api/alias-resolution/negative-6.4-alias-not-found-returns-stable-404.md)
-- Why it matters:
-  - Client can distinguish config vs upstream failure.
-- What to check:
-  - Unknown alias returns `404` `PD`, `ESrc=gateway`, `type` = `...upstream.not_found...` (or `UPSTREAM_NOT_FOUND`).
+#### List routes includes disabled resources
+- **Scenario**: [positive-3.10-list-routes-includes-disabled-resources.md](management-api/routes/positive-3.10-list-routes-includes-disabled-resources.md)
+- **Mechanism**: `GET /routes` returns both enabled and disabled routes with `enabled` field.
 
 ---
 
-## 6.5) Proxy API: Custom Header Routing (X-OAGW-Target-Host)
+### Plugin management
 
-### Positive Scenarios
+#### Create custom Starlark guard plugin
+- **Scenario**: [positive-4.1-create-custom-starlark-guard-plugin.md](management-api/plugins/positive-4.1-create-custom-starlark-guard-plugin.md)
+- **Mechanism**: `POST /plugins` returns `201`. Plugin addressable by anonymous GTS id. Source retrievable via `GET /plugins/{id}/source`.
 
-### [x] 6.5.1 Justification: Single-endpoint upstream without X-OAGW-Target-Host header
-- Scenario: [`positive-1.1-single-endpoint-no-header.md`](proxy-api/custom-header-routing/positive-1.1-single-endpoint-no-header.md)
-- Why it matters:
-  - Ensures backward compatibility for most common use case.
-- What to check:
-  - Single-endpoint upstreams route successfully without the custom header.
-  - Behavior unchanged from current implementation.
+#### Delete plugin succeeds only when unreferenced
+- **Scenario**: [positive-4.3-delete-plugin-succeeds-only-unreferenced.md](management-api/plugins/positive-4.3-delete-plugin-succeeds-only-unreferenced.md)
+- **Mechanism**: Referenced plugin deletion returns `409 plugin.in_use`. Unlinked plugin deletion returns `204`.
 
-### [x] 6.5.2 Justification: Single-endpoint upstream with valid X-OAGW-Target-Host header
-- Scenario: [`positive-1.2-single-endpoint-with-header.md`](proxy-api/custom-header-routing/positive-1.2-single-endpoint-with-header.md)
-- Why it matters:
-  - Header is validated but optional for single-endpoint upstreams.
-- What to check:
-  - Header value must match the single endpoint.
-  - Header is stripped before forwarding to upstream.
+#### Plugin resolution supports builtin named ids and custom UUID ids
+- **Scenario**: [positive-4.5-plugin-resolution-supports-builtin-named-ids-custom-uuid.md](management-api/plugins/positive-4.5-plugin-resolution-supports-builtin-named-ids-custom-uuid.md)
+- **Mechanism**: Builtin plugin id works without DB row. UUID plugin id requires DB row; missing yields `503 PLUGIN_NOT_FOUND`.
 
-### [x] 6.5.3 Justification: Multi-endpoint explicit alias without header uses round-robin
-- Scenario: [`positive-2.1-multi-endpoint-explicit-alias-no-header.md`](proxy-api/custom-header-routing/positive-2.1-multi-endpoint-explicit-alias-no-header.md)
-- Why it matters:
-  - Preserves load balancing for explicit aliases.
-- What to check:
-  - Requests distribute across endpoints via round-robin.
-  - No header required for explicit alias.
+#### Plugin sharing modes merge correctly across tenant hierarchy
+- **Scenario**: [positive-4.6-plugin-sharing-modes-merge-correctly-across-tenant-hierarchy.md](management-api/plugins/positive-4.6-plugin-sharing-modes-merge-correctly-across-tenant-hierarchy.md)
+- **Mechanism**: `sharing=inherit` → chain is parent + child. `sharing=enforce` → child cannot remove parent plugins. `sharing=private` → child does not see parent plugins.
 
-### [x] 6.5.4 Justification: Multi-endpoint explicit alias with header bypasses load balancing
-- Scenario: [`positive-2.2-multi-endpoint-explicit-alias-with-header.md`](proxy-api/custom-header-routing/positive-2.2-multi-endpoint-explicit-alias-with-header.md)
-- Why it matters:
-  - Allows explicit endpoint selection for debugging/testing.
-- What to check:
-  - Header value selects specific endpoint.
-  - Round-robin is bypassed when header present.
-
-### [x] 6.5.5 Justification: Multi-endpoint common suffix alias with header succeeds
-- Scenario: [`positive-3.1-multi-endpoint-common-suffix-with-header.md`](proxy-api/custom-header-routing/positive-3.1-multi-endpoint-common-suffix-with-header.md)
-- Why it matters:
-  - Core use case for custom header routing.
-- What to check:
-  - Header disambiguates endpoints with common suffix.
-  - Request routes to specified endpoint.
-
-### [x] 6.5.6 Justification: Case-insensitive X-OAGW-Target-Host matching
-- Scenario: [`positive-3.2-case-insensitive-matching.md`](proxy-api/custom-header-routing/positive-3.2-case-insensitive-matching.md)
-- Why it matters:
-  - DNS is case-insensitive; header matching should follow DNS standards.
-- What to check:
-  - Mixed case header values match endpoints.
-  - Comparison follows DNS conventions.
-
-### [x] 6.5.7 Justification: X-OAGW-Target-Host bypasses round-robin load balancing
-- Scenario: [`positive-3.3-load-balancing-bypass.md`](proxy-api/custom-header-routing/positive-3.3-load-balancing-bypass.md)
-- Why it matters:
-  - Explicit routing for operational needs (debugging, region-specific routing).
-- What to check:
-  - Header consistently routes to same endpoint.
-  - Load balancing state preserved for requests without header.
-
-### Negative Scenarios
-
-### [x] 6.5.8 Justification: Missing X-OAGW-Target-Host for common suffix alias returns 400
-- Scenario: [`negative-1.1-missing-header-common-suffix.md`](proxy-api/custom-header-routing/negative-1.1-missing-header-common-suffix.md)
-- Why it matters:
-  - Prevents ambiguous routing and enforces explicit endpoint selection.
-- What to check:
-  - Missing header for common suffix alias returns `400` `PD`.
-  - Error includes list of valid endpoint hosts.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.missing_target_host.v1`.
-
-### [x] 6.5.9 Justification: Invalid X-OAGW-Target-Host format with port returns 400
-- Scenario: [`negative-1.2-invalid-format-with-port.md`](proxy-api/custom-header-routing/negative-1.2-invalid-format-with-port.md)
-- Why it matters:
-  - Port is defined in upstream configuration, not header.
-- What to check:
-  - Header with port number rejected with `400` `PD`.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.invalid_target_host.v1`.
-
-### [x] 6.5.10 Justification: Invalid X-OAGW-Target-Host format with path returns 400
-- Scenario: [`negative-1.3-invalid-format-with-path.md`](proxy-api/custom-header-routing/negative-1.3-invalid-format-with-path.md)
-- Why it matters:
-  - Path components are not part of host specification.
-- What to check:
-  - Header with path component rejected with `400` `PD`.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.invalid_target_host.v1`.
-
-### [x] 6.5.11 Justification: Invalid X-OAGW-Target-Host format with special chars returns 400
-- Scenario: [`negative-1.4-invalid-format-special-chars.md`](proxy-api/custom-header-routing/negative-1.4-invalid-format-special-chars.md)
-- Why it matters:
-  - Prevents injection attacks and malformed routing.
-- What to check:
-  - Header with query params or special characters rejected with `400` `PD`.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.invalid_target_host.v1`.
-
-### [x] 6.5.12 Justification: Unknown X-OAGW-Target-Host not in endpoint list returns 400
-- Scenario: [`negative-2.1-unknown-host.md`](proxy-api/custom-header-routing/negative-2.1-unknown-host.md)
-- Why it matters:
-  - Allowlist validation prevents routing to arbitrary servers (SSRF protection).
-- What to check:
-  - Header value not matching any endpoint rejected with `400` `PD`.
-  - Error includes list of valid hosts.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.unknown_target_host.v1`.
-
-### [x] 6.5.13 Justification: IP address when hostname expected returns 400
-- Scenario: [`negative-2.2-ip-address-when-hostname-expected.md`](proxy-api/custom-header-routing/negative-2.2-ip-address-when-hostname-expected.md)
-- Why it matters:
-  - Type mismatch (IP vs hostname) treated as unknown host.
-- What to check:
-  - IP address when endpoints use hostnames rejected with `400` `PD`.
-  - Error type: `gts.x.core.errors.err.v1~x.oagw.routing.unknown_target_host.v1`.
+#### Plugin usage tracking and GC eligibility
+- **Scenario**: [positive-4.7-plugin-usage-tracking-gc-eligibility-behavior.md](management-api/plugins/positive-4.7-plugin-usage-tracking-gc-eligibility-behavior.md)
+- **Mechanism**: `last_used_at` updated on proxy invoke. Unlinked plugins get `gc_eligible_at` set. GC job deletes when `gc_eligible_at < now`.
 
 ---
 
-## 7) Proxy API: request transformation invariants
+### Injecting authentication
 
-### [x] 7.1 Justification: Inbound → outbound path + query mapping for HTTP
-- Scenario: [`positive-7.1-inbound-outbound-path-query-mapping-http.md`](proxy-api/request-transforms/positive-7.1-inbound-outbound-path-query-mapping-http.md)
-- Why it matters:
-  - Correctness and security of upstream requests.
-- What to check:
-  - Outbound path equals `route.match.http.path` (+ suffix if enabled).
-  - Only allowlisted query params are forwarded.
+#### Noop auth plugin (public upstreams)
+- **Scenario**: [positive-9.1-noop-auth-plugin-forwards-credential-injection.md](proxy-api/authentication/positive-9.1-noop-auth-plugin-forwards-credential-injection.md)
+- **Mechanism**: No auth headers added. Use for public APIs.
 
-### [x] 7.2 Justification: Hop-by-hop headers stripped
-- Scenario: [`positive-7.2-hop-hop-headers-stripped.md`](proxy-api/request-transforms/positive-7.2-hop-hop-headers-stripped.md)
-- Why it matters:
-  - Prevents connection manipulation and request smuggling.
-- What to check:
-  - Inbound `Connection`, `Upgrade`, `Transfer-Encoding`, `TE`, etc do not reach upstream unless explicitly allowed by protocol handler.
+#### API key injection (header + optional prefix)
+- **Scenario**: [positive-9.2-api-key-injection.md](proxy-api/authentication/positive-9.2-api-key-injection.md)
+- **Mechanism**: Configure `auth.type` = apikey with header name, prefix, and `secret_ref`. Secret retrieved from `cred_store` at request time. Common for OpenAI, Anthropic, etc.
 
-### [x] 7.3 Justification: `Host` header replaced by upstream host
-- Scenario: [`positive-7.3-host-header-replaced-upstream-host.md`](proxy-api/request-transforms/positive-7.3-host-header-replaced-upstream-host.md)
-- Why it matters:
-  - Prevents host header injection.
-- What to check:
-  - Upstream sees correct `Host`.
+#### Basic auth injection
+- **Scenario**: [positive-9.3-basic-auth-injection.md](proxy-api/authentication/positive-9.3-basic-auth-injection.md)
+- **Mechanism**: Correct `Authorization: Basic ...` formatting from secret.
 
-### [x] 7.4 Justification: Well-known header validation errors are `400`
-- Scenario: [`negative-7.4-well-known-header-validation-errors-400.md`](proxy-api/request-transforms/negative-7.4-well-known-header-validation-errors-400.md)
-- Why it matters:
-  - Fail fast on malformed requests.
-- What to check:
-  - Invalid `Content-Length` returns `400` `PD`.
-  - `Content-Length` mismatch with actual body returns `400` `PD`.
+#### Bearer token passthrough/injection
+- **Scenario**: [positive-9.4-bearer-token-passthrough-injection.md](proxy-api/authentication/positive-9.4-bearer-token-passthrough-injection.md)
+- **Mechanism**: `Authorization: Bearer ...` set from static secret. For service tokens.
 
-### [x] 7.5 Justification: Upstream `headers` config applies simple transformations
-- Scenario: [`positive-7.5-upstream-headers-config-applies-simple-transformations.md`](proxy-api/request-transforms/positive-7.5-upstream-headers-config-applies-simple-transformations.md)
-- Why it matters:
-  - Common use case without writing plugins.
-- What to check:
-  - `upstream.headers.request.set` adds/overwrites headers.
-  - Header removal rules (if supported) apply.
-  - Invalid header names/values are rejected with `400` `PD`.
+#### OAuth2 client credentials (body-based)
+- **Scenario**: [positive-9.5-oauth2-client-credentials.md](proxy-api/authentication/positive-9.5-oauth2-client-credentials.md)
+- **Mechanism**: Token fetched via OAuth2 flow, cached. On upstream `401`, plugin refreshes token. Plugin does not retry the original request.
 
-### [x] 7.6 Justification: Request correlation headers propagate end-to-end
-- Scenario: [`positive-7.6-request-correlation-headers-propagate-end-end.md`](proxy-api/request-transforms/positive-7.6-request-correlation-headers-propagate-end-end.md)
-- Why it matters:
-  - Debuggability across systems.
-- What to check:
-  - If client sends `X-Request-ID`, upstream receives it and response includes it.
-  - If client does not send `X-Request-ID`, gateway generates one (if implemented) and uses it consistently in logs.
+#### OAuth2 client credentials (basic-auth variant)
+- **Scenario**: [positive-9.6-oauth2-client-credentials.md](proxy-api/authentication/positive-9.6-oauth2-client-credentials.md)
+- **Mechanism**: Some token endpoints require `client_id/client_secret` via basic auth. Token request uses correct client authentication.
+
+#### Hierarchical auth sharing modes
+- **Scenario**: [positive-9.8-hierarchical-auth-sharing-modes-behave-specified.md](proxy-api/authentication/positive-9.8-hierarchical-auth-sharing-modes-behave-specified.md)
+- **Mechanism**: `auth.sharing=inherit` + child provides auth → child override. `inherit` + child omits → parent auth. `enforce` → child cannot override. `private` → child must provide own.
 
 ---
 
-## 8) Body validation (core)
+### Request transforms
 
-### [x] 8.1 Justification: Maximum body size limit enforced (100MB)
-- Scenario: [`negative-8.1-maximum-body-size-limit-enforced.md`](proxy-api/body-validation/negative-8.1-maximum-body-size-limit-enforced.md)
-- Why it matters:
-  - Prevents memory exhaustion.
-- What to check:
-  - Body > 100MB rejected early with `413` `PD`, `ESrc=gateway`.
+#### Inbound → outbound path + query mapping for HTTP
+- **Scenario**: [positive-7.1-inbound-outbound-path-query-mapping-http.md](proxy-api/request-transforms/positive-7.1-inbound-outbound-path-query-mapping-http.md)
+- **Mechanism**: Outbound path = `route.match.http.path` (+ suffix if enabled). Only allowlisted query params forwarded.
 
-### [x] 8.2 Justification: Transfer-Encoding support limited to `chunked`
-- Scenario: [`negative-8.2-transfer-encoding-support-limited-chunked.md`](proxy-api/body-validation/negative-8.2-transfer-encoding-support-limited-chunked.md)
-- Why it matters:
-  - Avoid unsupported encodings and ambiguous parsing.
-- What to check:
-  - Unsupported transfer-encoding rejected with `400` `PD`.
+#### Hop-by-hop headers stripped
+- **Scenario**: [positive-7.2-hop-hop-headers-stripped.md](proxy-api/request-transforms/positive-7.2-hop-hop-headers-stripped.md)
+- **Mechanism**: `Connection`, `Upgrade`, `Transfer-Encoding`, `TE`, etc. do not reach upstream unless explicitly allowed by protocol handler.
 
-### [x] 8.3 Justification: Streaming request bodies are not buffered (where supported)
-- Scenario: [`positive-8.3-streaming-request-bodies-not-buffered.md`](proxy-api/body-validation/positive-8.3-streaming-request-bodies-not-buffered.md)
-- Why it matters:
-  - Large uploads should not OOM gateway.
-- What to check:
-  - For endpoints supporting streaming body, memory does not grow with body size (assert via metrics/observability hooks if available).
+#### Host header replaced by upstream host
+- **Scenario**: [positive-7.3-host-header-replaced-upstream-host.md](proxy-api/request-transforms/positive-7.3-host-header-replaced-upstream-host.md)
+- **Mechanism**: Upstream sees correct `Host` header. Prevents host header injection.
 
----
+#### Upstream headers config applies simple transformations
+- **Scenario**: [positive-7.5-upstream-headers-config-applies-simple-transformations.md](proxy-api/request-transforms/positive-7.5-upstream-headers-config-applies-simple-transformations.md)
+- **Mechanism**: `upstream.headers.request.set` adds/overwrites headers. Header removal rules apply. Invalid header names/values rejected with `400 PD`.
 
-## 9) Outbound authentication plugins (OAGW → upstream)
-
-### [x] 9.1 Justification: `noop` auth plugin forwards without credential injection
-- Scenario: [`positive-9.1-noop-auth-plugin-forwards-credential-injection.md`](proxy-api/authentication/positive-9.1-noop-auth-plugin-forwards-credential-injection.md)
-- Why it matters:
-  - Public upstreams.
-- What to check:
-  - No auth headers are added.
-
-### [x] 9.2 Justification: API key injection (header + optional prefix)
-- Scenario: [`positive-9.2-api-key-injection.md`](proxy-api/authentication/positive-9.2-api-key-injection.md)
-- Why it matters:
-  - Common vendor auth.
-- What to check:
-  - Header name exactness (case-insensitive match, but sent as configured).
-  - Prefix handling (`"Bearer "` etc).
-  - Secret value not logged.
-
-### [x] 9.3 Justification: Basic auth injection
-- Scenario: [`positive-9.3-basic-auth-injection.md`](proxy-api/authentication/positive-9.3-basic-auth-injection.md)
-- Why it matters:
-  - Legacy systems.
-- What to check:
-  - Correct `Authorization: Basic ...` formatting.
-
-### [x] 9.4 Justification: Bearer token passthrough/injection
-- Scenario: [`positive-9.4-bearer-token-passthrough-injection.md`](proxy-api/authentication/positive-9.4-bearer-token-passthrough-injection.md)
-- Why it matters:
-  - Static bearer tokens and service tokens.
-- What to check:
-  - `Authorization: Bearer ...` set from secret.
-
-### [x] 9.5 Justification: OAuth2 client credentials (body-based)
-- Scenario: [`positive-9.5-oauth2-client-credentials.md`](proxy-api/authentication/positive-9.5-oauth2-client-credentials.md)
-- Why it matters:
-  - Standard machine-to-machine auth.
-- What to check:
-  - Token is fetched via OAuth2 flow.
-  - Token cached.
-  - On upstream `401`, plugin refreshes token.
-  - Plugin does not retry the original request beyond auth refresh policy (per design note).
-
-### [x] 9.6 Justification: OAuth2 client credentials (basic-auth variant)
-- Scenario: [`positive-9.6-oauth2-client-credentials.md`](proxy-api/authentication/positive-9.6-oauth2-client-credentials.md)
-- Why it matters:
-  - Some token endpoints require `client_id/client_secret` via basic auth.
-- What to check:
-  - Token request uses correct client authentication.
-
-### [x] 9.7 Justification: Secret access control via `cred_store`
-- Scenario: [`negative-9.7-secret-access-control-cred-store.md`](proxy-api/authentication/negative-9.7-secret-access-control-cred-store.md)
-- Why it matters:
-  - Prevent secret exfiltration across tenants.
-- What to check:
-  - If `cred_store` denies access, proxy returns `401 AuthenticationFailed` (`PD`, `ESrc=gateway`).
-  - If secret missing, proxy returns `500 SecretNotFound` (`PD`).
-
-### [x] 9.8 Justification: Hierarchical auth sharing modes behave as specified
-- Scenario: [`positive-9.8-hierarchical-auth-sharing-modes-behave-specified.md`](proxy-api/authentication/positive-9.8-hierarchical-auth-sharing-modes-behave-specified.md)
-- Why it matters:
-  - Partners may share auth, or enforce a corporate credential.
-- What to check:
-  - Parent `auth.sharing=inherit`, child provides auth:
-    - Effective auth is child override (only if child has override permission).
-  - Parent `auth.sharing=inherit`, child does not provide auth:
-    - Effective auth is parent.
-  - Parent `auth.sharing=enforce`:
-    - Child cannot override auth.
-  - Parent `auth.sharing=private`:
-    - Child must provide its own auth.
-
-### [x] 9.9 Justification: Descendant override permissions are enforced
-- Scenario: [`negative-9.9-descendant-override-permissions-enforced.md`](proxy-api/authentication/negative-9.9-descendant-override-permissions-enforced.md)
-- Why it matters:
-  - Prevents unauthorized weakening of shared configs.
-- What to check:
-  - Without `oagw:upstream:override_auth`, child cannot override inherited auth even when `sharing=inherit`.
-  - Without `oagw:upstream:override_rate`, child cannot set a custom rate limit.
-  - Without `oagw:upstream:add_plugins`, child cannot append plugins.
+#### Request correlation headers propagate end-to-end
+- **Scenario**: [positive-7.6-request-correlation-headers-propagate-end-end.md](proxy-api/request-transforms/positive-7.6-request-correlation-headers-propagate-end-end.md)
+- **Mechanism**: Client `X-Request-ID` forwarded to upstream and included in response. If absent, gateway generates one.
 
 ---
 
-## 10) Guard plugins (policy enforcement)
+### Alias resolution and shadowing
 
-### [x] 10.1 Justification: Timeout guard plugin enforces request timeout
-- Scenario: [`negative-10.1-timeout-guard-plugin-enforces-request-timeout.md`](plugins/guards/negative-10.1-timeout-guard-plugin-enforces-request-timeout.md)
-- Why it matters:
-  - Prevents hung upstream calls.
-- What to check:
-  - Request exceeding timeout returns `504` gateway timeout (`PD`, `ESrc=gateway`).
+#### Alias resolves by walking tenant hierarchy (shadowing)
+- **Scenario**: [positive-6.1-alias-resolves-walking-tenant-hierarchy.md](proxy-api/alias-resolution/positive-6.1-alias-resolves-walking-tenant-hierarchy.md)
+- **Mechanism**: Child upstream with same alias overrides parent for routing. Closest tenant wins.
 
-### [x] 10.2 Justification: Built-in CORS handling (preflight)
-- Scenario: [`positive-10.2-built-cors-handling.md`](plugins/guards/positive-10.2-built-cors-handling.md)
-- Why it matters:
-  - Browser clients.
-- What to check:
-  - OPTIONS preflight handled locally (`204` with correct `Access-Control-*`).
-  - Preflight bypasses upstream call.
-  - Origin/method/header not allowed yields `403` `PD`.
-
-### [x] 10.3 Justification: CORS credentials + wildcard is rejected by config validation
-- Scenario: [`negative-10.3-cors-credentials-wildcard-rejected-config-validation.md`](plugins/guards/negative-10.3-cors-credentials-wildcard-rejected-config-validation.md)
-- Why it matters:
-  - Prevents insecure misconfiguration.
-- What to check:
-  - `allow_credentials=true` + `allowed_origins=['*']` rejected (`400`), or preflight rejected.
-
-### [x] 10.4 Justification: Custom Starlark guard rejects based on headers/body
-- Scenario: [`negative-10.4-custom-starlark-guard-rejects-based-headers-body.md`](plugins/guards/negative-10.4-custom-starlark-guard-rejects-based-headers-body.md)
-- Why it matters:
-  - Tenant-specific compliance.
-- What to check:
-  - Missing required header rejected with plugin-defined status/code.
-  - Body-too-large rejected with `413`.
-  - Ensure guard only runs `on_request`.
+#### Upstream sharing via ancestor hierarchy
+- **Scenario**: [positive-5.3-upstream-sharing-ancestor-hierarchy.md](proxy-api/authz/positive-5.3-upstream-sharing-ancestor-hierarchy.md)
+- **Mechanism**: Ancestor upstream visible to descendant when sharing mode permits. Descendant cannot see ancestor `private` configuration.
 
 ---
 
-## 11) Transform plugins (request/response/error mutation)
+### Custom header routing (X-OAGW-Target-Host)
 
-### [x] 11.1 Justification: Request path rewrite transform
-- Scenario: [`positive-11.1-request-path-rewrite-transform.md`](plugins/transforms/positive-11.1-request-path-rewrite-transform.md)
-- Why it matters:
-  - Versioning and upstream compatibility.
-- What to check:
-  - Outbound `path` is rewritten.
-  - Transform emits audit-safe logs (no secrets).
+#### Single-endpoint upstream without X-OAGW-Target-Host header
+- **Scenario**: [positive-1.1-single-endpoint-no-header.md](proxy-api/custom-header-routing/positive-1.1-single-endpoint-no-header.md)
+- **Mechanism**: Single-endpoint upstreams route successfully without the custom header. Backward compatibility preserved.
 
-### [x] 11.2 Justification: Query mutation transform
-- Scenario: [`positive-11.2-query-mutation-transform.md`](plugins/transforms/positive-11.2-query-mutation-transform.md)
-- Why it matters:
-  - Inject upstream-required parameters.
-- What to check:
-  - New query param added.
-  - Internal query params removed.
-  - Query allowlist rules remain enforced before transform (or explicitly document order via test).
+#### Single-endpoint upstream with valid X-OAGW-Target-Host header
+- **Scenario**: [positive-1.2-single-endpoint-with-header.md](proxy-api/custom-header-routing/positive-1.2-single-endpoint-with-header.md)
+- **Mechanism**: Header value must match the single endpoint. Header stripped before forwarding.
 
-### [x] 11.3 Justification: Header mutation transform
-- Scenario: [`positive-11.3-header-mutation-transform.md`](plugins/transforms/positive-11.3-header-mutation-transform.md)
-- Why it matters:
-  - Vendor headers, tracing, feature flags.
-- What to check:
-  - `headers.set/add/remove` changes reflected upstream.
-  - Hop-by-hop headers remain stripped even if plugin tries to set them (define expected behavior and lock it with test).
+#### Multi-endpoint explicit alias without header uses round-robin
+- **Scenario**: [positive-2.1-multi-endpoint-explicit-alias-no-header.md](proxy-api/custom-header-routing/positive-2.1-multi-endpoint-explicit-alias-no-header.md)
+- **Mechanism**: Requests distribute across endpoints via round-robin. No header required for explicit alias.
 
-### [x] 11.4 Justification: Response JSON redaction transform
-- Scenario: [`positive-11.4-response-json-redaction-transform.md`](plugins/transforms/positive-11.4-response-json-redaction-transform.md)
-- Why it matters:
-  - Prevents PII leakage.
-- What to check:
-  - Target fields replaced with placeholder.
-  - Non-JSON response triggers defined behavior (reject or no-op).
+#### Multi-endpoint explicit alias with header bypasses load balancing
+- **Scenario**: [positive-2.2-multi-endpoint-explicit-alias-with-header.md](proxy-api/custom-header-routing/positive-2.2-multi-endpoint-explicit-alias-with-header.md)
+- **Mechanism**: Header value selects specific endpoint. Round-robin bypassed.
 
-### [x] 11.5 Justification: `on_error` transform handles gateway errors
-- Scenario: [`positive-11.5-error-transform-handles-gateway-errors.md`](plugins/transforms/positive-11.5-error-transform-handles-gateway-errors.md)
-- Why it matters:
-  - Standardize tenant error formats.
-- What to check:
-  - For a gateway error (e.g., rate limit), `on_error` can rewrite `title/detail` and status if allowed.
+#### Multi-endpoint common suffix alias with header succeeds
+- **Scenario**: [positive-3.1-multi-endpoint-common-suffix-with-header.md](proxy-api/custom-header-routing/positive-3.1-multi-endpoint-common-suffix-with-header.md)
+- **Mechanism**: Header disambiguates endpoints with common suffix. Core use case for custom header routing.
 
-### [x] 11.6 Justification: Plugin ordering and layering (upstream before route)
-- Scenario: [`positive-11.6-plugin-ordering-layering.md`](plugins/transforms/positive-11.6-plugin-ordering-layering.md)
-- Why it matters:
-  - Predictable composition.
-- What to check:
-  - Upstream plugins run before route plugins.
-  - Auth runs before guards, before transforms.
+#### Case-insensitive X-OAGW-Target-Host matching
+- **Scenario**: [positive-3.2-case-insensitive-matching.md](proxy-api/custom-header-routing/positive-3.2-case-insensitive-matching.md)
+- **Mechanism**: Mixed case header values match endpoints. DNS convention followed.
 
-### [x] 11.7 Justification: Plugin control flow (`next`, `reject`, `respond`)
-- Scenario: [`positive-11.7-plugin-control-flow.md`](plugins/transforms/positive-11.7-plugin-control-flow.md)
-- Why it matters:
-  - Plugins must be able to short-circuit.
-- What to check:
-  - `ctx.reject` stops chain and returns gateway error.
-  - `ctx.respond` returns custom success response without calling upstream.
-
-### [x] 11.8 Justification: Starlark sandbox restrictions
-- Scenario: [`negative-11.8-starlark-sandbox-restrictions.md`](plugins/transforms/negative-11.8-starlark-sandbox-restrictions.md)
-- Why it matters:
-  - Prevents plugin-based SSRF/file reads.
-- What to check:
-  - Network I/O attempt fails.
-  - File I/O attempt fails.
-  - Infinite loop times out.
-  - Large allocation is blocked.
+#### X-OAGW-Target-Host bypasses round-robin load balancing
+- **Scenario**: [positive-3.3-load-balancing-bypass.md](proxy-api/custom-header-routing/positive-3.3-load-balancing-bypass.md)
+- **Mechanism**: Header consistently routes to same endpoint. Load balancing state preserved for requests without header.
 
 ---
 
-## 12) Protocol coverage: HTTP (plain)
+### Rate limiting
 
-### [x] 12.1 Justification: Plain HTTP request/response passthrough
-- Scenario: [`positive-12.1-plain-http-request-response-passthrough.md`](protocols/http/positive-12.1-plain-http-request-response-passthrough.md)
-- Why it matters:
-  - Baseline behavior.
-- What to check:
-  - Status, headers, body forwarded.
-  - Gateway adds rate-limit headers if enabled.
+#### Token bucket sustained + burst
+- **Scenario**: [positive-18.1-token-bucket-sustained-burst.md](rate-limiting/positive-18.1-token-bucket-sustained-burst.md)
+- **Mechanism**: Burst allows short spike. Sustained rate enforced. `429` includes `Retry-After` and `X-RateLimit-*` headers.
 
-### [x] 12.2 Justification: Upstream error passthrough with `ESrc=upstream`
-- Scenario: [`negative-12.2-upstream-error-passthrough-esrc-upstream.md`](protocols/http/negative-12.2-upstream-error-passthrough-esrc-upstream.md)
-- Why it matters:
-  - Clients need to distinguish who produced the failure.
-- What to check:
-  - Upstream returns `500` with JSON body.
-  - OAGW response keeps body intact and sets `ESrc=upstream`.
+#### Rate limit response headers can be disabled
+- **Scenario**: [positive-18.1.1-rate-limit-response-headers-can-be-disabled.md](rate-limiting/positive-18.1.1-rate-limit-response-headers-can-be-disabled.md)
+- **Mechanism**: With `rate_limit.response_headers=false`, success responses omit `X-RateLimit-*`. Error responses still include `Retry-After`.
 
-### [x] 12.3 Justification: Gateway error uses `PD` + `ESrc=gateway`
-- Scenario: [`negative-12.3-gateway-error-uses-pd-esrc-gateway.md`](protocols/http/negative-12.3-gateway-error-uses-pd-esrc-gateway.md)
-- Why it matters:
-  - Consistent client handling.
-- What to check:
-  - Induce gateway error (route not found / validation error).
-  - Response is `PD`, `Content-Type=application/problem+json`, `ESrc=gateway`.
+#### Rate limit scope variants
+- **Scenario**: [positive-18.3-rate-limit-scope-variants.md](rate-limiting/positive-18.3-rate-limit-scope-variants.md)
+- **Mechanism**: One scenario each for `scope=global`, `tenant`, `user`, `ip`, `route`.
 
-### [x] 12.4 Justification: HTTP version negotiation (HTTP/2 attempt + fallback)
-- Scenario: [`positive-12.4-http-version-negotiation.md`](protocols/http/positive-12.4-http-version-negotiation.md)
-- Why it matters:
-  - Correctness and performance across mixed upstreams.
-- What to check:
-  - First call attempts HTTP/2; on failure falls back to HTTP/1.1.
-  - Subsequent calls use cached decision (TTL behavior).
+#### Weighted cost per route
+- **Scenario**: [positive-18.4-weighted-cost-per-route.md](rate-limiting/positive-18.4-weighted-cost-per-route.md)
+- **Mechanism**: Route with `cost=10` consumes 10 tokens. Expensive endpoints consume more budget.
 
-### [x] 12.6 Justification: No automatic retries for upstream failures
-- Scenario: [`negative-12.6-no-automatic-retries-upstream-failures.md`](protocols/http/negative-12.6-no-automatic-retries-upstream-failures.md)
-- Why it matters:
-  - Prevents duplicate side effects on non-idempotent calls.
-- What to check:
-  - Upstream returns transient `5xx` or connection close:
-    - OAGW returns error once.
-    - Upstream observes a single request attempt (requires controllable upstream).
+#### Hierarchical min() merge for descendant overrides
+- **Scenario**: [positive-18.6-hierarchical-min-merge-descendant-overrides.md](rate-limiting/positive-18.6-hierarchical-min-merge-descendant-overrides.md)
+- **Mechanism**: Parent `enforce 1000/min`, child `500/min` → effective `500/min`. Parent caps child.
 
-### [x] 12.7 Justification: Scheme/protocol mismatches fail explicitly
-- Scenario: [`negative-12.7-scheme-protocol-mismatches-fail-explicitly.md`](protocols/http/negative-12.7-scheme-protocol-mismatches-fail-explicitly.md)
-- Why it matters:
-  - Prevents silent downgrade or undefined behavior.
-- What to check:
-  - Upstream `protocol=http` with endpoint `scheme=grpc` rejected at config validation.
-  - Upstream `protocol=grpc` with endpoint `scheme=https` rejected (or yields `502 ProtocolError` on invoke; lock expected behavior).
+#### Budget modes (allocated/shared/unlimited)
+- **Scenario**: [positive-18.7-budget-modes-behave-specified.md](rate-limiting/positive-18.7-budget-modes-behave-specified.md)
+- **Mechanism**: `allocated` rejects when sum exceeds `total * overcommit_ratio`. `shared` pools between tenants. `unlimited` skips validation.
 
 ---
 
-## 13) Protocol coverage: SSE (HTTP streaming)
+### HTTP basics
 
-### [x] 13.1 Justification: SSE stream is forwarded without buffering
-- Scenario: [`positive-13.1-sse-stream-forwarded-buffering.md`](protocols/sse/positive-13.1-sse-stream-forwarded-buffering.md)
-- Why it matters:
-  - Streaming correctness and memory bounds.
-- What to check:
-  - Response `Content-Type: text/event-stream`.
-  - Events arrive incrementally.
-  - Rate limit headers present in initial headers.
+#### Plain HTTP request/response passthrough
+- **Scenario**: [positive-12.1-plain-http-request-response-passthrough.md](protocols/http/positive-12.1-plain-http-request-response-passthrough.md)
+- **Mechanism**: Status, headers, body forwarded. Gateway adds rate-limit headers if enabled.
 
-### [x] 13.2 Justification: Client disconnect aborts upstream stream
-- Scenario: [`positive-13.2-client-disconnect-aborts-upstream-stream.md`](protocols/sse/positive-13.2-client-disconnect-aborts-upstream-stream.md)
-- Why it matters:
-  - Resource cleanup.
-- What to check:
-  - Disconnect client mid-stream.
-  - Upstream stream is closed.
-  - Gateway may emit `StreamAborted` internally; ensure no leaked in-flight metrics.
+#### HTTP version negotiation (HTTP/2 attempt + fallback)
+- **Scenario**: [positive-12.4-http-version-negotiation.md](protocols/http/positive-12.4-http-version-negotiation.md)
+- **Mechanism**: First call attempts HTTP/2 via ALPN. On failure, falls back to HTTP/1.1. Subsequent calls use cached protocol decision.
 
 ---
 
-## 14) Protocol coverage: WebSocket (wss)
+### Streaming (SSE)
 
-### [x] 14.1 Justification: WebSocket upgrade is proxied
-- Scenario: [`positive-14.1-websocket-upgrade-proxied.md`](protocols/websocket/positive-14.1-websocket-upgrade-proxied.md)
-- Why it matters:
-  - Real-time APIs.
-- What to check:
-  - `101 Switching Protocols` handshake forwarded.
-  - Required WS headers forwarded/validated.
+#### SSE stream forwarded without buffering
+- **Scenario**: [positive-13.1-sse-stream-forwarded-buffering.md](protocols/sse/positive-13.1-sse-stream-forwarded-buffering.md)
+- **Mechanism**: Response `Content-Type: text/event-stream`. Events arrive incrementally. Rate limit headers in initial headers.
 
-### [x] 14.2 Justification: Auth injected during handshake (not per-message)
-- Scenario: [`positive-14.2-auth-injected-during-handshake.md`](protocols/websocket/positive-14.2-auth-injected-during-handshake.md)
-- Why it matters:
-  - Security model consistency.
-- What to check:
-  - Upstream sees auth header on upgrade request.
-  - Subsequent WS frames are forwarded unchanged.
-
-### [x] 14.3 Justification: Rate limit applies to connection establishment
-- Scenario: [`negative-14.3-rate-limit-applies-connection-establishment.md`](protocols/websocket/negative-14.3-rate-limit-applies-connection-establishment.md)
-- Why it matters:
-  - Avoid per-message accounting surprises.
-- What to check:
-  - Exceeding rate limit rejects upgrade with `429` (`PD`, `ESrc=gateway`).
-
-### [x] 14.4 Justification: WS connection idle timeout enforced
-- Scenario: [`negative-14.4-ws-connection-idle-timeout-enforced.md`](protocols/websocket/negative-14.4-ws-connection-idle-timeout-enforced.md)
-- Why it matters:
-  - Prevents stale connections consuming resources.
-- What to check:
-  - Idle connection closed after configured timeout.
+#### Client disconnect aborts upstream stream
+- **Scenario**: [positive-13.2-client-disconnect-aborts-upstream-stream.md](protocols/sse/positive-13.2-client-disconnect-aborts-upstream-stream.md)
+- **Mechanism**: Disconnect client mid-stream. Upstream stream closed. No leaked in-flight metrics.
 
 ---
 
-## 15) Protocol coverage: gRPC
+### WebSocket
 
-### [x] 15.1 Justification: gRPC unary request proxied (native)
-- Scenario: [`positive-15.1-grpc-unary-request-proxied.md`](protocols/grpc/positive-15.1-grpc-unary-request-proxied.md)
-- Why it matters:
-  - Service-to-service API support.
-- What to check:
-  - `content-type: application/grpc*` detection routes to gRPC handler.
-  - Metadata headers preserved.
+#### WebSocket upgrade is proxied
+- **Scenario**: [positive-14.1-websocket-upgrade-proxied.md](protocols/websocket/positive-14.1-websocket-upgrade-proxied.md)
+- **Mechanism**: `101 Switching Protocols` handshake forwarded. Required WS headers forwarded/validated.
 
-### [x] 15.2 Justification: gRPC server streaming proxied
-- Scenario: [`positive-15.2-grpc-server-streaming-proxied.md`](protocols/grpc/positive-15.2-grpc-server-streaming-proxied.md)
-- Why it matters:
-  - Common for list APIs.
-- What to check:
-  - Stream forwarded without buffering.
-  - Backpressure respects HTTP/2 flow control.
-
-### [x] 15.3 Justification: gRPC JSON transcoding for HTTP clients
-- Scenario: [`positive-15.3-grpc-json-transcoding-http-clients.md`](protocols/grpc/positive-15.3-grpc-json-transcoding-http-clients.md)
-- Why it matters:
-  - Enables REST clients to call gRPC services.
-- What to check:
-  - HTTP JSON request converted to gRPC protobuf.
-  - Server streaming results returned as `application/x-ndjson`.
-
-### [x] 15.4 Justification: gRPC status mapping and error source
-- Scenario: [`negative-15.4-grpc-status-mapping-error-source.md`](protocols/grpc/negative-15.4-grpc-status-mapping-error-source.md)
-- Why it matters:
-  - Clients need consistent failure semantics.
-- What to check:
-  - Upstream gRPC `RESOURCE_EXHAUSTED` maps to rate limit error (status + `type`).
-  - Upstream gRPC failures are marked `ESrc=upstream` when passed through.
+#### Auth injected during handshake (not per-message)
+- **Scenario**: [positive-14.2-auth-injected-during-handshake.md](protocols/websocket/positive-14.2-auth-injected-during-handshake.md)
+- **Mechanism**: Upstream sees auth header on upgrade request. Subsequent WS frames forwarded unchanged.
 
 ---
 
-## 17) Protocol coverage: WebTransport (`wt`) (future-facing)
+### gRPC
 
-### [x] 17.1 Justification: WT session establishment + auth
-- Scenario: [`positive-17.1-wt-session-establishment-auth.md`](protocols/webtransport/positive-17.1-wt-session-establishment-auth.md)
-- Why it matters:
-  - QUIC-based real-time transports are explicitly in schema.
-- What to check:
-  - Upstream scheme `wt` accepted.
-  - Failure mode clearly documented in behavior tests if feature is not implemented yet (e.g., `502 ProtocolError`, `ESrc=gateway`).
+#### gRPC unary request proxied (native)
+- **Scenario**: [positive-15.1-grpc-unary-request-proxied.md](protocols/grpc/positive-15.1-grpc-unary-request-proxied.md)
+- **Mechanism**: `content-type: application/grpc*` detection routes to gRPC handler. Metadata headers preserved.
 
----
+#### gRPC server streaming proxied
+- **Scenario**: [positive-15.2-grpc-server-streaming-proxied.md](protocols/grpc/positive-15.2-grpc-server-streaming-proxied.md)
+- **Mechanism**: Stream forwarded without buffering. Backpressure respects HTTP/2 flow control.
 
-## 18) Rate limiting
-
-### [x] 18.1 Justification: Token bucket sustained + burst
-- Scenario: [`positive-18.1-token-bucket-sustained-burst.md`](rate-limiting/positive-18.1-token-bucket-sustained-burst.md)
-- Why it matters:
-  - Default algorithm.
-- What to check:
-  - Burst allows short spike.
-  - Sustained rate enforced.
-  - `429` includes `Retry-After` and `X-RateLimit-*` headers.
-
-### [x] 18.1.1 Justification: Rate limit response headers can be disabled
-- Scenario: [`positive-18.1.1-rate-limit-response-headers-can-be-disabled.md`](rate-limiting/positive-18.1.1-rate-limit-response-headers-can-be-disabled.md)
-- Why it matters:
-  - Some clients don’t want header overhead; operators may reduce leakage.
-- What to check:
-  - With `rate_limit.response_headers=false`, success responses omit `X-RateLimit-*`.
-  - Error responses still include `Retry-After`.
-
-### [x] 18.2 Justification: Sliding window strictness
-- Scenario: [`negative-18.2-sliding-window-strictness.md`](rate-limiting/negative-18.2-sliding-window-strictness.md)
-- Why it matters:
-  - Prevents boundary bursts.
-- What to check:
-  - Requests across a window boundary do not allow 2x burst.
-
-### [x] 18.3 Justification: Rate limit scope variants
-- Scenario: [`positive-18.3-rate-limit-scope-variants.md`](rate-limiting/positive-18.3-rate-limit-scope-variants.md)
-- Why it matters:
-  - Operators need different fairness models.
-- What to check (one scenario each):
-  - `scope=global`.
-  - `scope=tenant`.
-  - `scope=user`.
-  - `scope=ip`.
-  - `scope=route`.
-
-### [x] 18.4 Justification: Weighted cost per route
-- Scenario: [`positive-18.4-weighted-cost-per-route.md`](rate-limiting/positive-18.4-weighted-cost-per-route.md)
-- Why it matters:
-  - Expensive endpoints should consume more budget.
-- What to check:
-  - Route with `cost=10` consumes 10 tokens.
-
-### [x] 18.5 Justification: Strategy variants when limit exceeded
-- Scenario: [`negative-18.5-strategy-variants-limit-exceeded.md`](rate-limiting/negative-18.5-strategy-variants-limit-exceeded.md)
-- Why it matters:
-  - Operators choose UX vs strictness.
-- What to check:
-  - `strategy=reject` returns `429`.
-  - `strategy=queue` delays then succeeds or times out with `503 queue.timeout`.
-  - `strategy=degrade` (if present) uses configured fallback behavior.
-
-### [x] 18.6 Justification: Hierarchical min() merge for descendant overrides
-- Scenario: [`positive-18.6-hierarchical-min-merge-descendant-overrides.md`](rate-limiting/positive-18.6-hierarchical-min-merge-descendant-overrides.md)
-- Why it matters:
-  - Parent caps child.
-- What to check:
-  - Parent `enforce 1000/min`, child `500/min` => effective `500/min`.
-
-### [x] 18.7 Justification: Budget modes (allocated/shared/unlimited) behave as specified
-- Scenario: [`positive-18.7-budget-modes-behave-specified.md`](rate-limiting/positive-18.7-budget-modes-behave-specified.md)
-- Why it matters:
-  - Partner/tenant quota allocation is a core multi-tenant requirement.
-- What to check:
-  - `budget.mode=allocated` rejects creation/override when sum(child) exceeds `total * overcommit_ratio`.
-  - `budget.mode=shared` shares a single pool between tenants.
-  - `budget.mode=unlimited` does not enforce budget validation.
+#### gRPC JSON transcoding for HTTP clients
+- **Scenario**: [positive-15.3-grpc-json-transcoding-http-clients.md](protocols/grpc/positive-15.3-grpc-json-transcoding-http-clients.md)
+- **Mechanism**: HTTP JSON request converted to gRPC protobuf. Server streaming returned as `application/x-ndjson`.
 
 ---
 
-## 19) Concurrency limiting + backpressure queueing (future-facing)
+### WebTransport
 
-### [x] 19.1 Justification: Concurrency limit rejects when max in-flight reached
-- Why it matters:
-  - Protect upstream and gateway.
-- What to check:
-  - When `max_concurrent` exceeded, return `503 concurrency_limit.exceeded` with `Retry-After`.
-
-### [x] 19.2 Justification: Queue strategy buffers requests up to max depth
-- Why it matters:
-  - Smooths spikes.
-- What to check:
-  - FIFO order.
-  - `queue.full` returned when depth exceeded.
-  - `queue.timeout` returned when wait exceeds config.
-  - Memory limit enforcement for queued requests.
-
-### [x] 19.3 Justification: Streaming requests hold permits until completion
-- Why it matters:
-  - Prevents infinite concurrency leakage via streams.
-- What to check:
-  - SSE and WS hold concurrency permit until closed.
+#### WT session establishment + auth
+- **Scenario**: [positive-17.1-wt-session-establishment-auth.md](protocols/webtransport/positive-17.1-wt-session-establishment-auth.md)
+- **Mechanism**: Upstream scheme `wt` accepted. Future-facing — if not implemented yet, `502 ProtocolError` with `ESrc=gateway`.
 
 ---
 
-## 20) Circuit breaker (future-facing)
+### CORS
 
-### [x] 20.1 Justification: Circuit opens after consecutive failures
-- Why it matters:
-  - Prevents cascading failures.
-- What to check:
-  - After threshold, requests fail fast with `503 circuit_breaker.open` + `Retry-After`.
+#### Built-in CORS handling (preflight)
+- **Scenario**: [positive-10.2-built-cors-handling.md](plugins/guards/positive-10.2-built-cors-handling.md)
+- **Mechanism**: OPTIONS preflight handled locally (`204` with correct `Access-Control-*`). Preflight bypasses upstream call.
 
-### [x] 20.2 Justification: Half-open probing closes circuit on recovery
-- Why it matters:
-  - Self-healing.
-- What to check:
-  - After open timeout, limited probes allowed.
-  - Success threshold closes circuit.
+#### Actual request adds CORS headers on response
+- **Scenario**: *Section 21.1 — no separate file. Behavior verified as part of HTTP passthrough and guard plugin scenarios.*
+- **Mechanism**: Response includes `Access-Control-Allow-Origin` (specific origin, not `*` when credentials). Includes `Vary: Origin`.
 
-### [x] 20.3 Justification: Per-endpoint circuit scope
-- Why it matters:
-  - Multi-endpoint pool should not be entirely blocked by one bad node.
-- What to check:
-  - With `scope=per_endpoint`, failures isolate to single endpoint.
+#### Hierarchical merge/union for CORS allowed origins
+- **Scenario**: *Covered within hierarchical configuration scenarios.*
+- **Mechanism**: `inherit` merges origins by union. `enforce` forbids child adding origins.
 
 ---
 
-## 21) CORS (built-in)
+### Guard plugins
 
-### [x] 21.1 Justification: Actual request adds CORS headers on response
-- Why it matters:
-  - Browser consumption.
-- What to check:
-  - Response includes `Access-Control-Allow-Origin` (specific origin, not `*` when credentials).
-  - Includes `Vary: Origin`.
+> **Flow reference**: [Plugin Execution](flows/plugin-execution.md)
 
-### [x] 21.2 Justification: Hierarchical merge/union for CORS allowed origins
-- Why it matters:
-  - Partner adds baseline origins, customer adds own.
-- What to check:
-  - `inherit` merges by union.
-  - `enforce` forbids child adding origins.
+*Note: CORS preflight guard is covered in [CORS](#cors) above. Timeout and Starlark guard rejection scenarios are in [Guardrails → Guard rejections](#guard-rejections).*
 
 ---
 
-## 22) Observability: metrics endpoint
+### Transform plugins
 
-### [x] 22.1 Justification: Metrics endpoint is auth-protected
-- Why it matters:
-  - Metrics can leak topology.
-- What to check:
-  - Unauthenticated `GET /metrics` is rejected.
-  - Non-admin rejected.
+#### Request path rewrite transform
+- **Scenario**: [positive-11.1-request-path-rewrite-transform.md](plugins/transforms/positive-11.1-request-path-rewrite-transform.md)
+- **Mechanism**: Outbound `path` is rewritten. Transform emits audit-safe logs (no secrets).
 
-### [x] 22.2 Justification: Request metrics increment on success
-- Why it matters:
-  - SLIs/alerting.
-- What to check:
-  - `oagw_requests_total` increments with correct labels (host, path, method, status_class).
-  - Histogram `phase=total/upstream/plugins` recorded.
+#### Query mutation transform
+- **Scenario**: [positive-11.2-query-mutation-transform.md](plugins/transforms/positive-11.2-query-mutation-transform.md)
+- **Mechanism**: New query param added. Internal params removed. Query allowlist rules remain enforced before transform.
 
-### [x] 22.3 Justification: Errors metrics increment on gateway errors
-- Why it matters:
-  - Detect regressions.
-- What to check:
-  - Induce gateway error; `oagw_errors_total{error_type=...}` increments.
+#### Header mutation transform
+- **Scenario**: [positive-11.3-header-mutation-transform.md](plugins/transforms/positive-11.3-header-mutation-transform.md)
+- **Mechanism**: `headers.set/add/remove` changes reflected upstream. Hop-by-hop headers remain stripped even if plugin tries to set them.
 
-### [x] 22.4 Justification: Cardinality rules (no tenant labels)
-- Why it matters:
-  - Prevents Prometheus overload.
-- What to check:
-  - Metrics output does not include `tenant_id` label.
-  - Path label uses configured route path, not dynamic suffix.
+#### Response JSON redaction transform
+- **Scenario**: [positive-11.4-response-json-redaction-transform.md](plugins/transforms/positive-11.4-response-json-redaction-transform.md)
+- **Mechanism**: Target fields replaced with placeholder. Non-JSON response triggers defined behavior (reject or no-op).
 
-### [x] 22.5 Justification: Status metrics use status class grouping
-- Why it matters:
-  - Prevents high-cardinality status labels.
-- What to check:
-  - Metrics export uses `status_class=2xx/3xx/4xx/5xx` labels.
-  - Per-status-code labels are absent (or explicitly documented).
+#### on_error transform handles gateway errors
+- **Scenario**: [positive-11.5-error-transform-handles-gateway-errors.md](plugins/transforms/positive-11.5-error-transform-handles-gateway-errors.md)
+- **Mechanism**: For a gateway error (e.g., rate limit), `on_error` can rewrite `title/detail` and status if allowed.
+
+#### Plugin ordering and layering (upstream before route)
+- **Scenario**: [positive-11.6-plugin-ordering-layering.md](plugins/transforms/positive-11.6-plugin-ordering-layering.md)
+- **Mechanism**: Upstream plugins run before route plugins. Auth before guards, before transforms.
+
+#### Plugin control flow (next, reject, respond)
+- **Scenario**: [positive-11.7-plugin-control-flow.md](plugins/transforms/positive-11.7-plugin-control-flow.md)
+- **Mechanism**: `ctx.reject` stops chain and returns gateway error. `ctx.respond` returns custom success response without calling upstream.
 
 ---
 
-## 23) Observability: audit logging
+### Streaming body handling
 
-### [x] 23.1 Justification: Proxy requests produce structured audit log
-- Why it matters:
-  - Forensics and compliance.
-- What to check:
-  - Log includes request_id, tenant_id, principal_id, host, path, status, duration.
-
-### [x] 23.2 Justification: Sensitive data not logged
-- Why it matters:
-  - Prevents secret/PII leaks.
-- What to check:
-  - No request bodies.
-  - No query params.
-  - No auth headers / secret values.
-
-### [x] 23.3 Justification: Config change operations are logged
-- Why it matters:
-  - Admin audit trail.
-- What to check:
-  - Upstream create/update/delete yields log entry.
-  - Route create/update/delete yields log entry.
-  - Plugin create/delete yields log entry.
+#### Streaming request bodies are not buffered
+- **Scenario**: [positive-8.3-streaming-request-bodies-not-buffered.md](proxy-api/body-validation/positive-8.3-streaming-request-bodies-not-buffered.md)
+- **Mechanism**: For endpoints supporting streaming body, memory does not grow with body size.
 
 ---
 
-## 24) Error handling: gateway vs upstream
+### Observability
 
-### [x] 24.1 Justification: Gateway errors always use RFC 9457 PD
-- Why it matters:
-  - Stable client parsing.
-- What to check:
-  - For each gateway error class (400/401/403/404/409/413/429/5xx), body is `PD`.
+#### Metrics endpoint is auth-protected
+- **Scenario**: *Section 22.1 — no separate file. Verified as part of management auth scenarios.*
+- **Mechanism**: Unauthenticated `GET /metrics` rejected. Non-admin rejected.
 
-### [x] 24.2 Justification: `ESrc` header is set for both gateway and upstream failures
-- Why it matters:
-  - Client retry policy depends on source.
-- What to check:
-  - Gateway error includes `ESrc=gateway`.
-  - Upstream error includes `ESrc=upstream`.
+#### Request metrics increment on success
+- **Scenario**: *Section 22.2 — no separate file.*
+- **Mechanism**: `oagw_requests_total` increments with correct labels (host, path, method, status_class). Histogram `phase=total/upstream/plugins` recorded.
 
-### [x] 24.3 Justification: Retry-After is present for retriable gateway errors
-- Why it matters:
-  - Client backoff guidance.
-- What to check:
-  - `429`, `503 link unavailable`, `503 circuit breaker open`, `504` timeouts include `Retry-After` (where specified).
+#### Error metrics increment on gateway errors
+- **Scenario**: *Section 22.3 — no separate file.*
+- **Mechanism**: Induce gateway error; `oagw_errors_total{error_type=...}` increments.
 
-### [x] 24.4 Justification: Stream aborted is classified distinctly
-- Why it matters:
-  - Streaming clients need different handling.
-- What to check:
-  - Abort SSE/WS mid-flight; classify as `StreamAborted`.
+#### Cardinality rules (no tenant labels)
+- **Scenario**: *Section 22.4 — no separate file.*
+- **Mechanism**: Metrics output does not include `tenant_id` label. Path label uses configured route path, not dynamic suffix.
 
-### [x] 24.5 Justification: Every documented error type has at least one reproducer
-- Why it matters:
-  - Prevents untested error paths.
-- What to check:
-  - `ValidationError` (bad query param / bad header)
-  - `RouteNotFound` (no matching route)
-  - `AuthenticationFailed` (bad/missing secret or outbound auth failure)
-  - `PayloadTooLarge` (body limit)
-  - `RateLimitExceeded` (429)
-  - `SecretNotFound` (missing secret ref)
-  - `ProtocolError` (protocol mismatch / invalid upgrade)
-  - `DownstreamError` (upstream TLS failure / connect error mapped)
-  - `StreamAborted` (client disconnect)
-  - `LinkUnavailable` (upstream unavailable)
-  - `CircuitBreakerOpen` (open circuit)
-  - `ConnectionTimeout` (connect timeout)
-  - `RequestTimeout` (overall timeout)
-  - `IdleTimeout` (idle connection timeout)
-  - `PluginNotFound` (missing plugin reference)
-  - `PluginInUse` (delete referenced plugin)
+#### Status metrics use status class grouping
+- **Scenario**: *Section 22.5 — no separate file.*
+- **Mechanism**: Metrics export uses `status_class=2xx/3xx/4xx/5xx` labels.
+
+#### Proxy requests produce structured audit log
+- **Scenario**: *Section 23.1 — no separate file.*
+- **Mechanism**: Log includes request_id, tenant_id, principal_id, host, path, status, duration.
+
+#### Sensitive data not logged
+- **Scenario**: *Section 23.2 — no separate file.*
+- **Mechanism**: No request bodies, query params, auth headers, or secret values logged.
+
+#### Config change operations are logged
+- **Scenario**: *Section 23.3 — no separate file.*
+- **Mechanism**: Upstream/route/plugin create/update/delete yields audit log entry.
 
 ---
 
-## 25) REST list endpoints: OData `$filter/$orderby/$top/$skip/$select`
+### OData query support
 
-### [x] 25.1 Justification: `$select` projects fields for upstream list
-- Why it matters:
-  - Reduce payload.
-- What to check:
-  - `GET /upstreams?$select=id,alias` returns only those fields.
+#### $select projects fields for upstream list
+- **Scenario**: *Section 25.1 — no separate file.*
+- **Mechanism**: `GET /upstreams?$select=id,alias` returns only those fields.
 
-### [x] 25.2 Justification: `$select` validation
-- Why it matters:
-  - Prevent abuse.
-- What to check:
-  - Too long `$select` returns `400` `PD`.
-  - Too many fields returns `400` `PD`.
-  - Duplicate fields returns `400` `PD`.
+#### $select validation
+- **Scenario**: *Section 25.2 — no separate file.*
+- **Mechanism**: Too long, too many fields, or duplicate fields returns `400 PD`.
 
-### [x] 25.3 Justification: `$filter` on alias
-- Why it matters:
-  - Discoverability.
-- What to check:
-  - `GET /upstreams?$filter=alias eq 'api.openai.com'` returns only matches.
+#### $filter on alias
+- **Scenario**: *Section 25.3 — no separate file.*
+- **Mechanism**: `GET /upstreams?$filter=alias eq 'api.openai.com'` returns only matches.
 
-### [x] 25.4 Justification: Pagination (`$top/$skip`) stable ordering
-- Why it matters:
-  - UI and automation.
-- What to check:
-  - Paging produces consistent sets.
+#### Pagination ($top/$skip) stable ordering
+- **Scenario**: *Section 25.4 — no separate file.*
+- **Mechanism**: Paging produces consistent sets.
 
-### [x] 25.5 Justification: `$select` works for routes and plugins lists
-- Why it matters:
-  - Large configs should be listable efficiently.
-- What to check:
-  - `GET /routes?$select=id,upstream_id,match` returns only those fields.
-  - `GET /plugins?$select=id,plugin_type,name` returns only those fields.
+#### $select works for routes and plugins lists
+- **Scenario**: *Section 25.5 — no separate file.*
+- **Mechanism**: `GET /routes?$select=id,upstream_id,match` and `GET /plugins?$select=id,plugin_type,name` return only those fields.
 
-### [x] 25.6 Justification: `$orderby` is applied and validated
-- Why it matters:
-  - Stable results for paging and UIs.
-- What to check:
-  - `created_at desc` ordering changes item order.
-  - Invalid `$orderby` yields `400` `PD`.
+#### $orderby is applied and validated
+- **Scenario**: *Section 25.6 — no separate file.*
+- **Mechanism**: `created_at desc` ordering changes item order. Invalid `$orderby` yields `400 PD`.
 
-### [x] 25.7 Justification: `$top` max and `$skip` bounds enforced
-- Why it matters:
-  - Prevent abuse and runaway responses.
-- What to check:
-  - `$top` above max clamps or rejects (lock expected behavior).
-  - Negative `$skip` rejected.
+#### $top max and $skip bounds enforced
+- **Scenario**: *Section 25.7 — no separate file.*
+- **Mechanism**: `$top` above max clamps or rejects. Negative `$skip` rejected.
 
 ---
 
-## 26) Security-focused proxy scenarios
+### E2E protocol examples
 
-### [x] 26.1 Justification: SSRF prevention by strict upstream host selection
-- Why it matters:
-  - Gateway must not be a generic open proxy.
-- What to check:
-  - Client cannot override upstream destination via inbound `Host` (except the explicit common-suffix selection mode).
-  - Absolute-form URLs in request line are rejected or normalized.
+Full integration walkthroughs — each demonstrates the complete journey (upstream → route → auth → invoke → response).
 
-### [x] 26.2 Justification: Header injection protections
-- Why it matters:
-  - Prevent response/request splitting.
-- What to check:
-  - Newline characters in header values rejected.
+#### HTTP request/response
+- **Scenario**: [positive-example-01-http-request-response.md](protocols/http/examples/positive-example-01-http-request-response.md)
+- **Mechanism**: End-to-end HTTP proxy call with upstream creation, route setup, auth injection, and response passthrough.
 
-### [x] 26.3 Justification: Protocol mismatch errors are explicit
-- Why it matters:
-  - Prevent silent downgrades.
-- What to check:
-  - Using HTTP route against `protocol=grpc` upstream fails with `502 ProtocolError` (`PD`).
+#### SSE streaming
+- **Scenario**: [positive-example-02-sse-streaming.md](protocols/sse/examples/positive-example-02-sse-streaming.md)
+- **Mechanism**: End-to-end SSE stream with `text/event-stream` forwarding without buffering.
 
----
+#### WebSocket upgrade
+- **Scenario**: [positive-example-03-websocket-upgrade.md](protocols/websocket/examples/positive-example-03-websocket-upgrade.md)
+- **Mechanism**: End-to-end WebSocket with `101 Switching Protocols` handshake proxying.
 
-## 27) Cross-surface consistency checks
-
-### [x] 27.1 Justification: IDs are anonymous GTS identifiers on API surface
-- Why it matters:
-  - Stable API contract.
-- What to check:
-  - `GET /upstreams/{id}` accepts `gts.x.core.oagw.upstream.v1~{uuid}`.
-  - Same for routes/plugins.
-
-### [x] 27.2 Justification: Examples in `modules/system/oagw/examples/*.md` remain valid
-- Scenarios:
-  - [`positive-example-04-grpc-unary-proxy.md`](protocols/grpc/examples/positive-example-04-grpc-unary-proxy.md)
-  - [`positive-example-01-http-request-response.md`](protocols/http/examples/positive-example-01-http-request-response.md)
-  - [`positive-example-02-sse-streaming.md`](protocols/sse/examples/positive-example-02-sse-streaming.md)
-  - [`positive-example-03-websocket-upgrade.md`](protocols/websocket/examples/positive-example-03-websocket-upgrade.md)
-- Why it matters:
-  - Documentation drift should be detected.
-- What to check:
-- Execute the flows described in:
-    - `protocols/http/examples/positive-example-01-http-request-response.md`
-    - `protocols/sse/examples/positive-example-02-sse-streaming.md`
-    - `protocols/websocket/examples/positive-example-03-websocket-upgrade.md`
-    - `protocols/grpc/examples/positive-example-04-grpc-unary-proxy.md`
-  - If proxy path format differs from design (`/proxy/{alias}/*`), lock behavior via explicit failing test + updated expectation.
+#### gRPC unary proxy
+- **Scenario**: [positive-example-04-grpc-unary-proxy.md](protocols/grpc/examples/positive-example-04-grpc-unary-proxy.md)
+- **Mechanism**: End-to-end gRPC unary call with service+method routing and metadata preservation.
 
 ---
 
-## 28) Minimum scenario matrix (coverage checklist)
+## 2. Guardrails, Edge Cases & Rejections
+
+### Authentication & authorization
+
+#### Missing Bearer token on management endpoints → 401
+- **Scenario**: [negative-1.1-all-management-endpoints-require-bearer-auth.md](management-api/auth/negative-1.1-all-management-endpoints-require-bearer-auth.md)
+- **What happens**: All management endpoints require `Authorization: Bearer` header. Missing or invalid token returns `401` `PD` with stable `type`.
+
+#### Permission gates for upstream/route/plugin CRUD → 403
+- **Scenario**: [negative-1.2-permission-gates-upstream-route-plugin-crud.md](management-api/auth/negative-1.2-permission-gates-upstream-route-plugin-crud.md)
+- **What happens**: Missing permission for resource type returns `403`. With correct permission, same call succeeds.
+
+#### Tenant scoping in management APIs → cross-tenant blocked
+- **Scenario**: [negative-1.3-tenant-scoping-management-apis.md](management-api/auth/negative-1.3-tenant-scoping-management-apis.md)
+- **What happens**: Tenant A cannot `GET /upstreams/{id}` created by tenant B. Listing returns only tenant-visible resources.
+
+#### Proxy invoke permission required → 403
+- **Scenario**: [negative-5.1-proxy-invoke-permission-required.md](proxy-api/authz/negative-5.1-proxy-invoke-permission-required.md)
+- **What happens**: Missing `gts.x.core.oagw.proxy.v1~:invoke` returns `403`.
+
+#### Proxy cannot access upstream not owned or shared → 403/404
+- **Scenario**: [negative-5.2-proxy-cannot-access-upstream-not-owned-shared.md](proxy-api/authz/negative-5.2-proxy-cannot-access-upstream-not-owned-shared.md)
+- **What happens**: Tenant A invoking Tenant B private upstream returns `403` or `404` (must not leak existence).
+
+---
+
+### Input validation
+
+#### Method allowlist enforcement → 404
+- **Scenario**: [negative-3.2-method-allowlist-enforcement.md](management-api/routes/negative-3.2-method-allowlist-enforcement.md)
+- **What happens**: Route allows `POST`; invoking `GET` returns `404 ROUTE_NOT_FOUND` as a gateway error.
+
+#### Query allowlist enforcement → 400
+- **Scenario**: [negative-3.3-query-allowlist-enforcement.md](management-api/routes/negative-3.3-query-allowlist-enforcement.md)
+- **What happens**: Unknown query param rejected with `400 PD`, `ESrc=gateway`.
+
+#### Path suffix mode = disabled → rejected
+- **Scenario**: [negative-3.4-path-suffix-mode-disabled.md](management-api/routes/negative-3.4-path-suffix-mode-disabled.md)
+- **What happens**: Supplying any suffix returns a gateway validation error.
+
+#### Well-known header validation errors → 400
+- **Scenario**: [negative-7.4-well-known-header-validation-errors-400.md](proxy-api/request-transforms/negative-7.4-well-known-header-validation-errors-400.md)
+- **What happens**: Invalid `Content-Length` or mismatch with actual body returns `400 PD`.
+
+#### Maximum body size limit enforced (100MB) → 413
+- **Scenario**: [negative-8.1-maximum-body-size-limit-enforced.md](proxy-api/body-validation/negative-8.1-maximum-body-size-limit-enforced.md)
+- **What happens**: Body > 100MB rejected early with `413 PD`, `ESrc=gateway`.
+
+#### Transfer-Encoding support limited to chunked → 400
+- **Scenario**: [negative-8.2-transfer-encoding-support-limited-chunked.md](proxy-api/body-validation/negative-8.2-transfer-encoding-support-limited-chunked.md)
+- **What happens**: Unsupported transfer-encoding rejected with `400 PD`.
+
+---
+
+### Routing rejections
+
+#### Explicit alias required for IP-based endpoints → 400
+- **Scenario**: [negative-2.3-explicit-alias-required-ip-based-endpoints.md](management-api/upstreams/negative-2.3-explicit-alias-required-ip-based-endpoints.md)
+- **What happens**: Create upstream with `host=10.0.0.1` and no alias is rejected (`400 PD`).
+
+#### Multi-endpoint upstream pool compatibility rules → 400
+- **Scenario**: [negative-2.4-multi-endpoint-upstream-pool-compatibility-rules.md](management-api/upstreams/negative-2.4-multi-endpoint-upstream-pool-compatibility-rules.md)
+- **What happens**: Mismatched `scheme`, `port`, or `protocol` in pool fails with `400`.
+
+#### Disable upstream blocks proxy traffic → 503
+- **Scenario**: [negative-2.6-disable-upstream-blocks-proxy-traffic.md](management-api/upstreams/negative-2.6-disable-upstream-blocks-proxy-traffic.md)
+- **What happens**: With `enabled=false`, proxy returns `503 PD`, `ESrc=gateway`. Disabled in ancestor → disabled for descendants too.
+
+#### Alias uniqueness enforced per tenant → conflict
+- **Scenario**: [negative-2.8-alias-uniqueness-enforced-per-tenant.md](management-api/upstreams/negative-2.8-alias-uniqueness-enforced-per-tenant.md)
+- **What happens**: Two upstreams with same alias in same tenant rejected (conflict). Same alias in different tenants succeeds.
+
+#### Enforced ancestor limits still apply when alias shadowed
+- **Scenario**: [negative-6.2-enforced-ancestor-limits-still-apply-alias-shadowed.md](proxy-api/alias-resolution/negative-6.2-enforced-ancestor-limits-still-apply-alias-shadowed.md)
+- **What happens**: Parent `rate_limit.sharing=enforce` still constrains child effective limit even when alias is shadowed.
+
+#### Alias not found → stable 404
+- **Scenario**: [negative-6.4-alias-not-found-returns-stable-404.md](proxy-api/alias-resolution/negative-6.4-alias-not-found-returns-stable-404.md)
+- **What happens**: Unknown alias returns `404 PD`, `ESrc=gateway`, `type` = `...upstream.not_found...`.
+
+#### Disable route blocks proxy traffic → 404/503
+- **Scenario**: [negative-3.7-disable-route-blocks-proxy-traffic.md](management-api/routes/negative-3.7-disable-route-blocks-proxy-traffic.md)
+- **What happens**: With `route.enabled=false`, request returns `404 ROUTE_NOT_FOUND` or `503`, `ESrc=gateway`.
+
+---
+
+### Security protections (SSRF, headers, injection)
+
+#### SSRF prevention by strict upstream host selection
+- **Scenario**: *Section 26.1 — no separate file.*
+- **What happens**: Client cannot override upstream destination via inbound `Host` header. Absolute-form URLs in request line rejected or normalized.
+
+#### Header injection protections
+- **Scenario**: *Section 26.2 — no separate file.*
+- **What happens**: Newline characters in header values rejected. Prevents response/request splitting.
+
+#### Protocol mismatch errors are explicit
+- **Scenario**: *Section 26.3 — no separate file.*
+- **What happens**: Using HTTP route against `protocol=grpc` upstream fails with `502 ProtocolError` (`PD`).
+
+---
+
+### Plugin enforcement
+
+#### Plugin immutability (no update) → 404/405
+- **Scenario**: [negative-4.2-plugin-immutability.md](management-api/plugins/negative-4.2-plugin-immutability.md)
+- **What happens**: `PUT /plugins/{id}` is not available (404/405). Ensures reproducibility and auditability.
+
+#### Plugin type enforcement → 400
+- **Scenario**: [negative-4.4-plugin-type-enforcement.md](management-api/plugins/negative-4.4-plugin-type-enforcement.md)
+- **What happens**: Attaching `plugin.guard` where auth is expected fails at config validation (`400`).
+
+#### Secret access control via cred_store → 401/500
+- **Scenario**: [negative-9.7-secret-access-control-cred-store.md](proxy-api/authentication/negative-9.7-secret-access-control-cred-store.md)
+- **What happens**: If `cred_store` denies access, proxy returns `401 AuthenticationFailed`. If secret missing, returns `500 SecretNotFound`.
+
+#### Descendant override permissions enforced → blocked
+- **Scenario**: [negative-9.9-descendant-override-permissions-enforced.md](proxy-api/authentication/negative-9.9-descendant-override-permissions-enforced.md)
+- **What happens**: Without `oagw:upstream:override_auth`, child cannot override inherited auth. Same for `override_rate` and `add_plugins`.
+
+#### Starlark sandbox restrictions → blocked
+- **Scenario**: [negative-11.8-starlark-sandbox-restrictions.md](plugins/transforms/negative-11.8-starlark-sandbox-restrictions.md)
+- **What happens**: Network I/O fails. File I/O fails. Infinite loop times out. Large allocation blocked.
+
+---
+
+### Rate limiting rejections
+
+#### Sliding window strictness → no boundary bursts
+- **Scenario**: [negative-18.2-sliding-window-strictness.md](rate-limiting/negative-18.2-sliding-window-strictness.md)
+- **What happens**: Requests across a window boundary do not allow 2x burst.
+
+#### Strategy variants when limit exceeded → 429/503
+- **Scenario**: [negative-18.5-strategy-variants-limit-exceeded.md](rate-limiting/negative-18.5-strategy-variants-limit-exceeded.md)
+- **What happens**: `strategy=reject` returns `429`. `strategy=queue` delays then succeeds or times out with `503 queue.timeout`. `strategy=degrade` uses configured fallback.
+
+---
+
+### Custom header routing rejections
+
+#### Missing X-OAGW-Target-Host for common suffix alias → 400
+- **Scenarios**:
+  - [negative-6.3-multi-endpoint-common-suffix-alias-requires-host-header.md](proxy-api/alias-resolution/negative-6.3-multi-endpoint-common-suffix-alias-requires-host-header.md)
+  - [negative-1.1-missing-header-common-suffix.md](proxy-api/custom-header-routing/negative-1.1-missing-header-common-suffix.md)
+- **What happens**: Missing header for common suffix alias returns `400 PD` with list of valid endpoint hosts.
+
+#### Invalid X-OAGW-Target-Host format (port) → 400
+- **Scenario**: [negative-1.2-invalid-format-with-port.md](proxy-api/custom-header-routing/negative-1.2-invalid-format-with-port.md)
+- **What happens**: Header with port number rejected. Port is defined in upstream config, not header.
+
+#### Invalid X-OAGW-Target-Host format (path) → 400
+- **Scenario**: [negative-1.3-invalid-format-with-path.md](proxy-api/custom-header-routing/negative-1.3-invalid-format-with-path.md)
+- **What happens**: Header with path component rejected.
+
+#### Invalid X-OAGW-Target-Host format (special chars) → 400
+- **Scenario**: [negative-1.4-invalid-format-special-chars.md](proxy-api/custom-header-routing/negative-1.4-invalid-format-special-chars.md)
+- **What happens**: Header with query params or special characters rejected.
+
+#### Unknown X-OAGW-Target-Host not in endpoint list → 400
+- **Scenario**: [negative-2.1-unknown-host.md](proxy-api/custom-header-routing/negative-2.1-unknown-host.md)
+- **What happens**: Header value not matching any endpoint rejected. Allowlist validation prevents SSRF.
+
+#### IP address when hostname expected → 400
+- **Scenario**: [negative-2.2-ip-address-when-hostname-expected.md](proxy-api/custom-header-routing/negative-2.2-ip-address-when-hostname-expected.md)
+- **What happens**: IP address when endpoints use hostnames treated as unknown host.
+
+---
+
+### Guard rejections
+
+#### Timeout guard plugin enforces request timeout → 504
+- **Scenario**: [negative-10.1-timeout-guard-plugin-enforces-request-timeout.md](plugins/guards/negative-10.1-timeout-guard-plugin-enforces-request-timeout.md)
+- **What happens**: Request exceeding timeout returns `504` gateway timeout (`PD`, `ESrc=gateway`).
+
+#### CORS credentials + wildcard rejected by config validation → 400
+- **Scenario**: [negative-10.3-cors-credentials-wildcard-rejected-config-validation.md](plugins/guards/negative-10.3-cors-credentials-wildcard-rejected-config-validation.md)
+- **What happens**: `allow_credentials=true` + `allowed_origins=['*']` rejected (`400`).
+
+#### Custom Starlark guard rejects based on headers/body
+- **Scenario**: [negative-10.4-custom-starlark-guard-rejects-based-headers-body.md](plugins/guards/negative-10.4-custom-starlark-guard-rejects-based-headers-body.md)
+- **What happens**: Missing required header rejected with plugin-defined status. Body-too-large rejected with `413`. Guard only runs `on_request`.
+
+---
+
+### Protocol errors
+
+#### Upstream error passthrough with ESrc=upstream
+- **Scenario**: [negative-12.2-upstream-error-passthrough-esrc-upstream.md](protocols/http/negative-12.2-upstream-error-passthrough-esrc-upstream.md)
+- **What happens**: Upstream returns `500` with JSON body. OAGW keeps body intact, sets `ESrc=upstream`.
+
+#### Gateway error uses PD + ESrc=gateway
+- **Scenario**: [negative-12.3-gateway-error-uses-pd-esrc-gateway.md](protocols/http/negative-12.3-gateway-error-uses-pd-esrc-gateway.md)
+- **What happens**: Route not found / validation error → `PD`, `Content-Type=application/problem+json`, `ESrc=gateway`.
+
+#### No automatic retries for upstream failures
+- **Scenario**: [negative-12.6-no-automatic-retries-upstream-failures.md](protocols/http/negative-12.6-no-automatic-retries-upstream-failures.md)
+- **What happens**: Upstream transient `5xx` or connection close → OAGW returns error once. Upstream sees single request attempt.
+
+#### Scheme/protocol mismatches fail explicitly
+- **Scenario**: [negative-12.7-scheme-protocol-mismatches-fail-explicitly.md](protocols/http/negative-12.7-scheme-protocol-mismatches-fail-explicitly.md)
+- **What happens**: `protocol=http` with `scheme=grpc` rejected at config validation. `protocol=grpc` with `scheme=https` yields `502 ProtocolError`.
+
+#### gRPC status mapping and error source
+- **Scenario**: [negative-15.4-grpc-status-mapping-error-source.md](protocols/grpc/negative-15.4-grpc-status-mapping-error-source.md)
+- **What happens**: gRPC `RESOURCE_EXHAUSTED` maps to rate limit error. Upstream gRPC failures marked `ESrc=upstream`.
+
+---
+
+### Connection limits
+
+#### WebSocket rate limit applies to connection establishment → 429
+- **Scenario**: [negative-14.3-rate-limit-applies-connection-establishment.md](protocols/websocket/negative-14.3-rate-limit-applies-connection-establishment.md)
+- **What happens**: Exceeding rate limit rejects upgrade with `429` (`PD`, `ESrc=gateway`).
+
+#### WS connection idle timeout enforced
+- **Scenario**: [negative-14.4-ws-connection-idle-timeout-enforced.md](protocols/websocket/negative-14.4-ws-connection-idle-timeout-enforced.md)
+- **What happens**: Idle connection closed after configured timeout.
+
+---
+
+### Error handling invariants
+
+#### Gateway errors always use RFC 9457 PD
+- **Scenario**: *Section 24.1 — no separate file.*
+- **What happens**: For each gateway error class (400/401/403/404/409/413/429/5xx), body is `PD`.
+
+#### ESrc header set for both gateway and upstream failures
+- **Scenario**: *Section 24.2 — no separate file.*
+- **What happens**: Gateway error → `ESrc=gateway`. Upstream error → `ESrc=upstream`.
+
+#### Retry-After present for retriable gateway errors
+- **Scenario**: *Section 24.3 — no separate file.*
+- **What happens**: `429`, `503 link unavailable`, `503 circuit breaker open`, `504` timeouts include `Retry-After`.
+
+#### Stream aborted classified distinctly
+- **Scenario**: *Section 24.4 — no separate file.*
+- **What happens**: Abort SSE/WS mid-flight → classified as `StreamAborted`.
+
+#### Every documented error type has at least one reproducer
+- **Scenario**: *Section 24.5 — no separate file.*
+- **What happens**: `ValidationError`, `RouteNotFound`, `AuthenticationFailed`, `PayloadTooLarge`, `RateLimitExceeded`, `SecretNotFound`, `ProtocolError`, `DownstreamError`, `StreamAborted`, `LinkUnavailable`, `CircuitBreakerOpen`, `ConnectionTimeout`, `RequestTimeout`, `IdleTimeout`, `PluginNotFound`, `PluginInUse` — each has at least one reproducer scenario.
+
+---
+
+### Concurrency & circuit breaker (future-facing)
+
+#### Concurrency limit rejects when max in-flight reached → 503
+- *No scenario file (future-facing).*
+- **What happens**: When `max_concurrent` exceeded, return `503 concurrency_limit.exceeded` with `Retry-After`.
+
+#### Queue strategy buffers requests up to max depth
+- *No scenario file (future-facing).*
+- **What happens**: FIFO order. `queue.full` when depth exceeded. `queue.timeout` when wait exceeds config. Memory limit enforced.
+
+#### Streaming requests hold permits until completion
+- *No scenario file (future-facing).*
+- **What happens**: SSE and WS hold concurrency permit until closed.
+
+#### Circuit opens after consecutive failures → 503
+- *No scenario file (future-facing).*
+- **What happens**: After threshold, requests fail fast with `503 circuit_breaker.open` + `Retry-After`.
+
+#### Half-open probing closes circuit on recovery
+- *No scenario file (future-facing).*
+- **What happens**: After open timeout, limited probes allowed. Success threshold closes circuit.
+
+#### Per-endpoint circuit scope
+- *No scenario file (future-facing).*
+- **What happens**: With `scope=per_endpoint`, failures isolate to single endpoint.
+
+---
+
+### ID & cross-surface consistency
+
+#### IDs are anonymous GTS identifiers on API surface
+- **Scenario**: *Section 27.1 — no separate file.*
+- **What happens**: `GET /upstreams/{id}` accepts `gts.x.core.oagw.upstream.v1~{uuid}`. Same for routes/plugins.
+
+---
+
+## Appendix: Coverage Matrix
 
 For E2E coverage, ensure at least one scenario exists for each cell:
 
-### 28.1 Protocol × scheme
+### Protocol × scheme
 - HTTP:
   - `https`
 - Streaming:
@@ -1255,7 +798,7 @@ For E2E coverage, ensure at least one scenario exists for each cell:
 - gRPC:
   - `grpc` (and HTTP/2 multiplexing on shared ingress port)
 
-### 28.2 Outbound auth plugin × protocol
+### Outbound auth plugin × protocol
 - `noop`: HTTP
 - `apikey`: HTTP, WebSocket, SSE, gRPC
 - `basic`: HTTP
@@ -1263,12 +806,12 @@ For E2E coverage, ensure at least one scenario exists for each cell:
 - `oauth2.client_cred`: HTTP
 - `oauth2.client_cred_basic`: HTTP
 
-### 28.3 Plugin chain phases
+### Plugin chain phases
 - Guard-only (`on_request`)
 - Transform (`on_request`)
 - Transform (`on_response`)
 - Transform (`on_error`)
 
-### 28.4 Error source
+### Error source
 - Gateway-generated (validation/rate-limit/etc)
 - Upstream passthrough (4xx/5xx)

@@ -3,6 +3,7 @@
 // But for now we will manually maintain this file.
 #![allow(unused_imports)]
 
+use api_egress as _;
 use api_gateway as _;
 use file_parser as _;
 use grpc_hub as _;
