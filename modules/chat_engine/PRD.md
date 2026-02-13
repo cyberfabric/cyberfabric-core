@@ -540,6 +540,24 @@ Webhook backends are expected to be HTTP services that receive session context (
 Messages form a tree structure where each message (except the root) references a parent message. This tree structure enables conversation branching and message variant preservation. Multiple sibling messages with the same parent represent variants (alternative responses). The client application is responsible for rendering the tree structure in UI and providing navigation controls. The system maintains tree integrity but does not enforce a specific UI representation.
 <!-- fdd-id-content -->
 
+#### Message Visibility Control
+
+**ID**: `fdd-chat-engine-prd-context-message-visibility`
+
+<!-- fdd-id-content -->
+Messages can be selectively hidden from users or LLMs using visibility flags:
+
+- **`is_hidden_from_user`** (boolean): When true, the message is excluded from client-facing APIs and UI rendering. The message remains in the database and message tree but is not returned to clients. Use cases include system prompts, backend configuration messages, and internal tracking notes.
+
+- **`is_hidden_from_llm`** (boolean): When true, the message is excluded from the context history sent to webhook backends during message processing. The message is still visible to users (unless also hidden via `is_hidden_from_user`) but does not influence LLM responses. Use cases include user feedback, debug messages, and messages that should not affect conversation context.
+
+These flags enable flexible message handling patterns:
+- **System prompts**: `is_hidden_from_user=true, is_hidden_from_llm=false` - Configure LLM behavior without showing configuration to users
+- **Internal notes**: `is_hidden_from_user=true, is_hidden_from_llm=true` - Store metadata or debug information without affecting UI or LLM
+- **User feedback**: `is_hidden_from_user=false, is_hidden_from_llm=true` - Show user messages in UI but exclude from LLM context (e.g., rating messages)
+- **Normal messages**: `is_hidden_from_user=false, is_hidden_from_llm=false` - Standard visible messages that are part of conversation flow
+<!-- fdd-id-content -->
+
 #### Assumptions
 
 **ID**: `fdd-chat-engine-prd-context-assumptions`
