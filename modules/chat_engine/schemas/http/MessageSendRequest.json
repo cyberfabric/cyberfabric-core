@@ -6,9 +6,7 @@
   "type": "object",
   "properties": {
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "../common/GtsSessionId.json",
       "description": "Session identifier"
     },
     "content": {
@@ -26,9 +24,7 @@
       "description": "Array of file UUIDs attached to this message"
     },
     "parent_message_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "../common/GtsMessageId.json",
       "description": "Parent message ID for branching"
     },
     "enabled_capabilities": {

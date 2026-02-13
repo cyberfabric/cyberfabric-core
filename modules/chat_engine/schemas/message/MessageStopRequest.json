@@ -6,9 +6,7 @@
   "type": "object",
   "properties": {
     "message_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "../common/GtsMessageId.json",
       "description": "Message identifier to stop"
     },
     "request_id": {

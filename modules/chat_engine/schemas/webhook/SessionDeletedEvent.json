@@ -11,10 +11,7 @@
       "description": "Event type identifier"
     },
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Deleted session identifier"
+      "$ref": "../common/GtsSessionId.json"
     },
     "timestamp": {
       "type": "string",

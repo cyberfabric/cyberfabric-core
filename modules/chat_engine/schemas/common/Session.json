@@ -6,9 +6,7 @@
   "type": "object",
   "properties": {
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "./GtsSessionId.json",
       "description": "Unique session identifier"
     },
     "client_id": {
@@ -17,9 +15,7 @@
       "description": "Owner identifier"
     },
     "session_type_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "./GtsSessionTypeId.json",
       "description": "Current session type reference"
     },
     "available_capabilities": {

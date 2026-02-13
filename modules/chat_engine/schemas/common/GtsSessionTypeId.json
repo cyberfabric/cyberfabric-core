@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.entities.session_type_id.v1~",
+  "title": "GTS Session Type ID",
+  "description": "GTS ID for a session type definition",
+  "type": "string",
+  "pattern": "^gts\\.hyperspot\\.chat_engine\\.session_types\\.[a-z0-9_]+\\.v[0-9]+(\\.[0-9]+)*~$",
+  "examples": [
+    "gts.hyperspot.chat_engine.session_types.ai_assistant.v1~",
+    "gts.hyperspot.chat_engine.session_types.human_support.v1~"
+  ]
+}

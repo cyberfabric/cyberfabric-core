@@ -147,8 +147,7 @@
                 "required": ["new_session_type_id"],
                 "properties": {
                   "new_session_type_id": {
-                    "type": "string",
-                    "format": "uuid"
+                    "$ref": "../schemas/common/GtsSessionTypeId.json"
                   }
                 }
               }
@@ -164,12 +163,10 @@
                   "type": "object",
                   "properties": {
                     "session_id": {
-                      "type": "string",
-                      "format": "uuid"
+                      "$ref": "../schemas/common/GtsSessionId.json"
                     },
                     "session_type_id": {
-                      "type": "string",
-                      "format": "uuid"
+                      "$ref": "../schemas/common/GtsSessionTypeId.json"
                     }
                   }
                 }
@@ -338,8 +335,7 @@
                   "type": "object",
                   "properties": {
                     "session_id": {
-                      "type": "string",
-                      "format": "uuid"
+                      "$ref": "../schemas/common/GtsSessionId.json"
                     },
                     "messages": {
                       "type": "array",
@@ -644,8 +640,7 @@
             "name": "parent_message_id",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "../schemas/common/GtsMessageId.json"
             }
           }
         ],
@@ -818,8 +813,7 @@
         "in": "path",
         "required": true,
         "schema": {
-          "type": "string",
-          "format": "uuid"
+          "$ref": "../schemas/common/GtsSessionId.json"
         }
       },
       "MessageId": {
@@ -827,8 +821,7 @@
         "in": "path",
         "required": true,
         "schema": {
-          "type": "string",
-          "format": "uuid"
+          "$ref": "../schemas/common/GtsMessageId.json"
         }
       }
     },
@@ -880,8 +873,7 @@
         "required": ["session_type_id", "client_id"],
         "properties": {
           "session_type_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionTypeId.json"
           },
           "client_id": {
             "type": "string"
@@ -892,8 +884,7 @@
         "type": "object",
         "properties": {
           "session_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionId.json"
           },
           "available_capabilities": {
             "type": "array",
@@ -907,15 +898,13 @@
         "type": "object",
         "properties": {
           "session_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionId.json"
           },
           "client_id": {
             "type": "string"
           },
           "session_type_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionTypeId.json"
           },
           "available_capabilities": {
             "type": "array",
@@ -940,17 +929,20 @@
         "type": "object",
         "properties": {
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "session_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionId.json"
           },
           "parent_message_id": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
+            "oneOf": [
+              {
+                "$ref": "../schemas/common/GtsMessageId.json"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "role": {
             "type": "string",
@@ -992,8 +984,7 @@
         "type": "object",
         "properties": {
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "variant_index": {
             "type": "integer"
@@ -1049,8 +1040,7 @@
               "type": "object",
               "properties": {
                 "message_id": {
-                  "type": "string",
-                  "format": "uuid"
+                  "$ref": "../schemas/common/GtsMessageId.json"
                 },
                 "content": {
                   "type": "string"
@@ -1085,8 +1075,7 @@
               "type": "object",
               "properties": {
                 "session_id": {
-                  "type": "string",
-                  "format": "uuid"
+                  "$ref": "../schemas/common/GtsSessionId.json"
                 },
                 "metadata": {
                   "type": "object"
@@ -1097,8 +1086,7 @@
                     "type": "object",
                     "properties": {
                       "message_id": {
-                        "type": "string",
-                        "format": "uuid"
+                        "$ref": "../schemas/common/GtsMessageId.json"
                       },
                       "content": {
                         "type": "string"
@@ -1167,8 +1155,7 @@
         "required": ["message_id", "reaction_type", "applied"],
         "properties": {
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "reaction_type": {
             "type": "string",
@@ -1184,8 +1171,7 @@
         "required": ["session_id", "content"],
         "properties": {
           "session_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsSessionId.json"
           },
           "content": {
             "type": "string"
@@ -1200,8 +1186,7 @@
             "description": "Array of file UUIDs attached to this message (stable identifiers from File Storage Service)"
           },
           "parent_message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "enabled_capabilities": {
             "type": "array",
@@ -1242,8 +1227,7 @@
             "const": "start"
           },
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           }
         }
       },
@@ -1256,8 +1240,7 @@
             "const": "chunk"
           },
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "chunk": {
             "type": "object",
@@ -1283,8 +1266,7 @@
             "const": "complete"
           },
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "metadata": {
             "type": "object",
@@ -1313,8 +1295,7 @@
             "const": "error"
           },
           "message_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "../schemas/common/GtsMessageId.json"
           },
           "error_code": {
             "type": "string"

@@ -6,15 +6,14 @@
   "type": "object",
   "properties": {
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "../common/GtsSessionId.json",
       "description": "Session identifier"
     },
     "parent_message_id": {
-      "type": ["string", "null"],
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "oneOf": [
+        { "$ref": "../common/GtsMessageId.json" },
+        { "type": "null" }
+      ],
       "description": "Filter by parent message ID (for specific branch)"
     }
   },

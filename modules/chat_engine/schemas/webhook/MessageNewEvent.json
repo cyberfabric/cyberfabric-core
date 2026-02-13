@@ -11,16 +11,10 @@
       "description": "Event type identifier"
     },
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Session identifier"
+      "$ref": "../common/GtsSessionId.json"
     },
     "message_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Unique message identifier"
+      "$ref": "../common/GtsMessageId.json"
     },
     "session_metadata": {
       "type": "object",

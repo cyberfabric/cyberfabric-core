@@ -6,9 +6,7 @@
   "type": "object",
   "properties": {
     "session_type_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "$ref": "../common/GtsSessionTypeId.json",
       "description": "ID of the session type to use for this session"
     },
     "client_id": {

@@ -11,16 +11,10 @@
       "description": "Event type identifier"
     },
     "session_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Newly created session identifier"
+      "$ref": "../common/GtsSessionId.json"
     },
     "session_type_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Session type identifier"
+      "$ref": "../common/GtsSessionTypeId.json"
     },
     "client_id": {
       "type": "string",

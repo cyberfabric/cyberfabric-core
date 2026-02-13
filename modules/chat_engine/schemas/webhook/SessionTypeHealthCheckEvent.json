@@ -11,10 +11,7 @@
       "description": "Event type identifier"
     },
     "session_type_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Session type identifier to check"
+      "$ref": "../common/GtsSessionTypeId.json"
     },
     "timestamp": {
       "type": "string",

@@ -6,10 +6,7 @@
   "type": "object",
   "properties": {
     "message_id": {
-      "type": "string",
-      "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "Generated assistant message identifier"
+      "$ref": "../common/GtsMessageId.json"
     },
     "role": {
       "$ref": "../common/Role.json"

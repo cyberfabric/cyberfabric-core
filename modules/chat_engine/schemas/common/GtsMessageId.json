@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.entities.message_id.v1~",
+  "title": "GTS Message ID",
+  "description": "GTS ID for a message instance",
+  "type": "string",
+  "pattern": "^gts\\.hyperspot\\.chat_engine\\.entities\\.message\\.v[0-9]+~[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+  "examples": [
+    "gts.hyperspot.chat_engine.entities.message.v1~987fcdeb-51a2-43c1-b789-012345678abc"
+  ]
+}
