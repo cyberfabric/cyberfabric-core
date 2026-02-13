@@ -56,7 +56,7 @@ The system supports both **linear conversations** (traditional chat) and **non-l
 
 | Layer | Responsibility | Technology |
 |-------|---------------|------------|
-| **API Layer** | WebSocket connection management (embedded per instance), event routing, authentication, bidirectional streaming | WebSocket server with event-driven architecture |
+| **API Layer** | HTTP request handling, streaming response coordination, authentication, chunked transfer encoding | HTTP server with async I/O |
 | **Application Layer** | Use case orchestration, webhook invocation, streaming coordination | Service classes with dependency injection |
 | **Domain Layer** | Business logic, message tree operations, validation rules | Domain entities and value objects |
 | **Infrastructure Layer** | Database access, HTTP client for webhooks, file storage client | PostgreSQL, HTTP client library, S3 SDK |
@@ -147,12 +147,6 @@ All Chat Engine instances share a single database cluster. No local caching of s
 
 **Core Schemas**:
 
-#### Base Protocol (core/)
-
-- **WebSocketMessage** - WebSocket message envelope (id, type, payload, timestamp)
-- **RequestPayload** - Base interface for all request payloads
-- **ResponsePayload** - Base interface for all response payloads
-
 #### Session Operations (session/)
 
 - **SessionCreateRequest** - Create session (session_type_id, client_id)
@@ -183,32 +177,17 @@ All Chat Engine instances share a single database cluster. No local caching of s
 - **MessageGetRequest** - Get message (message_id)
 - **MessageGetResponse** - Message details (message_id, role, content, file_urls, metadata, variant_info)
 - **MessageRecreateRequest** - Recreate response (message_id, enabled_capabilities)
-- **MessageStopRequest** - Stop streaming (message_id or request_id)
-- **MessageStopResponse** - Stream stopped (stopped, partial_message_id)
 - **MessageGetVariantsRequest** - Get variants (message_id)
 - **MessageGetVariantsResponse** - Variants list (variants, current_index)
 
 #### Streaming Events (streaming/)
 
-- **StreamingStartEvent** - Begin streaming (request_id, message_id)
-- **StreamingChunkEvent** - Stream chunk (request_id, message_id, chunk)
-- **StreamingCompleteEvent** - Streaming finished (request_id, message_id, metadata)
-- **StreamingErrorEvent** - Stream error (request_id, message_id, error_code, message)
+**Note**: Sent via HTTP chunked response as newline-delimited JSON (NDJSON)
 
-#### Connection Management (connection/)
-
-- **ConnectionReadyEvent** - Connection established (client_id, server_version, capabilities)
-- **ConnectionErrorEvent** - Connection error (error_code, message, details)
-
-#### Response Wrappers (response/)
-
-- **SuccessResponse** - Operation succeeded (request_id, result)
-- **ErrorResponse** - Operation failed (request_id, error_code, message, details)
-
-#### Push Events (push/)
-
-- **SessionUpdatedEvent** - Session changed (session_id, updates)
-- **MessageCreatedEvent** - Message persisted (session_id, message)
+- **StreamingStartEvent** - Begin streaming (message_id)
+- **StreamingChunkEvent** - Stream chunk (message_id, chunk)
+- **StreamingCompleteEvent** - Streaming finished (message_id, metadata)
+- **StreamingErrorEvent** - Stream error (message_id, error_code, message)
 
 #### Webhook Protocol (webhook/)
 
@@ -256,12 +235,8 @@ All Chat Engine instances share a single database cluster. No local caching of s
 
 **Relationships**:
 
-WebSocket Protocol:
-- WebSocketMessage → type: determines event schema
-- WebSocketMessage → payload: contains typed request/response
-- All Request schemas → WebSocketMessage: wrapped in message envelope
-- All Response schemas → SuccessResponse/ErrorResponse: wrapped for correlation
-- StreamingStartEvent, StreamingChunkEvent, StreamingCompleteEvent, StreamingErrorEvent → request_id: linked sequence
+HTTP Protocol:
+- StreamingStartEvent, StreamingChunkEvent, StreamingCompleteEvent, StreamingErrorEvent → message_id: linked sequence
 - SessionCreateRequest → SessionType: references via session_type_id
 - MessageSendRequest → Session: references via session_id
 - MessageSendRequest → Message: optional parent via parent_message_id
@@ -311,21 +286,21 @@ flowchart TB
         Summ[Summarization<br/>Service]
     end
 
-    WebClient -.WebSocket.-> ChatEngine
-    MobileClient -.WebSocket.-> ChatEngine
+    WebClient -.HTTP.-> ChatEngine
+    MobileClient -.HTTP.-> ChatEngine
 
     ChatEngine --> DB
     ChatEngine --> Webhook
     ChatEngine --> Storage
     ChatEngine --> Summ
 
-    ChatEngine -.streams.-> WebClient
-    ChatEngine -.streams.-> MobileClient
+    ChatEngine -.HTTP chunks.-> WebClient
+    ChatEngine -.HTTP chunks.-> MobileClient
 ```
 
 **System Architecture**:
 
-Chat Engine handles all chat-related operations. It is deployed as a unified monolithic service, not as separate microservices. Each instance includes an embedded WebSocket server for client connections and provides the following core functionality through internal modules.
+Chat Engine handles all chat-related operations. It is deployed as a unified monolithic service, not as separate microservices. Each instance includes an HTTP server with chunked streaming support for client connections and provides the following core functionality through internal modules.
 
 **Core Functionality**:
 
@@ -364,7 +339,7 @@ Chat Engine's HTTP client functionality for webhook backend invocation. It const
 <!-- fdd-id-content -->
 **ADRs**: ADR-0003 (streaming architecture), ADR-0009 (cancellation), ADR-0012 (backpressure)
 
-Chat Engine manages WebSocket frame streaming functionality. It pipes data from webhook backend to client via WebSocket messages. This handles connection state tracking, multiple concurrent streams per WebSocket connection, partial response saving on disconnect, and backpressure control. Each stream is identified by unique request_id.
+Chat Engine manages HTTP chunked streaming functionality. It pipes data from webhook backend to client via HTTP streaming responses. This handles stateless request processing, partial response saving on connection close, and backpressure control. Each stream is identified by unique message_id.
 <!-- fdd-id-content -->
 
 #### Conversation Export
@@ -405,9 +380,9 @@ Chat Engine allows users to react to messages with simple like/dislike feedback.
 <!-- fdd-id-content -->
 
 **Key Interactions**:
-- Client → Chat Engine: Session and message operations via WebSocket events
+- Client → Chat Engine: Session and message operations via HTTP REST API
 - Chat Engine → Webhook Backend: HTTP POST with event payload and session context
-- Chat Engine → Client: WebSocket frame-based streaming with JSON messages
+- Chat Engine → Client: HTTP chunked streaming with NDJSON messages
 - Chat Engine → File Storage: File upload with signed URL generation for exports
 - Chat Engine → Database: All persistence operations for sessions, messages, and metadata
 - Chat Engine → Summarization Service: Context summarization requests
@@ -424,30 +399,19 @@ See [`api/README.md`](api/README.md) for comprehensive protocol documentation.
 
 **Authentication**: JWT Bearer token in Authorization header
 
-**14 REST endpoints** across 3 categories:
-- **Session Management (9)**: Create, get, delete, switch type, export, share, access shared, search
-- **Message Operations (5)**: List, get, stop, variants, multi-send
+**15 REST endpoints** across 3 categories:
+- **Session Management (10)**: Create, get, delete, switch type, export, share, access shared, search, summarize (streaming)
+- **Message Operations (5)**: Send (streaming), recreate (streaming), list, get, variants, reaction
+
+**HTTP Streaming**:
+- Content-Type: `application/x-ndjson` (newline-delimited JSON)
+- Transfer-Encoding: chunked
+- Cancellation: Close HTTP connection
+- Events: start, chunk, complete, error
 
 For complete endpoint definitions, request/response schemas, and examples, see the OpenAPI specification file.
 
-#### 3.3.2 WebSocket API (Client ↔ Chat Engine)
-
-**Specification**: [`api/websocket-protocol.json`](api/websocket-protocol.json) (GTS JSON Schema)
-
-**URL**: `wss://chat-engine/ws`
-
-**Authentication**: JWT in handshake or first message
-
-**3 Client→Server streaming operations**:
-- `message.send` - Send message with streaming response
-- `message.recreate` - Recreate response with streaming
-- `session.summarize` - Generate summary with streaming
-
-**Server→Client events**: Connection, response, streaming, and push events
-
-For complete event schemas, streaming protocol, and examples, see the WebSocket protocol specification file.
-
-#### 3.3.3 Webhook API (Chat Engine ↔ Webhook Backend)
+#### 3.3.2 Webhook API (Chat Engine ↔ Webhook Backend)
 
 **Specification**: [`api/webhook-protocol.json`](api/webhook-protocol.json) (GTS JSON Schema)
 
@@ -455,9 +419,9 @@ For complete event schemas, streaming protocol, and examples, see the WebSocket 
 
 **Content-Type**: `application/json`
 
-**Accept**: `application/json`, `text/event-stream`
+**Accept**: `application/json`, `application/x-ndjson`
 
-**7 Webhook operations**:
+**8 Webhook operations**:
 - `session.created` - Session creation notification
 - `message.new` - New user message processing
 - `message.recreate` - Message regeneration request
@@ -465,8 +429,11 @@ For complete event schemas, streaming protocol, and examples, see the WebSocket 
 - `session.deleted` - Session deletion notification
 - `session.summary` - Session summarization request
 - `session_type.health_check` - Backend health check
+- `message.reaction` - Message reaction notification
 
-For complete webhook schemas, SSE streaming format, and resilience patterns, see the Webhook protocol specification file.
+**Streaming Format**: Newline-delimited JSON (NDJSON) over HTTP chunked transfer
+
+For complete webhook schemas, NDJSON streaming format, and resilience patterns, see the Webhook protocol specification file.
 
 ### 3.4 Interactions & Sequences
 
@@ -482,17 +449,17 @@ sequenceDiagram
     participant Chat Engine
     participant Webhook Backend
 
-    Admin->>Chat Engine: Submit session type config (name, URL, summarization_settings, meta)
-    Chat Engine->>Chat Engine: Validate required fields
+    Admin->>Chat Engine: Submit Session Type Config
+    Chat Engine->>Chat Engine: Validate Configuration
 
     alt Webhook testing enabled
-        Chat Engine->>Webhook Backend: Test availability (event: session_type.health_check)
-        Webhook Backend-->>Chat Engine: Health check response
+        Chat Engine->>Webhook Backend: Test Backend Availability
+        Webhook Backend-->>Chat Engine: Health Status
     end
 
-    Chat Engine->>Chat Engine: Save configuration to database
+    Chat Engine->>Chat Engine: Store Configuration
 
-    Chat Engine-->>Admin: Return session type ID
+    Chat Engine-->>Admin: Session Type Created
 ```
 
 #### S2: Create Session and Send First Message
@@ -506,34 +473,29 @@ sequenceDiagram
     participant Chat Engine
     participant Webhook Backend
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: GET /session-types (list available types)
-    Chat Engine-->>Client: Return list of session types
+    Client->>Chat Engine: List Session Types
+    Chat Engine-->>Client: Available Session Types
 
-    Client->>Chat Engine: POST /sessions (session_type_id, client_id)
+    Client->>Chat Engine: Create Session
 
-    Chat Engine->>Chat Engine: Create new session record
-    Chat Engine->>Webhook Backend: HTTP POST: Notify session created (event: session.created)
-    Webhook Backend-->>Chat Engine: Return available_capabilities[]
+    Chat Engine->>Chat Engine: Store Session
+    Chat Engine->>Webhook Backend: Notify Session Created
+    Webhook Backend-->>Chat Engine: Available Capabilities
 
-    Chat Engine->>Chat Engine: Store available_capabilities
-    Chat Engine-->>Client: 201 Created: session_id + available_capabilities[]
+    Chat Engine->>Chat Engine: Store Capabilities
+    Chat Engine-->>Client: Session Created
 
-    Note over Client,Chat Engine: WebSocket API
-    Client->>Chat Engine: Connect WebSocket (wss://chat-engine/ws)
-    Chat Engine-->>Client: connection.ready event
+    Client->>Chat Engine: Send Message
 
-    Client->>Chat Engine: message.send event (session_id, content, enabled_capabilities[])
-
-    Chat Engine->>Webhook Backend: HTTP POST: Forward message (event: message.new)
+    Chat Engine->>Webhook Backend: Process Message
 
     loop Streaming Response
-        Webhook Backend-->>Chat Engine: HTTP stream chunk
-        Chat Engine-->>Client: message.streaming.chunk event
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Webhook Backend-->>Chat Engine: HTTP stream complete
-    Chat Engine-->>Client: message.streaming.complete event
+    Webhook Backend-->>Chat Engine: Stream complete
+    Chat Engine-->>Client: Stream complete
 ```
 
 #### S3: Send Message with File Attachments
@@ -550,22 +512,22 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session already exists
 
-    Client->>File Storage: Upload file
+    Client->>File Storage: Upload File
     File Storage-->>Client: File URL
 
-    Client->>Chat Engine: Send message with file URL (session_id, enabled_capabilities[])
-    Chat Engine->>Webhook Backend: Forward message with context + enabled_capabilities + file URL (event: message.new)
+    Client->>Chat Engine: Send Message with File
+    Chat Engine->>Webhook Backend: Process Message
 
-    Webhook Backend->>File Storage: Access file (if needed)
-    File Storage-->>Webhook Backend: File content
+    Webhook Backend->>File Storage: Access File
+    File Storage-->>Webhook Backend: File Content
 
     loop Streaming Response
-        Webhook Backend-->>Chat Engine: Message part
-        Chat Engine-->>Client: Stream message part
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Webhook Backend-->>Chat Engine: Complete response
-    Chat Engine-->>Client: Complete message response with file reference
+    Webhook Backend-->>Chat Engine: Stream complete
+    Chat Engine-->>Client: Message Complete
 ```
 
 #### S4: Switch Session Type Mid-Conversation
@@ -582,21 +544,19 @@ sequenceDiagram
 
     Note over Client,Webhook Backend A: Previous messages sent to Backend A
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: PATCH /sessions/{id}/type (new_session_type_id: B)
-    Chat Engine-->>Client: 200 OK: session updated
+    Client->>Chat Engine: Switch Session Type
+    Chat Engine-->>Client: Session Updated
 
-    Note over Client,Chat Engine: WebSocket API
-    Client->>Chat Engine: message.send event (session_id, content, enabled_capabilities[])
-    Chat Engine->>Webhook Backend B: HTTP POST: Forward message (event: message.new) with full history
+    Client->>Chat Engine: Send Message
+    Chat Engine->>Webhook Backend B: Process Message
 
     loop Streaming Response
-        Webhook Backend B-->>Chat Engine: HTTP stream chunk
-        Chat Engine-->>Client: message.streaming.chunk event
+        Webhook Backend B-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Webhook Backend B-->>Chat Engine: HTTP stream complete
-    Chat Engine-->>Client: message.streaming.complete event
+    Webhook Backend B-->>Chat Engine: Stream complete
+    Chat Engine-->>Client: Stream complete
 ```
 
 #### S5: Recreate Assistant Response (Variant Creation)
@@ -612,19 +572,18 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with messages exists
 
-    Note over Client,Chat Engine: WebSocket API
-    Client->>Chat Engine: message.recreate event (message_id, enabled_capabilities[])
-    Chat Engine->>Chat Engine: Mark old response as inactive (optional)
-    Note over Chat Engine: Old response preserved with same parent_message_id
-    Chat Engine->>Webhook Backend: HTTP POST: Recreation request (event: message.recreate)
+    Client->>Chat Engine: Recreate Message
+    Chat Engine->>Chat Engine: Mark old response as inactive
+    Note over Chat Engine: Old response preserved with same parent
+    Chat Engine->>Webhook Backend: Request Recreation
 
     loop Streaming New Response
-        Webhook Backend-->>Chat Engine: HTTP stream chunk
-        Chat Engine-->>Client: message.streaming.chunk event
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Webhook Backend-->>Chat Engine: HTTP stream complete
-    Chat Engine-->>Client: message.streaming.complete event with variant info
+    Webhook Backend-->>Chat Engine: Stream complete
+    Chat Engine-->>Client: Variant Created
 ```
 
 #### S6: Branch from Historical Message
@@ -640,20 +599,20 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with messages exists
 
-    Client->>Chat Engine: Select message (message_id) to branch from
-    Client->>Chat Engine: Send new message (parent_message_id = selected message)
+    Client->>Chat Engine: Select Branch Point
+    Client->>Chat Engine: Send Message from Branch Point
 
-    Chat Engine->>Chat Engine: Create new message with parent reference
-    Chat Engine->>Chat Engine: Load context up to parent message
-    Chat Engine->>Webhook Backend: Forward message with context (event: message.new)
+    Chat Engine->>Chat Engine: Create Message Branch
+    Chat Engine->>Chat Engine: Load Context
+    Chat Engine->>Webhook Backend: Process Message
 
     loop Streaming Response
-        Webhook Backend-->>Chat Engine: Message part
-        Chat Engine-->>Client: Stream message part
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Webhook Backend-->>Chat Engine: Complete response
-    Chat Engine-->>Client: Complete message (new branch created)
+    Webhook Backend-->>Chat Engine: Stream complete
+    Chat Engine-->>Client: Branch Created
 
     Note over Client,Chat Engine: Both message paths preserved
 ```
@@ -670,14 +629,13 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with message variants exists
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: GET /messages/{id}/variants
-    Chat Engine->>Chat Engine: Query siblings (same parent_message_id)
-    Chat Engine-->>Client: 200 OK: variants[] with metadata
+    Client->>Chat Engine: Get Message Variants
+    Chat Engine->>Chat Engine: Query Siblings
+    Chat Engine-->>Client: Variants List
 
-    Client->>Chat Engine: GET /messages/{variant_id}
-    Chat Engine->>Chat Engine: Load sibling message
-    Chat Engine-->>Client: 200 OK: variant content with position (e.g., "2 of 3")
+    Client->>Chat Engine: Get Specific Variant
+    Chat Engine->>Chat Engine: Load Variant
+    Chat Engine-->>Client: Variant Content
 ```
 
 #### S8: Export Session
@@ -693,14 +651,13 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with messages exists
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: POST /sessions/{id}/export (format, scope)
-    Chat Engine->>Chat Engine: Retrieve session messages
-    Chat Engine->>Chat Engine: Apply path filter (active path or all variants)
-    Chat Engine->>Chat Engine: Format data by requested format
-    Chat Engine->>File Storage: Upload formatted file
-    File Storage-->>Chat Engine: File URL
-    Chat Engine-->>Client: 200 OK: download_url + expires_at
+    Client->>Chat Engine: Export Session
+    Chat Engine->>Chat Engine: Retrieve Messages
+    Chat Engine->>Chat Engine: Apply Path Filter
+    Chat Engine->>Chat Engine: Format Data
+    Chat Engine->>File Storage: Upload Export
+    File Storage-->>Chat Engine: Download URL
+    Chat Engine-->>Client: Export Ready
 ```
 
 #### S9: Share Session
@@ -715,38 +672,37 @@ sequenceDiagram
     participant User B
     participant Webhook Backend
 
-    Note over User A,Chat Engine: HTTP REST API
-    User A->>Chat Engine: POST /sessions/{id}/share
-    Chat Engine-->>User A: 201 Created: share_token + share_url
+    User A->>Chat Engine: Share Session
+    Chat Engine-->>User A: Share Link Created
 
     Note over User A,User B: User A shares link with User B
 
-    Note over User B,Chat Engine: HTTP REST API
-    User B->>Chat Engine: GET /share/{token}
-    Chat Engine->>Chat Engine: Validate link
-    Chat Engine-->>User B: 200 OK: session data (read-only)
+    User B->>Chat Engine: Access Shared Session
+    Chat Engine->>Chat Engine: Validate Link
+    Chat Engine-->>User B: Session Data
 
-    Note over User B,Chat Engine: WebSocket API
-    User B->>Chat Engine: message.send event (session_id, content, enabled_capabilities[])
-    Chat Engine->>Chat Engine: Create message branching from last message
-    Chat Engine->>Chat Engine: Load context up to branch point
-    Chat Engine->>Webhook Backend: HTTP POST: Forward message (event: message.new)
+    User B->>Chat Engine: Send Message
+    Chat Engine->>Chat Engine: Create Message Branch
+    Chat Engine->>Chat Engine: Load Context
+    Chat Engine->>Webhook Backend: Process Message
 
     loop Streaming Response
-        Webhook Backend-->>Chat Engine: HTTP stream chunk
-        Chat Engine-->>User B: message.streaming.chunk event
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>User B: Stream chunk
     end
 
-    Webhook Backend-->>Chat Engine: HTTP stream complete
-    Chat Engine-->>User B: message.streaming.complete event
+    Webhook Backend-->>Chat Engine: Stream complete
+    Chat Engine-->>User B: Stream complete
 
     Note over User B,Chat Engine: New message path created in shared session
 ```
 
-#### S10: Stop Streaming Response
+#### S10: Stop Streaming Response (Connection Close)
 
 **Use Case**: `fdd-chat-engine-fr-stop-streaming`
 **Actors**: `fdd-chat-engine-actor-client`
+
+**Note**: With HTTP streaming, cancellation is achieved by closing the connection, not by sending a separate API call.
 
 ```mermaid
 sequenceDiagram
@@ -756,24 +712,23 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session already exists
 
-    Note over Client,Chat Engine: WebSocket API
-    Client->>Chat Engine: message.send event
-    Chat Engine->>Webhook Backend: HTTP POST: Forward message (event: message.new)
+    Client->>Chat Engine: Send Message
+    Chat Engine->>Webhook Backend: Process Message
 
     loop Streaming Response
-        Webhook Backend-->>Chat Engine: HTTP stream chunk
-        Chat Engine-->>Client: message.streaming.chunk event
+        Webhook Backend-->>Chat Engine: Stream chunk
+        Chat Engine-->>Client: Stream chunk
     end
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: POST /messages/{id}/stop
-    Chat Engine->>Chat Engine: Cancel webhook HTTP request
-    Chat Engine->>Chat Engine: Save partial response as incomplete
-    Chat Engine-->>Client: 200 OK: stopped=true, partial_message_id
+    Note over Client: User cancels streaming
+    Client->>Client: Close Connection
 
-    Note over Chat Engine: Message marked with cancellation status
+    Note over Chat Engine: Connection close detected
+    Chat Engine->>Chat Engine: Cancel Request
+    Chat Engine->>Chat Engine: Save Partial Response
+    Chat Engine->>Webhook Backend: Close Connection
 
-    Webhook Backend-->>Chat Engine: Remaining chunks (connection closed)
+    Note over Chat Engine: Message marked incomplete
 ```
 
 #### S11: Search Session History
@@ -788,12 +743,11 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with messages exists
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: GET /sessions/{id}/search?query=...&limit=20
-    Chat Engine->>Chat Engine: Search message content by query
-    Chat Engine->>Chat Engine: Rank results by relevance
-    Chat Engine->>Chat Engine: Load message context (surrounding messages)
-    Chat Engine-->>Client: 200 OK: ranked search results with context
+    Client->>Chat Engine: Search Session
+    Chat Engine->>Chat Engine: Search Messages
+    Chat Engine->>Chat Engine: Rank Results
+    Chat Engine->>Chat Engine: Load Context
+    Chat Engine-->>Client: Search Results
 ```
 
 #### S12: Search Across Sessions
@@ -806,12 +760,11 @@ sequenceDiagram
     participant Client
     participant Chat Engine
 
-    Note over Client,Chat Engine: HTTP REST API
-    Client->>Chat Engine: GET /search?query=...&limit=20
-    Chat Engine->>Chat Engine: Search session titles and message content
-    Chat Engine->>Chat Engine: Rank sessions by relevance
-    Chat Engine->>Chat Engine: Prepare session metadata and content preview
-    Chat Engine-->>Client: 200 OK: ranked list of sessions with metadata
+    Client->>Chat Engine: Search Across Sessions
+    Chat Engine->>Chat Engine: Search All Sessions
+    Chat Engine->>Chat Engine: Rank Sessions
+    Chat Engine->>Chat Engine: Prepare Metadata
+    Chat Engine-->>Client: Session Results
 ```
 
 #### S13: Generate Session Summary
@@ -828,38 +781,37 @@ sequenceDiagram
 
     Note over Client,Chat Engine: Session with messages exists
 
-    Note over Client,Chat Engine: WebSocket API
-    Client->>Chat Engine: session.summarize event (session_id, enabled_capabilities[])
-    Chat Engine->>Chat Engine: Validate summarization is supported
+    Client->>Chat Engine: Summarize Session
+    Chat Engine->>Chat Engine: Validate Summarization Support
 
     alt Summarization supported
-        Chat Engine->>Chat Engine: Retrieve full session history
-        Chat Engine->>Chat Engine: Apply configured summarization settings
-        Chat Engine->>Chat Engine: Determine target endpoint
+        Chat Engine->>Chat Engine: Retrieve Session History
+        Chat Engine->>Chat Engine: Apply Settings
+        Chat Engine->>Chat Engine: Determine Target
 
         alt Dedicated summarization service configured
-            Chat Engine->>Summarization Service: HTTP POST: Summary request (event: session.summary)
+            Chat Engine->>Summarization Service: Request Summary
 
             loop Streaming Summary
-                Summarization Service-->>Chat Engine: HTTP stream chunk
-                Chat Engine-->>Client: message.streaming.chunk event
+                Summarization Service-->>Chat Engine: Stream chunk
+                Chat Engine-->>Client: Stream chunk
             end
 
-            Summarization Service-->>Chat Engine: HTTP stream complete
-            Chat Engine-->>Client: message.streaming.complete event
+            Summarization Service-->>Chat Engine: Stream complete
+            Chat Engine-->>Client: Stream complete
         else Use webhook backend for summarization
-            Chat Engine->>Webhook Backend: HTTP POST: Summary request (event: session.summary)
+            Chat Engine->>Webhook Backend: Request Summary
 
             loop Streaming Summary
-                Webhook Backend-->>Chat Engine: HTTP stream chunk
-                Chat Engine-->>Client: message.streaming.chunk event
+                Webhook Backend-->>Chat Engine: Stream chunk
+                Chat Engine-->>Client: Stream chunk
             end
 
-            Webhook Backend-->>Chat Engine: HTTP stream complete
-            Chat Engine-->>Client: message.streaming.complete event
+            Webhook Backend-->>Chat Engine: Stream complete
+            Chat Engine-->>Client: Stream complete
         end
     else Summarization not supported
-        Chat Engine-->>Client: response.error event
+        Chat Engine-->>Client: Error Response
     end
 ```
 
@@ -874,21 +826,21 @@ sequenceDiagram
     participant CE as Chat Engine
     participant WH as Webhook Backend
 
-    C->>CE: Submit reaction (reaction_type)
-    CE->>CE: Extract user_id from JWT
-    CE->>CE: Validate message exists and user has access
+    C->>CE: Submit Reaction
+    CE->>CE: Extract User Identity
+    CE->>CE: Validate Access
 
     alt Add or change reaction
-        CE->>CE: Store reaction (UPSERT)
-        CE->>C: Return confirmation (applied)
+        CE->>CE: Store Reaction
+        CE->>C: Reaction Applied
     else Remove reaction
-        CE->>CE: Remove reaction
-        CE->>C: Return confirmation (removed)
+        CE->>CE: Remove Reaction
+        CE->>C: Reaction Removed
     end
 
     Note over CE: Client response sent before webhook
 
-    CE->>WH: Send reaction notification (event: message.reaction)
+    CE->>WH: Notify Reaction Change
     Note over WH: Backend processes reaction event
 ```
 
@@ -909,14 +861,14 @@ sequenceDiagram
     participant C as Client
     participant CE as Chat Engine
 
-    C->>CE: Request message deletion
-    CE->>CE: Validate user owns session
-    CE->>CE: Delete message record
+    C->>CE: Delete Message
+    CE->>CE: Validate Ownership
+    CE->>CE: Delete Message
 
     Note over CE: CASCADE DELETE cleanup
 
-    CE->>CE: Remove associated reactions
-    CE->>C: Return deletion confirmation
+    CE->>CE: Remove Reactions
+    CE->>C: Deletion Confirmed
 ```
 
 **Flow**:

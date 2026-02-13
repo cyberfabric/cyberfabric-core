@@ -57,7 +57,7 @@ Chosen option: "JSONB metadata column", because it enables schema-free extensibi
 **Design Elements**:
 * `fdd-chat-engine-entity-session` - metadata field (JSONB)
 * `fdd-chat-engine-db-table-sessions` - metadata column with GIN index
-* WebSocket session.get returns metadata
+* HTTP GET /sessions/{id} returns metadata
 
 **Related ADRs**:
 * ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL JSONB support

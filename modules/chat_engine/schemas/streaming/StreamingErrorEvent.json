@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "gts://gts.x.chat_engine.streaming.error_event.v1~",
   "title": "StreamingErrorEvent",
-  "description": "Event emitted when an error occurs during message streaming",
+  "description": "Event emitted when an error occurs during message streaming. Sent via HTTP chunked response as newline-delimited JSON (NDJSON).",
   "type": "object",
   "properties": {
-    "request_id": {
+    "type": {
       "type": "string",
-      "minLength": 1,
-      "description": "Request identifier for this streaming operation"
+      "const": "error",
+      "description": "Event type identifier"
     },
     "message_id": {
       "type": "string",
@@ -25,6 +25,6 @@
       "description": "Human-readable error message"
     }
   },
-  "required": ["request_id", "message_id", "error_code", "message"],
+  "required": ["type", "message_id", "error_code", "message"],
   "additionalProperties": false
 }

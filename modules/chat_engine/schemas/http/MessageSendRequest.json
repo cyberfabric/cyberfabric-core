@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.http.message_send_request.v1~",
+  "title": "MessageSendRequest",
+  "description": "HTTP POST request to send a message with streaming response",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Session identifier"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Message content (text)"
+    },
+    "file_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "description": "Array of file URLs attached to this message"
+    },
+    "parent_message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Parent message ID for branching"
+    },
+    "enabled_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Capabilities to enable for this message"
+    }
+  },
+  "required": ["session_id", "content"],
+  "additionalProperties": false
+}

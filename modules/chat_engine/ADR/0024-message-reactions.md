@@ -47,21 +47,7 @@ Chosen option: "Separate reaction table with UPSERT and fire-and-forget webhook"
 
 ### Database Schema
 
-```sql
-CREATE TABLE message_reactions (
-    message_id UUID NOT NULL,
-    user_id VARCHAR(255) NOT NULL,
-    reaction_type VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-
-    PRIMARY KEY (message_id, user_id),
-    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE,
-    CONSTRAINT valid_reaction_type CHECK (reaction_type IN ('like', 'dislike'))
-);
-
-CREATE INDEX idx_message_reactions_message_id ON message_reactions(message_id);
-```
+Table `message_reactions` with composite primary key (message_id, user_id). Columns: message_id (UUID), user_id (VARCHAR), reaction_type (VARCHAR with CHECK constraint for 'like'/'dislike'), created_at, updated_at timestamps. Foreign key to messages table with CASCADE DELETE. Index on message_id for efficient lookups.
 
 ### HTTP API
 

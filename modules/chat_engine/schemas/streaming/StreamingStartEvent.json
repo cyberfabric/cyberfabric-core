@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "gts://gts.x.chat_engine.streaming.start_event.v1~",
   "title": "StreamingStartEvent",
-  "description": "Event emitted when message streaming begins",
+  "description": "Event emitted when message streaming begins. Sent via HTTP chunked response as newline-delimited JSON (NDJSON).",
   "type": "object",
   "properties": {
-    "request_id": {
+    "type": {
       "type": "string",
-      "minLength": 1,
-      "description": "Request identifier for this streaming operation"
+      "const": "start",
+      "description": "Event type identifier"
     },
     "message_id": {
       "type": "string",
@@ -17,6 +17,6 @@
       "description": "Message identifier being generated"
     }
   },
-  "required": ["request_id", "message_id"],
+  "required": ["type", "message_id"],
   "additionalProperties": false
 }

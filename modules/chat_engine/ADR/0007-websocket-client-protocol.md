@@ -1,14 +1,14 @@
-# ADR-0007: HTTP REST + WebSocket Dual Protocol for Client Communication
+# ADR-0007: HTTP Streaming Protocol for Client Communication
 
-**Date**: 2026-02-05 (Updated from 2026-02-04)
+**Date**: 2026-02-04
 
-**Status**: accepted (supersedes original WebSocket-only decision)
+**Status**: accepted
 
-**ID**: `fdd-chat-engine-adr-http-websocket-split`
+**ID**: `fdd-chat-engine-adr-http-client-protocol`
 
 ## Context and Problem Statement
 
-Chat Engine needs to support both simple CRUD operations (session management, message retrieval, search) and real-time streaming operations (message streaming, server push notifications). What protocol architecture should be used between client applications and Chat Engine to optimize for both use cases?
+Chat Engine needs to support both simple CRUD operations (session management, message retrieval, search) and real-time streaming operations (message streaming with assistant responses). What protocol architecture should be used between client applications and Chat Engine to optimize for both use cases while maintaining operational simplicity?
 
 ## Decision Drivers
 
@@ -21,102 +21,137 @@ Chat Engine needs to support both simple CRUD operations (session management, me
 
 **For Streaming Operations**:
 * Real-time streaming of assistant responses (time-to-first-byte < 200ms)
-* Multiple concurrent streams over single connection
-* Server-initiated events (session updates, push notifications)
-* Efficient connection management (avoid HTTP polling overhead)
-* Request/response matching for concurrent operations
-* Connection keep-alive and automatic reconnection
+* Efficient connection management
+* Simple cancellation mechanism (connection close)
+* Support for multiple content types (text, code, images)
+* Progress indication for long operations
+
+**Architectural Principles**:
+* Prefer stateless over stateful
+* Prefer simple over complex
+* Prefer standard over custom
+* Optimize for modern cloud/serverless environments
+* Enable horizontal scaling without session affinity
 
 ## Considered Options
 
-* **Option 1: WebSocket only** - All operations over WebSocket (original design)
-* **Option 2: HTTP REST + WebSocket split** - HTTP for CRUD, WebSocket for streaming
+* **Option 1: HTTP REST + WebSocket split** - Dual-protocol architecture
+* **Option 2: HTTP with chunked streaming (NDJSON)** - Single protocol with streaming
 * **Option 3: HTTP/2 Server-Sent Events (SSE)** - HTTP/2 for requests, SSE for streaming
-* **Option 4: gRPC split** - gRPC unary for CRUD, bidirectional streaming for messages
+* **Option 4: gRPC streaming** - gRPC unary and streaming
 
 ## Decision Outcome
 
-Chosen option: "HTTP REST + WebSocket split", because it provides optimal protocol for each operation type, reduces complexity for simple CRUD operations, follows industry patterns (Slack, Discord, GitHub), enables standard HTTP features (caching, CDN, load balancing), simplifies testing and debugging, while preserving WebSocket benefits for streaming and push notifications.
+Chosen option: "HTTP with chunked streaming (NDJSON)", because it provides a single protocol for all operations, enables stateless scaling without sticky sessions, simplifies client implementation, uses standard HTTP features (chunked transfer), provides simple cancellation via connection close, improves serverless compatibility, and reduces operational complexity.
 
 ### Consequences
 
-**HTTP REST API Benefits**:
-* Good, because standard RESTful patterns familiar to all developers
-* Good, because easy testing with curl, Postman, standard HTTP clients
-* Good, because standard load balancing, caching, CDN support
-* Good, because stateless operations simplify horizontal scaling
-* Good, because HTTP status codes provide clear semantics (200, 404, 500)
-* Good, because mature debugging tools (browser DevTools, network analyzers)
+**Architectural Benefits**:
+* Good, because stateless servers enable true horizontal scaling
+* Good, because any request can be handled by any server instance
+* Good, because standard HTTP load balancing works without special configuration
+* Good, because simpler deployment (no WebSocket proxy configuration)
+* Good, because better serverless support (HTTP is universal)
 
-**WebSocket API Benefits**:
-* Good, because persistent connection eliminates handshake overhead for streaming
-* Good, because bidirectional allows server push (session.updated, message.created)
-* Good, because multiple concurrent streams share connection (parallel requests)
-* Good, because WebSocket libraries handle reconnection, keep-alive automatically
-* Good, because JSON framing simple for debugging (human-readable)
+**Operational Benefits**:
+* Good, because standard HTTP monitoring and logging tools work
+* Good, because easier debugging (curl can test streaming)
+* Good, because no persistent connection management overhead
+* Good, because graceful shutdown is simpler
+* Good, because CDN and proxy compatibility improved
 
-**Dual Protocol Benefits**:
-* Good, because each protocol optimized for its use case
-* Good, because follows industry patterns (Slack, Discord, GitHub)
-* Good, because clients can use HTTP-only for simple apps (no WebSocket needed)
-* Good, because simpler client implementation (HTTP for CRUD, WebSocket when needed)
+**Development Benefits**:
+* Good, because single protocol reduces client complexity
+* Good, because no WebSocket library required (standard fetch API)
+* Good, because easier testing (standard HTTP tools)
+* Good, because NDJSON is simple and human-readable
+* Good, because cancellation is intuitive (close connection)
 
-**Dual Protocol Drawbacks**:
-* Bad, because clients must implement two protocols instead of one
-* Bad, because requires coordination between HTTP auth and WebSocket auth
-* Bad, because potential for inconsistent state if protocols used incorrectly
-* Bad, because two separate protocol specifications to maintain
-* Bad, because WebSocket still requires stateful connection management (sticky sessions)
+**Trade-offs**:
+* Bad, because no server push capability (no persistent connection)
+* Bad, because clients must poll for updates if needed
+* Bad, because authentication token sent with every request
 
-**Implementation Impact**:
-* Requires dual API implementation (HTTP server + WebSocket server)
-* Requires clear documentation on which protocol to use for each operation
-* Requires client libraries to support both protocols
-* Enables phased migration (HTTP first, add WebSocket later)
+## Protocol Details
 
-## Protocol Distribution
+### Authentication
 
-**HTTP REST API (14 operations)**:
-* Session Management: create, get, delete, switch type, export, share, access shared
-* Message Operations: list, get, stop, get variants, send multi
-* Search Operations: search in session, search across sessions
+All requests use JWT Bearer token authentication.
 
-**WebSocket API (5 operations)**:
-* Client→Server (3): message.send, message.recreate, session.summarize
-* Server→Client (2 push): session.updated, message.created
+### CRUD Operations (HTTP REST)
+
+**Session Management**:
+* `POST /api/v1/sessions` - Create session
+* `GET /api/v1/sessions/{id}` - Get session
+* `DELETE /api/v1/sessions/{id}` - Delete session
+* `PATCH /api/v1/sessions/{id}/type` - Switch session type
+* `POST /api/v1/sessions/{id}/export` - Export session
+* `POST /api/v1/sessions/{id}/share` - Share session
+* `GET /api/v1/sessions/shared/{token}` - Access shared session
+
+**Message Operations**:
+* `GET /api/v1/messages/{id}` - Get message
+* `GET /api/v1/sessions/{id}/messages` - List messages
+* `GET /api/v1/messages/{id}/variants` - Get message variants
+* `POST /api/v1/messages/multi` - Send multiple messages
+
+**Search Operations**:
+* `POST /api/v1/sessions/{id}/search` - Search in session
+* `POST /api/v1/search` - Search across sessions
+
+### Streaming Operations (HTTP Chunked Transfer)
+
+**Endpoints**:
+* `POST /api/v1/messages/send` - Send message with streaming response
+* `POST /api/v1/messages/{id}/recreate` - Recreate message with streaming
+* `POST /api/v1/sessions/{id}/summarize` - Summarize session with streaming
+
+**Request Format**: HTTP POST with JSON body containing session_id, content, and enabled_capabilities fields. Uses Bearer token authentication and application/json content type.
+
+**Response Format**: NDJSON (newline-delimited JSON) over HTTP chunked transfer encoding. Each line is a separate JSON object representing a streaming event (start, chunk, complete, or error). Content-Type is application/x-ndjson.
+
+### Streaming Event Types
+
+**StreamingStartEvent**: Signals the beginning of streaming, contains type "start" and message_id.
+
+**StreamingChunkEvent**: Contains type "chunk", message_id, and chunk object with content type, content text, and index.
+
+**StreamingCompleteEvent**: Signals end of streaming, contains type "complete", message_id, and metadata with usage statistics (input_tokens, output_tokens).
+
+**StreamingErrorEvent**: Signals streaming error, contains type "error", message_id, and error object with error code and message.
+
+### Cancellation Mechanism
+
+Clients cancel streaming by closing the HTTP connection. In browsers, this is done using AbortController with the fetch API. In other clients (Python, etc.), the HTTP request can be closed/cancelled directly. When the connection is closed, the server detects the disconnection and terminates the streaming process.
 
 ## Related Design Elements
 
 **Actors**:
-* `fdd-chat-engine-actor-client` - Web/mobile/desktop apps using HTTP REST and WebSocket
-* Chat Engine instances - Each instance includes HTTP server + WebSocket server
+* `fdd-chat-engine-actor-client` - Web/mobile/desktop apps using HTTP REST and HTTP streaming
+* Chat Engine instances - HTTP server with chunked streaming support
 
 **Requirements**:
 * CRUD operations use HTTP REST for simplicity and standard patterns
-* Streaming operations use WebSocket for real-time delivery
+* Streaming operations use HTTP chunked transfer for real-time delivery
 * `fdd-chat-engine-nfr-streaming` - First byte < 200ms, overhead < 10ms per chunk
-* `fdd-chat-engine-nfr-response-time` - HTTP routing < 50ms, WebSocket routing < 100ms
-* `fdd-chat-engine-fr-stop-streaming` - Cancellation via HTTP POST (not WebSocket)
+* `fdd-chat-engine-nfr-response-time` - HTTP routing < 50ms
+* `fdd-chat-engine-fr-stop-streaming` - Cancellation via connection close
 
 **Design Elements**:
-* HTTP REST server - Handles CRUD operations, authentication via Bearer tokens
-* WebSocket server - Handles streaming operations, authentication via JWT
-* `fdd-chat-engine-response-streaming` - Manages WebSocket frame streaming
+* HTTP server - Handles both CRUD and streaming operations
+* `fdd-chat-engine-response-streaming` - Manages HTTP chunked streaming
 * HTTP REST API specification (Section 3.3.1 of DESIGN.md)
-* WebSocket API specification (Section 3.3.2 of DESIGN.md)
 * Webhook API specification (Section 3.3.3 of DESIGN.md)
 
 **Related ADRs**:
-* ADR-0003 (Streaming Architecture) - WebSocket used for client-side streaming delivery
-* ADR-0006 (Webhook Protocol) - Backend protocol remains HTTP (not WebSocket)
-* ADR-0009 (Streaming Cancellation) - Cancellation now via HTTP POST /messages/{id}/stop
-* ADR-0010 (Stateless Scaling) - HTTP enables stateless scaling; WebSocket requires session affinity
+* ADR-0003 (Streaming Architecture) - HTTP streaming architecture principles
+* ADR-0006 (Webhook Protocol) - Backend webhook protocol (also HTTP streaming)
+* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation via connection close
+* ADR-0010 (Stateless Scaling) - Stateless architecture enabled by HTTP
 
-## Migration Path
+## References
 
-For existing WebSocket-only clients:
-1. Phase 1: Implement HTTP REST for CRUD operations (optional backward compatibility)
-2. Phase 2: Migrate read operations to HTTP (GET session, GET messages, search)
-3. Phase 3: Migrate write operations to HTTP (POST session, DELETE, PATCH)
-4. Phase 4: Keep only streaming operations on WebSocket
-5. Phase 5: Remove backward compatibility for old WebSocket CRUD operations
+* OpenAI API uses HTTP streaming: https://platform.openai.com/docs/api-reference/streaming
+* Anthropic API uses HTTP streaming: https://docs.anthropic.com/claude/reference/streaming
+* HTTP/1.1 Chunked Transfer: RFC 7230 Section 4.1
+* NDJSON Format: http://ndjson.org/

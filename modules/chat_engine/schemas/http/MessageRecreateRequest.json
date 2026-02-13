@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.http.message_recreate_request.v1~",
+  "title": "MessageRecreateRequest",
+  "description": "HTTP POST request to recreate a message with streaming response",
+  "type": "object",
+  "properties": {
+    "enabled_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Capabilities to enable for this recreation"
+    }
+  },
+  "additionalProperties": false
+}

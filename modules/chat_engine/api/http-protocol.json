@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Chat Engine HTTP REST API",
-    "description": "RESTful HTTP API for Chat Engine client operations. Used for CRUD operations, queries, and simple control operations. Streaming operations use WebSocket API instead.",
+    "description": "RESTful HTTP API for Chat Engine client operations. Used for CRUD operations, queries, control operations, and streaming responses via HTTP chunked transfer encoding (newline-delimited JSON).",
     "version": "1.0.0",
     "contact": {
       "name": "Chat Engine Team"
@@ -483,6 +483,154 @@
         }
       }
     },
+    "/messages/send": {
+      "post": {
+        "summary": "Send message with streaming response",
+        "operationId": "sendMessage",
+        "tags": ["Message Operations"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming response (newline-delimited JSON)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "oneOf": [
+                    {"$ref": "#/components/schemas/StreamingStartEvent"},
+                    {"$ref": "#/components/schemas/StreamingChunkEvent"},
+                    {"$ref": "#/components/schemas/StreamingCompleteEvent"},
+                    {"$ref": "#/components/schemas/StreamingErrorEvent"}
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/messages/{id}/recreate": {
+      "post": {
+        "summary": "Recreate message with streaming response",
+        "operationId": "recreateMessage",
+        "tags": ["Message Operations"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MessageId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageRecreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming response (newline-delimited JSON)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "oneOf": [
+                    {"$ref": "#/components/schemas/StreamingStartEvent"},
+                    {"$ref": "#/components/schemas/StreamingChunkEvent"},
+                    {"$ref": "#/components/schemas/StreamingCompleteEvent"},
+                    {"$ref": "#/components/schemas/StreamingErrorEvent"}
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/summarize": {
+      "post": {
+        "summary": "Generate session summary with streaming response",
+        "operationId": "summarizeSession",
+        "tags": ["Session Management"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionSummarizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming response (newline-delimited JSON)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "oneOf": [
+                    {"$ref": "#/components/schemas/StreamingStartEvent"},
+                    {"$ref": "#/components/schemas/StreamingChunkEvent"},
+                    {"$ref": "#/components/schemas/StreamingCompleteEvent"},
+                    {"$ref": "#/components/schemas/StreamingErrorEvent"}
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/sessions/{id}/messages": {
       "get": {
         "summary": "List messages in session",
@@ -549,48 +697,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Message"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          }
-        }
-      }
-    },
-    "/messages/{id}/stop": {
-      "post": {
-        "summary": "Stop streaming response",
-        "operationId": "stopMessage",
-        "tags": ["Message Operations"],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/MessageId"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Streaming stopped",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "stopped": {
-                      "type": "boolean"
-                    },
-                    "partial_message_id": {
-                      "type": "string",
-                      "format": "uuid"
-                    }
-                  }
                 }
               }
             }
@@ -1068,6 +1174,151 @@
           },
           "applied": {
             "type": "boolean"
+          }
+        }
+      },
+      "MessageSendRequest": {
+        "type": "object",
+        "required": ["session_id", "content"],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "content": {
+            "type": "string"
+          },
+          "file_urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent_message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MessageRecreateRequest": {
+        "type": "object",
+        "properties": {
+          "enabled_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SessionSummarizeRequest": {
+        "type": "object",
+        "properties": {
+          "enabled_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "StreamingStartEvent": {
+        "type": "object",
+        "required": ["type", "message_id"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "start"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "StreamingChunkEvent": {
+        "type": "object",
+        "required": ["type", "message_id", "chunk"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "chunk"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chunk": {
+            "type": "object",
+            "required": ["type", "content"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["text", "code", "image", "audio", "video", "document"]
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "StreamingCompleteEvent": {
+        "type": "object",
+        "required": ["type", "message_id"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "complete"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer"
+                  },
+                  "output_tokens": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "StreamingErrorEvent": {
+        "type": "object",
+        "required": ["type", "message_id", "error_code", "message"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
           }
         }
       }

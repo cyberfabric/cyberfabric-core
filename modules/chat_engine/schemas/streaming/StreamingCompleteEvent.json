@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "gts://gts.x.chat_engine.streaming.complete_event.v1~",
   "title": "StreamingCompleteEvent",
-  "description": "Event emitted when message streaming completes successfully",
+  "description": "Event emitted when message streaming completes successfully. Sent via HTTP chunked response as newline-delimited JSON (NDJSON).",
   "type": "object",
   "properties": {
-    "request_id": {
+    "type": {
       "type": "string",
-      "minLength": 1,
-      "description": "Request identifier for this streaming operation"
+      "const": "complete",
+      "description": "Event type identifier"
     },
     "message_id": {
       "type": "string",
@@ -30,6 +30,6 @@
       "additionalProperties": true
     }
   },
-  "required": ["request_id", "message_id"],
+  "required": ["type", "message_id"],
   "additionalProperties": false
 }

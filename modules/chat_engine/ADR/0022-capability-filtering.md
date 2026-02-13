@@ -59,7 +59,7 @@ Chosen option: "enabled_capabilities array per message", because it provides per
 
 **Design Elements**:
 * `fdd-chat-engine-entity-session` - available_capabilities (authoritative)
-* WebSocket message.send event with enabled_capabilities field
+* HTTP POST /messages/send with enabled_capabilities field
 * Webhook message.new event with enabled_capabilities array
 
 **Related ADRs**:

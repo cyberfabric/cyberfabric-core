@@ -41,13 +41,12 @@ Chosen option: "Stateless instances with database state", because it enables sim
 * Good, because database handles consistency (ACID transactions)
 * Bad, because every request requires database queries (no in-memory state)
 * Bad, because database becomes scaling bottleneck (write throughput limit)
-* Bad, because WebSocket connection state still per-instance (reconnection on failure)
 * Bad, because no request coalescing or in-memory optimizations
 
 ## Related Design Elements
 
 **Actors**:
-* Chat Engine instances (stateless pods) - Each instance includes embedded WebSocket server
+* Chat Engine instances (stateless pods) - HTTP servers with no persistent connection state
 * `fdd-chat-engine-actor-database` - Single source of truth for all state
 
 **Requirements**:
@@ -62,5 +61,5 @@ Chosen option: "Stateless instances with database state", because it enables sim
 
 **Related ADRs**:
 * ADR-0010 (Stateless Horizontal Scaling with Database State) - Database provides all persistent state
-* ADR-0007 (WebSocket Client Protocol) - WebSocket connections per instance
+* ADR-0007 (HTTP Client Protocol) - Stateless HTTP protocol enables true horizontal scaling
 * ADR-0011 (Circuit Breaker per Webhook Backend) - Circuit breaker state per instance (not shared)

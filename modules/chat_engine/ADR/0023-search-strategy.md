@@ -59,7 +59,7 @@ Chosen option: "PostgreSQL tsvector with GIN indexes", because it provides built
 **Design Elements**:
 * `fdd-chat-engine-db-table-messages` - Full-text index on content field
 * `fdd-chat-engine-design-context-search` - Implementation details (tsvector, GIN, ts_rank_cd)
-* WebSocket session.search and sessions.search events
+* HTTP POST /sessions/{id}/search and POST /search endpoints
 
 **Related ADRs**:
 * ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL full-text search features

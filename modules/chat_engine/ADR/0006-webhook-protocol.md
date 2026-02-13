@@ -29,7 +29,7 @@ Chat Engine needs to invoke webhook backends for message processing, passing ses
 
 ## Decision Outcome
 
-Chosen option: "HTTP POST with chunked streaming", because it provides simple integration for backend developers (standard HTTP), supports streaming via chunked transfer encoding, maintains synchronous semantics simplifying error handling, requires no persistent connections or message broker infrastructure, and keeps client connections open for real-time streaming.
+Chosen option: "HTTP POST with chunked streaming", because it provides simple integration for backend developers (standard HTTP), supports streaming via chunked transfer encoding with newline-delimited JSON (NDJSON), maintains synchronous semantics simplifying error handling, requires no persistent connections or message broker infrastructure, and keeps client connections open for real-time streaming.
 
 ### Consequences
 

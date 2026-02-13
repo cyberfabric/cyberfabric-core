@@ -9,13 +9,12 @@ Protocol specification files complement the domain model schemas in `../schemas/
 - **API operations and flows**: How clients interact with the server
 - **Event sequences**: Order and structure of events in request/response cycles
 - **Protocol-level constraints**: Timeouts, error handling, streaming patterns
-- **Connection configuration**: Authentication, keepalive, transport details
+- **Connection configuration**: Authentication, transport details
 
-The Chat Engine API uses a **dual-protocol architecture**:
-- **HTTP REST API**: For CRUD operations, queries, and simple control operations
-- **WebSocket API**: For streaming responses and real-time push notifications
-
-This split provides better separation of concerns, easier testing, improved scalability, and follows industry best practices (similar to Slack, Discord, GitHub APIs).
+The Chat Engine API uses **HTTP with chunked streaming**:
+- **HTTP REST API**: For CRUD operations, queries, and control operations
+- **HTTP Chunked Streaming**: For real-time streaming responses (newline-delimited JSON)
+- **Stateless Architecture**: No persistent connections, simpler scaling and deployment
 
 ## Files
 
@@ -26,8 +25,8 @@ This split provides better separation of concerns, easier testing, improved scal
 Complete HTTP REST API specification defining the RESTful endpoints for Chat Engine client operations.
 
 **Contents**:
-- **13 REST endpoints** across 3 categories:
-  - **Session Management (9)**:
+- **15 REST endpoints** across 3 categories:
+  - **Session Management (10)**:
     - `POST /sessions` - Create session
     - `GET /sessions/{id}` - Get session
     - `DELETE /sessions/{id}` - Delete session
@@ -37,12 +36,15 @@ Complete HTTP REST API specification defining the RESTful endpoints for Chat Eng
     - `GET /share/{token}` - Access shared
     - `GET /sessions/{id}/search` - Search in session
     - `GET /search` - Search all sessions
+    - `POST /sessions/{id}/summarize` - Generate summary (streaming)
 
-  - **Message Operations (4)**:
+  - **Message Operations (5)**:
+    - `POST /messages/send` - Send message (streaming)
+    - `POST /messages/{id}/recreate` - Recreate message (streaming)
     - `GET /sessions/{id}/messages` - List messages
     - `GET /messages/{id}` - Get message
-    - `POST /messages/{id}/stop` - Stop streaming
     - `GET /messages/{id}/variants` - Get variants
+    - `POST /messages/{id}/reaction` - React to message
 
   - **Search Operations (2)**: Included above
 
@@ -57,39 +59,35 @@ Complete HTTP REST API specification defining the RESTful endpoints for Chat Eng
 - Message retrieval and navigation
 - Search across conversations
 - Export and sharing operations
-- Simple control operations (stop streaming)
+- Real-time streaming responses (send message, recreate, summarize)
+- Cancellation via connection close (stateless)
 
-### websocket-protocol.json
+### HTTP Chunked Streaming
 
-**Format**: GTS JSON Schema (custom format)
+**Format**: Newline-Delimited JSON (NDJSON) over HTTP chunked transfer encoding
 
-**GTS ID**: `gts://gts.x.chat_engine.api.websocket_protocol.v2~`
+**Streaming Endpoints**:
+- `POST /messages/send` - Send message with streaming response
+- `POST /messages/{id}/recreate` - Recreate message with streaming
+- `POST /sessions/{id}/summarize` - Generate summary with streaming
 
-WebSocket API specification for streaming operations and real-time notifications. Version 2.0 reflects the HTTP/WebSocket protocol split.
+**Streaming Events**:
+- `start` - Streaming begins, includes message_id
+- `chunk` - Content chunk (text, code, image, etc.)
+- `complete` - Streaming finished successfully
+- `error` - Error occurred during streaming
 
-**Contents**:
-- **3 Client→Server streaming operations**:
-  - `message.send` - Send message with streaming response
-  - `message.recreate` - Recreate response with streaming
-  - `session.summarize` - Generate summary with streaming
-
-- **10 Server→Client events**:
-  - Connection Events (2): ready, error
-  - Response Events (2): success, error
-  - Streaming Events (4): start, chunk, complete, error
-  - Push Events (2): session.updated, message.created
-
-**WebSocket Configuration**:
-- URL: `wss://chat-engine/ws`
-- Authentication: JWT in handshake or first message
-- Keepalive: Ping/Pong every 30 seconds
-- Multiple concurrent operations per connection
+**HTTP Configuration**:
+- Content-Type: `application/x-ndjson`
+- Transfer-Encoding: chunked
+- Authentication: JWT Bearer token in Authorization header
+- Cancellation: Close HTTP connection
 
 **Use Cases**:
 - Real-time message streaming from AI backends
 - Recreating responses with variants
 - Session summarization with streaming
-- Server-push notifications (session/message updates)
+- Stateless scaling (no persistent connections)
 
 ### webhook-protocol.json
 
@@ -115,7 +113,7 @@ Complete Webhook API specification defining HTTP POST calls from Chat Engine to 
   - Accept: application/json, text/event-stream
 
 **Streaming Protocol**:
-  - Server-Sent Events (SSE) format
+  - HTTP chunked streaming (NDJSON) format
   - Event types: chunk, complete, error
   - Content chunk structure
 
@@ -126,25 +124,23 @@ Complete Webhook API specification defining HTTP POST calls from Chat Engine to 
 
 ## Protocol Architecture
 
-### Why Two Client Protocols?
+### HTTP with Chunked Streaming
 
-**HTTP REST API** is used for:
+**HTTP REST API with Streaming** provides:
 - ✅ Simple CRUD operations (no persistent connection overhead)
 - ✅ Queries and search (standard HTTP caching, CDN-friendly)
 - ✅ Standard tooling (curl, Postman, HTTP clients)
 - ✅ Easy testing and debugging
 - ✅ RESTful patterns and conventions
+- ✅ Streaming responses (real-time incremental delivery via chunked transfer)
+- ✅ Stateless scaling (no sticky sessions required)
+- ✅ Simple cancellation (close connection)
+- ✅ Standard load balancing and proxy support
 
-**WebSocket API** is used for:
-- ✅ Streaming responses (real-time incremental delivery)
-- ✅ Server push notifications (no client polling needed)
-- ✅ Low-latency bidirectional communication
-- ✅ Multiple concurrent streams per connection
-
-This separation follows industry patterns used by:
-- Slack (REST + WebSocket RTM)
-- Discord (REST + Gateway WebSocket)
-- GitHub (REST + WebSocket for live updates)
+This approach follows modern patterns used by:
+- OpenAI API (HTTP streaming)
+- Anthropic API (HTTP streaming)
+- Modern serverless architectures
 
 ### Protocol Decision Matrix
 
@@ -153,13 +149,12 @@ This separation follows industry patterns used by:
 | Create session | HTTP POST | Simple request/response, no streaming needed |
 | Get session | HTTP GET | Standard retrieval, cacheable |
 | Delete session | HTTP DELETE | Simple command, idempotent |
-| Send message | **WebSocket** | Requires streaming response from backend |
+| Send message | **HTTP POST (streaming)** | Streaming response via chunked transfer |
 | List messages | HTTP GET | Standard query, pagination support |
-| Stop streaming | HTTP POST | Control command during active stream |
-| Recreate message | **WebSocket** | Requires streaming response |
+| Stop streaming | **Close connection** | Stateless cancellation |
+| Recreate message | **HTTP POST (streaming)** | Streaming response via chunked transfer |
 | Search messages | HTTP GET | Query operation, standard REST patterns |
-| Summarize session | **WebSocket** | Requires streaming response |
-| Push notifications | **WebSocket** | Server-initiated, no client request |
+| Summarize session | **HTTP POST (streaming)** | Streaming response via chunked transfer |
 
 ## Relationship to Domain Schemas
 
@@ -237,104 +232,89 @@ session_id = response.json()['session_id']
 requests.delete(f'https://chat-engine/api/v1/sessions/{session_id}', headers=headers)
 ```
 
-### WebSocket API Examples
+### HTTP Streaming API Examples
 
 **TypeScript Client**:
 ```typescript
-// Connect to WebSocket
-const ws = new WebSocket('wss://chat-engine/ws');
-
-ws.onopen = () => {
-  // Send authentication (if not in handshake)
-  ws.send(JSON.stringify({
-    id: uuid(),
-    type: 'auth',
-    payload: { token: jwt },
-    timestamp: new Date().toISOString()
-  }));
-};
-
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-
-  switch (message.type) {
-    case 'connection.ready':
-      console.log('Connected:', message.payload);
-      break;
-
-    case 'message.streaming.start':
-      console.log('Streaming started:', message.payload.message_id);
-      break;
-
-    case 'message.streaming.chunk':
-      console.log('Chunk:', message.payload.chunk);
-      displayChunk(message.payload.chunk);
-      break;
-
-    case 'message.streaming.complete':
-      console.log('Streaming complete:', message.payload.metadata);
-      break;
-
-    case 'session.updated':
-      console.log('Session updated:', message.payload.updates);
-      updateSessionState(message.payload);
-      break;
-  }
-};
-
-// Send message (streaming)
-function sendMessage(sessionId: string, content: string) {
-  ws.send(JSON.stringify({
-    id: uuid(),
-    type: 'message.send',
-    payload: {
+// Send message with streaming response
+async function sendMessage(sessionId: string, content: string) {
+  const response = await fetch('https://chat-engine/api/v1/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${jwt}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
       session_id: sessionId,
       content: content,
       enabled_capabilities: ['web_search']
-    },
-    timestamp: new Date().toISOString()
-  }));
+    })
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n').filter(line => line.trim());
+
+    for (const line of lines) {
+      const event = JSON.parse(line);
+
+      switch (event.type) {
+        case 'start':
+          console.log('Streaming started:', event.message_id);
+          break;
+        case 'chunk':
+          console.log('Chunk:', event.chunk);
+          displayChunk(event.chunk);
+          break;
+        case 'complete':
+          console.log('Complete:', event.metadata);
+          break;
+        case 'error':
+          console.error('Error:', event.message);
+          break;
+      }
+    }
+  }
 }
 ```
 
 **Python Client**:
 ```python
-import asyncio
-import websockets
+import requests
 import json
-from uuid import uuid4
 
-async def chat_session():
-    uri = "wss://chat-engine/ws"
-    async with websockets.connect(uri) as ws:
-        # Wait for connection ready
-        msg = await ws.recv()
-        data = json.loads(msg)
-        assert data['type'] == 'connection.ready'
+def send_message(session_id: str, content: str):
+    response = requests.post(
+        'https://chat-engine/api/v1/messages/send',
+        headers={'Authorization': f'Bearer {jwt}'},
+        json={
+            'session_id': session_id,
+            'content': content,
+            'enabled_capabilities': []
+        },
+        stream=True
+    )
 
-        # Send message
-        await ws.send(json.dumps({
-            'id': str(uuid4()),
-            'type': 'message.send',
-            'payload': {
-                'session_id': 'uuid-123',
-                'content': 'Hello AI',
-                'enabled_capabilities': []
-            },
-            'timestamp': datetime.utcnow().isoformat()
-        }))
+    for line in response.iter_lines():
+        if line:
+            event = json.loads(line)
 
-        # Receive streaming response
-        async for message in ws:
-            data = json.loads(message)
-
-            if data['type'] == 'message.streaming.chunk':
-                print(data['payload']['chunk']['content'], end='')
-            elif data['type'] == 'message.streaming.complete':
+            if event['type'] == 'start':
+                print(f"Streaming started: {event['message_id']}")
+            elif event['type'] == 'chunk':
+                print(event['chunk']['content'], end='', flush=True)
+            elif event['type'] == 'complete':
                 print('\n[Complete]')
-                break
+            elif event['type'] == 'error':
+                print(f"\nError: {event['message']}")
 
-asyncio.run(chat_session())
+send_message('uuid-123', 'Hello AI')
 ```
 
 ### Validating Protocol Compliance
@@ -496,12 +476,12 @@ with open('api/websocket-protocol.json') as f:
 
 ## Migration Guide
 
-For clients migrating from WebSocket-only to HTTP+WebSocket:
+For clients migrating from WebSocket to HTTP streaming:
 
-### Operations Moved to HTTP
+### All Operations Now Use HTTP
 
-| Old (WebSocket) | New (HTTP REST) |
-|----------------|-----------------|
+| Old (WebSocket) | New (HTTP REST/Streaming) |
+|----------------|---------------------------|
 | `session.create` | `POST /sessions` |
 | `session.get` | `GET /sessions/{id}` |
 | `session.delete` | `DELETE /sessions/{id}` |
@@ -511,20 +491,24 @@ For clients migrating from WebSocket-only to HTTP+WebSocket:
 | `session.access_shared` | `GET /share/{token}` |
 | `message.list` | `GET /sessions/{id}/messages` |
 | `message.get` | `GET /messages/{id}` |
-| `message.stop` | `POST /messages/{id}/stop` |
+| `message.send` | `POST /messages/send` (streaming) |
+| `message.recreate` | `POST /messages/{id}/recreate` (streaming) |
+| `message.stop` | Close HTTP connection |
 | `message.get_variants` | `GET /messages/{id}/variants` |
 | `session.search` | `GET /sessions/{id}/search` |
 | `sessions.search` | `GET /search` |
+| `session.summarize` | `POST /sessions/{id}/summarize` (streaming) |
 
-### Operations Staying on WebSocket
+### Key Changes
 
-| Operation | Reason |
-|-----------|--------|
-| `message.send` | Requires streaming response |
-| `message.recreate` | Requires streaming response |
-| `session.summarize` | Requires streaming response |
-| `session.updated` (push) | Server-initiated notification |
-| `message.created` (push) | Server-initiated notification |
+| Feature | Old (WebSocket) | New (HTTP Streaming) |
+|---------|-----------------|----------------------|
+| **Connection** | Persistent WebSocket | HTTP request per operation |
+| **Streaming** | WebSocket frames | HTTP chunked transfer (NDJSON) |
+| **Cancellation** | `message.stop` event | Close connection |
+| **Authentication** | JWT in handshake | Bearer token per request |
+| **Scaling** | Sticky sessions | Stateless (any server) |
+| **Push events** | `session.updated`, `message.created` | Removed (client polls if needed) |
 
 ## See Also
 
@@ -548,32 +532,21 @@ For clients migrating from WebSocket-only to HTTP+WebSocket:
    {"session_type_id": "uuid", "client_id": "user-id"}
    ```
 
-2. **WebSocket**: Connect and send message
-   ```json
-   // Connect to wss://chat-engine/ws
-   // Send message
-   {
-     "id": "req-123",
-     "type": "message.send",
-     "payload": {
-       "session_id": "uuid",
-       "content": "Hello",
-       "enabled_capabilities": []
-     },
-     "timestamp": "2025-02-05T..."
-   }
+2. **HTTP Streaming**: Send message
+   ```http
+   POST /api/v1/messages/send
+   Authorization: Bearer <token>
+   Content-Type: application/json
+
+   {"session_id": "uuid", "content": "Hello", "enabled_capabilities": []}
    ```
 
-3. **WebSocket**: Receive streaming response
+3. **HTTP Streaming**: Receive response (NDJSON)
    ```json
-   // Start
-   {"type": "message.streaming.start", "payload": {"request_id": "req-123", "message_id": "msg-456"}}
-
-   // Chunks
-   {"type": "message.streaming.chunk", "payload": {"chunk": {"type": "text", "content": "Hi..."}}}
-
-   // Complete
-   {"type": "message.streaming.complete", "payload": {"metadata": {"usage": {...}}}}
+   {"type":"start","message_id":"msg-456"}
+   {"type":"chunk","message_id":"msg-456","chunk":{"type":"text","content":"Hi"}}
+   {"type":"chunk","message_id":"msg-456","chunk":{"type":"text","content":" there"}}
+   {"type":"complete","message_id":"msg-456","metadata":{"usage":{"input_tokens":10,"output_tokens":5}}}
    ```
 
 4. **HTTP**: Retrieve message history
@@ -584,6 +557,6 @@ For clients migrating from WebSocket-only to HTTP+WebSocket:
 
 ---
 
-**Protocol Version**: HTTP REST API 1.0.0, WebSocket API 2.0, Webhook API 1.0
+**Protocol Version**: HTTP REST API 1.0.0, Webhook API 1.0
 **Last Updated**: 2025-02-05
 **Maintainers**: Chat Engine Team

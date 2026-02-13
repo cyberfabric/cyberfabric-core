@@ -38,9 +38,9 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["application/json", "text/event-stream"]
+            "enum": ["application/json", "application/x-ndjson"]
           },
-          "description": "Accepted response content types (JSON for standard, SSE for streaming)"
+          "description": "Accepted response content types (JSON for standard, NDJSON for streaming)"
         }
       },
       "required": ["method", "content_type", "accept"]
@@ -405,26 +405,26 @@
     },
     "streaming_protocol": {
       "type": "object",
-      "description": "Server-Sent Events (SSE) streaming for webhook responses",
+      "description": "HTTP chunked streaming (newline-delimited JSON) for webhook responses",
       "properties": {
         "format": {
           "type": "string",
-          "const": "text/event-stream",
-          "description": "Content-Type for streaming responses"
+          "const": "application/x-ndjson",
+          "description": "Content-Type for streaming responses (newline-delimited JSON)"
         },
         "event_format": {
           "type": "object",
-          "description": "SSE event format",
+          "description": "NDJSON event format",
           "properties": {
-            "event_field": {
+            "structure": {
               "type": "string",
-              "const": "event: <event_type>",
-              "description": "SSE event type field"
+              "const": "{\"type\":\"<event_type>\",...}<newline>",
+              "description": "Each event is a single-line JSON object followed by newline"
             },
-            "data_field": {
+            "encoding": {
               "type": "string",
-              "const": "data: <json_payload>",
-              "description": "SSE data field (JSON payload)"
+              "const": "UTF-8",
+              "description": "Character encoding"
             }
           }
         },
