@@ -10,11 +10,11 @@
       "const": "audio",
       "description": "Content type discriminator"
     },
-    "audio_url": {
+    "audio_id": {
       "type": "string",
-      "format": "uri",
-      "pattern": "^https?://",
-      "description": "URL to the audio file"
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID of the audio file"
     },
     "mime_type": {
       "type": "string",
@@ -28,6 +28,6 @@
       "description": "Duration of the audio in seconds"
     }
   },
-  "required": ["type", "audio_url"],
+  "required": ["type", "audio_id"],
   "additionalProperties": false
 }

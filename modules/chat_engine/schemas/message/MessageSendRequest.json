@@ -26,14 +26,14 @@
         }
       ]
     },
-    "file_urls": {
+    "file_ids": {
       "type": "array",
       "items": {
         "type": "string",
-        "format": "uri",
-        "pattern": "^https?://"
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
-      "description": "Attached file URLs"
+      "description": "Attached file UUIDs"
     },
     "parent_message_id": {
       "type": ["string", "null"],

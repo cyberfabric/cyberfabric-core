@@ -962,11 +962,13 @@
               "$ref": "#/components/schemas/ContentPart"
             }
           },
-          "file_urls": {
+          "file_ids": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Array of file UUIDs (stable identifiers from File Storage Service). Clients must implement separate integration with File Storage Service to display files."
           },
           "variant_index": {
             "type": "integer"
@@ -1188,11 +1190,14 @@
           "content": {
             "type": "string"
           },
-          "file_urls": {
+          "file_ids": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 10,
+            "description": "Array of file UUIDs attached to this message (stable identifiers from File Storage Service)"
           },
           "parent_message_id": {
             "type": "string",

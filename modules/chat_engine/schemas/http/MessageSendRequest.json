@@ -16,13 +16,14 @@
       "minLength": 1,
       "description": "Message content (text)"
     },
-    "file_urls": {
+    "file_ids": {
       "type": "array",
       "items": {
         "type": "string",
-        "format": "uri"
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
-      "description": "Array of file URLs attached to this message"
+      "description": "Array of file UUIDs attached to this message"
     },
     "parent_message_id": {
       "type": "string",

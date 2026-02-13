@@ -10,11 +10,11 @@
       "const": "video",
       "description": "Content type discriminator"
     },
-    "video_url": {
+    "video_id": {
       "type": "string",
-      "format": "uri",
-      "pattern": "^https?://",
-      "description": "URL to the video file"
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID of the video file"
     },
     "mime_type": {
       "type": "string",
@@ -28,6 +28,6 @@
       "description": "Duration of the video in seconds"
     }
   },
-  "required": ["type", "video_url"],
+  "required": ["type", "video_id"],
   "additionalProperties": false
 }

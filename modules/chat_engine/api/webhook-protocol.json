@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "gts://gts.x.chat_engine.api.webhook_protocol.v1~",
   "title": "Chat Engine Webhook Protocol",
-  "description": "Complete Webhook API protocol specification for Chat Engine. Defines all webhook operations (HTTP POST) between Chat Engine and backend services.",
+  "description": "Complete Webhook API protocol specification for Chat Engine. Defines all webhook operations (HTTP POST) between Chat Engine and backend services. Webhook backends receive file UUIDs (not URLs) and must integrate with File Storage Service to fetch file content when needed.",
   "type": "object",
   "properties": {
     "protocol": {
@@ -175,7 +175,7 @@
             "properties": {
               "operation_id": {"const": "message_new"},
               "event_type": {"const": "message.new"},
-              "description": {"const": "Send user message to backend for processing"},
+              "description": {"const": "Send user message to backend for processing. Message contains file_ids (UUIDs) for file attachments. Backend must fetch files from File Storage Service API using UUIDs."},
               "request": {
                 "properties": {
                   "schema": {"const": "../schemas/webhook/MessageNewEvent.json"}
@@ -209,7 +209,7 @@
             "properties": {
               "operation_id": {"const": "message_recreate"},
               "event_type": {"const": "message.recreate"},
-              "description": {"const": "Request backend to regenerate a message"},
+              "description": {"const": "Request backend to regenerate a message. History contains file_ids (UUIDs) for file attachments in previous messages."},
               "request": {
                 "properties": {
                   "schema": {"const": "../schemas/webhook/MessageRecreateEvent.json"}

@@ -134,7 +134,20 @@ The system must forward user messages to webhook backend with full session conte
 <!-- fdd-id-content -->
 **Priority**: High
 
-The system must support file references in messages. Client uploads files to external storage, receives file URLs, and includes them in message payloads. The system forwards file URLs to webhook backends as part of message context. File handling is enabled only if session capabilities allow it.
+The system must support file references in messages. Clients upload files to File Storage Service, obtain file UUIDs (stable identifiers), and include these UUIDs in message payloads. The system stores UUIDs in message records and forwards them to webhook backends as part of message context. File handling is enabled only if session capabilities allow it.
+
+**File Upload Workflow:**
+1. Client calls File Storage Service upload endpoint
+2. File Storage returns UUID as file identifier
+3. Client includes UUID in message send request (file_ids array, max 10 files)
+4. Chat Engine stores UUIDs in message record
+5. Webhook backends receive UUIDs and fetch files from File Storage as needed
+
+**File Access Control:**
+- UUIDs are stable identifiers that do not expire
+- File Storage Service controls access via separate authentication
+- Webhook backends must have credentials for File Storage API
+- Clients retrieve files by requesting temporary signed URLs from File Storage
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-file-storage`
 <!-- fdd-id-content -->
@@ -183,6 +196,8 @@ The system must allow creating new messages from any point in conversation histo
 **Priority**: Medium
 
 The system must allow navigation between message variants (siblings with same parent message). When retrieving messages, the system provides variant position information (e.g., "2 of 3") and allows clients to request specific variants.
+
+Webhook backends receive message history with file_ids (UUIDs). Backends must implement File Storage Service client to fetch file content when needed.
 
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->

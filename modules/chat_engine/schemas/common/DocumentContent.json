@@ -10,11 +10,11 @@
       "const": "document",
       "description": "Content type discriminator"
     },
-    "document_url": {
+    "document_id": {
       "type": "string",
-      "format": "uri",
-      "pattern": "^https?://",
-      "description": "URL to the document file"
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID of the document file"
     },
     "mime_type": {
       "type": "string",
@@ -27,6 +27,6 @@
       "description": "Original filename of the document"
     }
   },
-  "required": ["type", "document_url"],
+  "required": ["type", "document_id"],
   "additionalProperties": false
 }
