@@ -105,36 +105,30 @@ The system supports various conversation patterns including traditional linear c
 
 #### FR-001: Create Session
 
-**ID**: `fdd-chat-engine-fr-create-session`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-create-session`
 
 <!-- fdd-id-content -->
-**Priority**: High
-
-The system must create a new session with a specified session type and client ID. The system notifies the webhook backend of the new session and receives available capabilities for that session type. The capabilities determine which features are enabled (file attachments, session switching, summarization, etc.).
+The system **MUST** create a new session with a specified session type and client ID. The system notifies the webhook backend of the new session and receives available capabilities for that session type. The capabilities determine which features are enabled (file attachments, session switching, summarization, etc.).
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-002: Send Message with Streaming Response
 
-**ID**: `fdd-chat-engine-fr-send-message`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-send-message`
 
 <!-- fdd-id-content -->
-**Priority**: High
-
-The system must forward user messages to webhook backend with full session context (session metadata, capabilities, message history) and stream responses back to client in real-time. The system persists the complete message exchange (user message and assistant response) after streaming completes.
+The system **MUST** forward user messages to webhook backend with full session context (session metadata, capabilities, message history) and stream responses back to client in real-time. The system persists the complete message exchange (user message and assistant response) after streaming completes.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-003: Attach Files to Messages
 
-**ID**: `fdd-chat-engine-fr-attach-files`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-attach-files`
 
 <!-- fdd-id-content -->
-**Priority**: High
-
-The system must support file references in messages. Clients upload files to File Storage Service, obtain file UUIDs (stable identifiers), and include these UUIDs in message payloads. The system stores UUIDs in message records and forwards them to webhook backends as part of message context. File handling is enabled only if session capabilities allow it.
+The system **MUST** support file references in messages. Clients upload files to File Storage Service, obtain file UUIDs (stable identifiers), and include these UUIDs in message payloads. The system stores UUIDs in message records and forwards them to webhook backends as part of message context. File handling is enabled only if session capabilities allow it.
 
 **File Upload Workflow:**
 1. Client calls File Storage Service upload endpoint
@@ -154,48 +148,40 @@ The system must support file references in messages. Clients upload files to Fil
 
 #### FR-004: Switch Session Type
 
-**ID**: `fdd-chat-engine-fr-switch-session-type`
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-switch-session-type`
 
 <!-- fdd-id-content -->
-**Priority**: Medium
-
-The system must allow switching to a different session type mid-session. When switching occurs, the next message is routed to the new webhook backend with full message history. The new backend returns updated capabilities which apply for subsequent messages.
+The system **SHOULD** allow switching to a different session type mid-session. When switching occurs, the next message is routed to the new webhook backend with full message history. The new backend returns updated capabilities which apply for subsequent messages.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-005: Recreate Assistant Response
 
-**ID**: `fdd-chat-engine-fr-recreate-response`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-recreate-response`
 
 <!-- fdd-id-content -->
-**Priority**: High
-
-The system must allow regeneration of assistant responses. When recreation is requested, the old response is preserved as a variant in the message tree, and a new response is generated and stored as a sibling (same parent, different branch). Both variants remain accessible for navigation.
+The system **MUST** allow regeneration of assistant responses. When recreation is requested, the old response is preserved as a variant in the message tree, and a new response is generated and stored as a sibling (same parent, different branch). Both variants remain accessible for navigation.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-006: Branch from Message
 
-**ID**: `fdd-chat-engine-fr-branch-message`
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-branch-message`
 
 <!-- fdd-id-content -->
-**Priority**: Medium
-
-The system must allow creating new messages from any point in conversation history, creating alternative conversation paths. When branching, the system loads context up to the specified parent message and forwards the new message to the backend with truncated history. Both conversation branches remain preserved.
+The system **SHOULD** allow creating new messages from any point in conversation history, creating alternative conversation paths. When branching, the system loads context up to the specified parent message and forwards the new message to the backend with truncated history. Both conversation branches remain preserved.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-007: Navigate Message Variants
 
-**ID**: `fdd-chat-engine-fr-navigate-variants`
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-navigate-variants`
 
 <!-- fdd-id-content -->
-**Priority**: Medium
-
-The system must allow navigation between message variants (siblings with same parent message). When retrieving messages, the system provides variant position information (e.g., "2 of 3") and allows clients to request specific variants.
+The system **SHOULD** allow navigation between message variants (siblings with same parent message). When retrieving messages, the system provides variant position information (e.g., "2 of 3") and allows clients to request specific variants.
 
 Webhook backends receive message history with file_ids (UUIDs). Backends must implement File Storage Service client to fetch file content when needed.
 
@@ -204,84 +190,99 @@ Webhook backends receive message history with file_ids (UUIDs). Backends must im
 
 #### FR-008: Stop Streaming Response
 
-**ID**: `fdd-chat-engine-fr-stop-streaming`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-stop-streaming`
 
 <!-- fdd-id-content -->
-**Priority**: High
-
-The system must allow canceling streaming responses mid-generation. When cancellation occurs, the system stops forwarding data from webhook backend, closes the connection, and saves the partial response as an incomplete message with appropriate metadata.
+The system **MUST** allow canceling streaming responses mid-generation. When cancellation occurs, the system stops forwarding data from webhook backend, closes the connection, and saves the partial response as an incomplete message with appropriate metadata.
 
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->
 
 #### FR-009: Export Session
 
-**ID**: `fdd-chat-engine-fr-export-session`
+- [ ] `p3` - **ID**: `fdd-chat-engine-fr-export-session`
 
 <!-- fdd-id-content -->
-**Priority**: Low
-
-The system must export sessions in JSON, Markdown, or TXT format. Export can include only the active conversation path or all message variants. The system uploads the formatted export to file storage and returns a download URL.
+The system **MAY** export sessions in JSON, Markdown, or TXT format. Export can include only the active conversation path or all message variants. The system uploads the formatted export to file storage and returns a download URL.
 
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->
 
 #### FR-010: Share Session
 
-**ID**: `fdd-chat-engine-fr-share-session`
+- [ ] `p3` - **ID**: `fdd-chat-engine-fr-share-session`
 
 <!-- fdd-id-content -->
-**Priority**: Low
-
-The system must generate shareable links for sessions. Recipients can view sessions in read-only mode and create branches from the last message in the session. Branches created by recipients do not affect the original session owner's conversation path.
+The system **MAY** generate shareable links for sessions. Recipients can view sessions in read-only mode and create branches from the last message in the session. Branches created by recipients do not affect the original session owner's conversation path.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-end-user`
 <!-- fdd-id-content -->
 
 #### FR-011: Session Summary
 
-**ID**: `fdd-chat-engine-fr-session-summary`
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-session-summary`
 
 <!-- fdd-id-content -->
-**Priority**: Medium
-
-The system must support session summarization if enabled by session type capabilities. Summary generation is triggered automatically or on demand and can be handled by the webhook backend or a dedicated summarization service. The summary is stored as session metadata.
+The system **SHOULD** support session summarization if enabled by session type capabilities. Summary generation is triggered automatically or on demand and can be handled by the webhook backend or a dedicated summarization service. The summary is stored as session metadata.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
 #### FR-012: Search Session History
 
-**ID**: `fdd-chat-engine-fr-search-session`
+- [ ] `p3` - **ID**: `fdd-chat-engine-fr-search-session`
 
 <!-- fdd-id-content -->
-**Priority**: Low
-
-The system must search within a single session's message history and return matching messages with surrounding context. Search supports text matching across all message roles (user and assistant).
+The system **MAY** search within a single session's message history and return matching messages with surrounding context. Search supports text matching across all message roles (user and assistant).
 
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->
 
 #### FR-013: Search Across Sessions
 
-**ID**: `fdd-chat-engine-fr-search-sessions`
+- [ ] `p3` - **ID**: `fdd-chat-engine-fr-search-sessions`
 
 <!-- fdd-id-content -->
-**Priority**: Low
-
-The system must search across all sessions belonging to a client and return ranked results with session metadata (session ID, title, timestamp, match context). Results are ordered by relevance.
+The system **MAY** search across all sessions belonging to a client and return ranked results with session metadata (session ID, title, timestamp, match context). Results are ordered by relevance.
 
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->
 
 #### FR-014: Delete Session
 
-**ID**: `fdd-chat-engine-fr-delete-session`
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-delete-session`
 
 <!-- fdd-id-content -->
-**Priority**: High
+The system **MUST** delete sessions and all associated messages. Before deletion, the system notifies the webhook backend to allow cleanup of backend-specific resources. Deletion is permanent and cannot be undone.
 
-The system must delete sessions and all associated messages. Before deletion, the system notifies the webhook backend to allow cleanup of backend-specific resources. Deletion is permanent and cannot be undone.
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-015: WebSocket Protocol Support
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-websocket-protocol`
+
+<!-- fdd-id-content -->
+The system **SHOULD** support WebSocket protocol as an alternative to HTTP streaming for client-server communication. Clients can connect via WebSocket and perform all operations (session management, message sending, streaming responses) over a persistent connection instead of HTTP REST endpoints.
+
+**Protocol Features**:
+- Persistent bidirectional connection using WebSocket (RFC 6455)
+- JSON message framing for commands and NDJSON for streaming chunks
+- Connection lifecycle management (authenticate, heartbeat, reconnect)
+- All HTTP REST operations available via WebSocket commands
+- Graceful degradation to HTTP if WebSocket unavailable
+
+**Use Cases**:
+- Clients preferring WebSocket client libraries
+- Lower latency for rapid message exchanges
+- Future bidirectional features (typing indicators, presence, notifications)
+- Mobile apps with persistent connections
+
+**Trade-offs**:
+- Requires sticky session configuration for load balancing
+- Adds connection state management complexity
+- WebSocket proxy configuration needed in deployment
+- Not compatible with serverless architectures
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
@@ -535,6 +536,22 @@ System must enforce file size limits with a default of 10MB per individual file.
 
 <!-- fdd-id-content -->
 Session history search must return results within 1 second at p95 for sessions with up to 10,000 messages. Cross-session search must return results within 3 seconds at p95 for clients with up to 1,000 sessions. Search must support pagination for large result sets.
+<!-- fdd-id-content -->
+
+#### NFR-011: WebSocket Performance
+
+**ID**: `fdd-chat-engine-nfr-websocket-performance`
+
+<!-- fdd-id-content -->
+WebSocket connection establishment must complete within 500ms at p95. Message routing latency over WebSocket must be less than 50ms at p95 (lower than HTTP's 100ms target). Heartbeat interval must be 30 seconds with automatic reconnection using exponential backoff (maximum 60 seconds). System must support at least 5,000 concurrent WebSocket connections per instance.
+<!-- fdd-id-content -->
+
+#### NFR-012: WebSocket Reliability
+
+**ID**: `fdd-chat-engine-nfr-websocket-reliability`
+
+<!-- fdd-id-content -->
+WebSocket connections must support automatic reconnection with state restoration after network interruptions. Message delivery guarantees must match HTTP protocol (at-least-once for operations, exactly-once for streaming). System must handle graceful connection closure with pending operation completion or cancellation. Connection timeout must be 5 minutes for idle connections, configurable per deployment.
 <!-- fdd-id-content -->
 
 ## 6. Additional Context
