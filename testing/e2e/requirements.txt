@@ -1,6 +1,7 @@
 pytest>=7.0.0
 httpx>=0.28.0  # Previously 0.23.0 minimum for PYSEC-2022-183 fix
 pytest-asyncio
+aiohttp>=3.9.0  # Mock upstream server for OAGW E2E tests
 
 
 h11>=0.16.0 # not directly required, pinned by Snyk to avoid a vulnerability

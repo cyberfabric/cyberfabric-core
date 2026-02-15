@@ -80,7 +80,7 @@ Incoming Request
 
 ### Built-in Plugins
 
-Included in `oagw-cp` crate:
+Included in `oagw-dp` crate:
 
 **Auth Plugins**:
 

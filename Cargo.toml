@@ -63,6 +63,8 @@ members = [
     "modules/system/tenant-resolver/tenant-resolver",
     "modules/system/tenant-resolver/plugins/static-tr-plugin",
     "modules/system/tenant-resolver/plugins/single-tenant-tr-plugin",
+    "modules/system/oagw/oagw",
+    "modules/system/oagw/oagw-sdk",
 ]
 exclude = ["fuzz"]
 resolver = "3"

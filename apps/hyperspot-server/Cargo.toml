@@ -24,6 +24,7 @@ modkit = { workspace = true, features = ["bootstrap"] }
 
 # System modules
 api_gateway = { package = "cf-api-gateway", path = "../../modules/system/api-gateway" }
+api_egress = { package = "cf-oagw", path = "../../modules/system/oagw/oagw" }
 grpc_hub = { package = "cf-grpc-hub", path = "../../modules/system/grpc-hub" }
 module_orchestrator = { package = "cf-module-orchestrator", path = "../../modules/system/module-orchestrator" }
 types = { path = "../../modules/system/types" }
