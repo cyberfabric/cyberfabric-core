@@ -19,6 +19,7 @@ The architecture follows CyberFabric modular monolith conventions: an SDK crate 
 | `cpt-cf-uc-fr-usage-ingestion` | SDK with client-side batching + multi-transport API (Rust, gRPC, HTTP) |
 | `cpt-cf-uc-fr-idempotency` | Idempotency key index in storage with dedup check before write |
 | `cpt-cf-uc-fr-counter-semantics` | Counter validation in ingestion pipeline (monotonicity per source+resource) |
+| `cpt-cf-uc-fr-record-metadata` | Optional JSONB metadata per record; size-validated on ingestion, stored as-is, returned in queries |
 | `cpt-cf-uc-fr-gauge-semantics` | Gauge records stored as-is without monotonicity validation |
 | `cpt-cf-uc-fr-tenant-attribution` | Tenant derived from SecurityContext, immutable on record |
 | `cpt-cf-uc-fr-subject-attribution` | Optional subject_id + subject_type derived from SecurityContext or explicit source attribution |
@@ -228,6 +229,7 @@ UC relies on the platform's existing authentication infrastructure (OAuth 2.0, m
 - event_timestamp — When the consumption occurred at the source
 - idempotency_key — Client-provided key for exactly-once semantics
 - status — Active, deprecated, or archived
+- metadata — Optional JSON object with extensible key-value properties; opaque to UC, interpreted by downstream consumers (see `cpt-cf-uc-fr-record-metadata`)
 
 **Relationships**:
 
@@ -245,6 +247,7 @@ UC relies on the platform's existing authentication infrastructure (OAuth 2.0, m
 - Gauge metric values have no monotonicity constraint
 - event_timestamp must be within the grace period window (for normal ingestion) or backfill window (for backfill operations)
 - Archived records are excluded from normal queries unless explicitly requested
+- metadata field, when present, must not exceed the configured maximum size (default 8 KB)
 
 ### 3.2 Component Model
 
@@ -289,7 +292,7 @@ Request handling, authentication enforcement, and transport normalization. Suppo
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-component-ingestion-service`
 
-Core ingestion pipeline: rate limit check → source authorization → schema validation → idempotency dedup → metric semantics validation → storage write. Handles both individual and batch record submission.
+Core ingestion pipeline: rate limit check → source authorization → schema validation → metadata size validation → idempotency dedup → metric semantics validation → storage write. Handles both individual and batch record submission.
 
 #### Query Service
 
@@ -408,6 +411,7 @@ enum IngestionError {
     DuplicateRecord(DuplicateError),
     CounterViolation(CounterError),
     GracePeriodExceeded(GracePeriodError),
+    MetadataTooLarge(MetadataError),
     StorageError(StorageError),
 }
 ```
@@ -656,6 +660,7 @@ HTTP and gRPC transports provide external access to the Rust service APIs. All e
 | `IngestionError::CounterViolation` | 422 | `counter_violation` |
 | `IngestionError::RateLimitExceeded` | 429 | `rate_limited` |
 | `IngestionError::GracePeriodExceeded` | 400 | `grace_period_exceeded` |
+| `IngestionError::MetadataTooLarge` | 400 | `metadata_too_large` |
 | `BackfillError::WindowExceeded` | 400 | `backfill_window_exceeded` |
 | `BackfillError::Conflict` | 409 | `backfill_conflict` |
 | `AdminError::UnitNameConflict` | 409 | `unit_name_conflict` |
@@ -945,7 +950,7 @@ sequenceDiagram
 | idempotency_key | VARCHAR, NOT NULL | Client-provided deduplication key |
 | status | ENUM(active, deprecated, archived), NOT NULL | Record lifecycle status (default: active) |
 | backfill_operation_id | UUID | References backfill that archived this record (if applicable) |
-| metadata | JSONB | Extensible metadata |
+| metadata | JSONB | Optional extensible key-value properties; opaque to UC, max 8 KB default (`cpt-cf-uc-fr-record-metadata`) |
 | created_at | TIMESTAMPTZ, NOT NULL | When the record was ingested into UC database (system-set) |
 
 **PK**: id

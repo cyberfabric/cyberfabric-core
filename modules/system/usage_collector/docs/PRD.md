@@ -43,6 +43,7 @@ Key problems:
 | Amendment | A correction to previously recorded usage data, either by replacing events in a time range or deprecating individual events |
 | Rate Limit | A constraint on the volume of requests a source can submit within a time window |
 | Load Shedding | The deliberate dropping or deferral of low-priority work to preserve system stability under overload |
+| Record Metadata | An optional, extensible JSON object attached to a usage record, allowing usage sources to include context-specific properties (e.g., LLM model name, token type, geographic region) that are opaque to UC and interpreted by downstream consumers |
 | Snapshot Read | A query that sees data as it existed at a specific point in time, providing consistency across paginated requests despite concurrent data modifications |
 
 ## 2. Actors
@@ -163,6 +164,17 @@ The system **MUST** support idempotency keys to ensure exactly-once processing, 
 
 **Rationale**: Network retries and batching can produce duplicate submissions; deduplication ensures billing accuracy.
 **Actors**: `cpt-cf-uc-actor-usage-source`
+
+#### Per-Record Extensible Metadata
+
+- [ ] `p2` - **ID**: `cpt-cf-uc-fr-record-metadata`
+
+The system **MUST** support an optional, extensible metadata field on each usage record, allowing usage sources to attach arbitrary key-value properties as a JSON object. The system **MUST** persist metadata as-is and return it in query results without interpretation. The system **MUST** enforce a configurable maximum size limit on the metadata field (default 8 KB per record) and **MUST** reject records exceeding the limit with an actionable error.
+
+The system **MUST NOT** index, aggregate, or interpret metadata contents — metadata is opaque to the Usage Collector. Downstream consumers (billing, reporting, analytics) are responsible for extracting and processing metadata fields according to their own domain logic.
+
+**Rationale**: Different usage sources need to attach context-specific properties to usage records (e.g., LLM model name, token type, request category, geographic region) that enable downstream reporting and analytics. Storing metadata per-record at ingestion time avoids the need to correlate usage records with external context stores and supports use cases like detailed LLM usage reporting and cost attribution by model. This follows the industry-standard pattern used by metering platforms (OpenMeter, Lago, Orb, Amberflo) where per-event properties are stored alongside the core measurement.
+**Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-developer`, `cpt-cf-uc-actor-billing-system`, `cpt-cf-uc-actor-monitoring-system`
 
 ### 5.2 Metric Semantics
 
@@ -812,6 +824,8 @@ The system **MUST** continue accepting usage records even if downstream consumer
 - [ ] Query results are returned in stable, deterministic order across all pagination requests
 - [ ] Cursor-based pagination prevents record gaps or duplicates during concurrent insertions
 - [ ] Cursors remain valid for at least 24 hours after issuance
+- [ ] Usage records can carry optional extensible metadata (JSON object) that is persisted as-is and returned in query results
+- [ ] Records with metadata exceeding the configured size limit (default 8 KB) are rejected with an actionable error
 
 ## 10. Dependencies
 
