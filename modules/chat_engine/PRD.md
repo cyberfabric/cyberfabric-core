@@ -293,14 +293,74 @@ The system **MAY** search across all sessions belonging to a client and return r
 **Actors**: `fdd-chat-engine-actor-client`
 <!-- fdd-id-content -->
 
-#### FR-014: Delete Session
+#### FR-014: Session Lifecycle Management
 
 - [ ] `p1` - **ID**: `fdd-chat-engine-fr-delete-session`
 
 <!-- fdd-id-content -->
-The system **MUST** delete sessions and all associated messages. Before deletion, the system notifies the webhook backend to allow cleanup of backend-specific resources. Deletion is permanent and cannot be undone.
+The system **MUST** support session lifecycle management with four states: active, archived, soft_deleted, and hard_deleted. Sessions transition through these states based on user actions or retention policies. Each lifecycle transition notifies webhook backends to enable synchronized resource management.
+
+**Lifecycle States:**
+- **active** - Normal operational state (default)
+- **archived** - Inactive sessions optimized for long-term storage
+- **soft_deleted** - Deleted but recoverable within retention period
+- **hard_deleted** - Permanently removed from database
+
+**Operations:** Detailed in FR-014a (soft delete), FR-014b (hard delete), FR-014c (restore), FR-014d (archive), and FR-014e (retention policies).
+
+**State Inheritance:** Messages inherit lifecycle_state from their session and transition together to maintain referential integrity.
 
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-014a: Soft Delete Session (Recoverable)
+
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-soft-delete-session`
+
+<!-- fdd-id-content -->
+The system **MUST** support soft deletion as the default deletion mechanism. Soft-deleted sessions are hidden from normal queries but remain in the system and can be restored within a retention period. The system notifies webhook backends of soft deletion, allowing them to cleanup or suspend associated resources. Sessions automatically transition to permanent deletion after the retention period expires unless restored.
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-014b: Hard Delete Session (Permanent)
+
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-hard-delete-session`
+
+<!-- fdd-id-content -->
+The system **MUST** support permanent hard deletion that irreversibly removes sessions and all associated messages. Hard deletion is triggered explicitly by user request or automatically when soft-deleted sessions reach their retention period expiry. The system notifies webhook backends of permanent deletion, requiring them to cleanup all external resources (files, analytics, indices). This supports data minimization requirements (GDPR, CCPA).
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`, `fdd-chat-engine-actor-system`
+<!-- fdd-id-content -->
+
+#### FR-014c: Restore Soft-Deleted Session
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-restore-session`
+
+<!-- fdd-id-content -->
+The system **SHOULD** support restoring soft-deleted sessions back to active state. Restoration is only possible before the retention period expires. This enables recovery from accidental deletions. The system notifies webhook backends when sessions are restored, allowing them to reinstate any suspended resources. Hard-deleted sessions cannot be restored.
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-014d: Archive Inactive Sessions
+
+- [ ] `p3` - **ID**: `fdd-chat-engine-fr-archive-session`
+
+<!-- fdd-id-content -->
+The system **MAY** support archiving inactive sessions to optimize database performance. Archived sessions remain accessible and queryable but may have reduced query performance. Archival can be triggered manually or automatically based on inactivity period. The system notifies webhook backends of lifecycle state changes. Archived sessions can transition back to active state when new activity occurs or be deleted.
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`, `fdd-chat-engine-actor-system`
+<!-- fdd-id-content -->
+
+#### FR-014e: Retention Policy Configuration and Enforcement
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-retention-policy`
+
+<!-- fdd-id-content -->
+The system **SHOULD** support configurable retention policies that automatically manage session lifecycle based on age and inactivity. Retention policies enable automated data lifecycle management while balancing storage costs and compliance requirements. Policies are configured per session type and control automatic archival of inactive sessions, automatic hard deletion of soft-deleted sessions after grace period, and optional immediate deletion for compliance scenarios. The system processes retention policies periodically and notifies webhook backends of all lifecycle transitions.
+
+**Actors**: `fdd-chat-engine-actor-system`, Admin
 <!-- fdd-id-content -->
 
 #### FR-015: WebSocket Protocol Support
@@ -607,6 +667,22 @@ WebSocket connections must support automatic reconnection with state restoration
 System must support sessions with up to 10,000 messages without performance degradation. Message history forwarding to webhook backends must complete within 2 seconds at p95 for sessions with 1,000 messages. Backends must implement conversation memory management strategies when approaching context window limits (typically 4,000-100,000 tokens depending on LLM model). System must provide message count and estimated token count in session metadata to help backends make memory management decisions.
 <!-- fdd-id-content -->
 
+#### NFR-014: Lifecycle Operation Performance
+
+**ID**: `fdd-chat-engine-nfr-lifecycle-performance`
+
+<!-- fdd-id-content -->
+Lifecycle operations (soft delete, restore, archive) must complete within 500ms at p95 for sessions with up to 10,000 messages. Hard delete operations may take up to 5 seconds at p95 for large sessions. Restoration must preserve complete session state including message tree structure, metadata, and file references. Lifecycle state transitions must be atomic.
+<!-- fdd-id-content -->
+
+#### NFR-015: Retention Policy Enforcement SLA
+
+**ID**: `fdd-chat-engine-nfr-retention-sla`
+
+<!-- fdd-id-content -->
+Automatic retention policy enforcement must run at least daily. Sessions must transition to permanent deletion within 24 hours of reaching their retention period expiry. Policy processing must handle at least 10,000 sessions per run without impacting production query performance (p95 latency increase <10%). Failed operations must retry and alert on repeated failures.
+<!-- fdd-id-content -->
+
 ## 6. Additional Context
 
 #### Integration with Webhook Backends
@@ -663,6 +739,75 @@ Backends are responsible for:
 - Storing strategy state in session metadata
 
 Common strategies include sending only recent messages (sliding window), summarizing older messages while keeping recent ones verbatim, or filtering messages by semantic importance.
+<!-- fdd-id-content -->
+
+#### Session Lifecycle State Flow
+
+**ID**: `fdd-chat-engine-prd-context-lifecycle-flow`
+
+<!-- fdd-id-content -->
+Sessions and messages progress through four lifecycle states that control visibility, accessibility, and storage optimization:
+
+**Lifecycle States:**
+
+1. **active** (default) - Normal operational state. Sessions are visible in queries and fully accessible. Messages can be sent and received.
+
+2. **archived** - Inactive sessions optimized for long-term storage. Sessions remain queryable but may have reduced performance.
+
+3. **soft_deleted** - Deleted but recoverable. Sessions are hidden from normal queries but remain in the system. Can be restored before retention period expires.
+
+4. **hard_deleted** - Permanently removed. Cannot be recovered.
+
+**State Transition Flows:**
+
+Common transitions:
+- active → soft_deleted (user deletion) → hard_deleted (retention policy or explicit)
+- active → archived (inactivity) → soft_deleted (deletion) → hard_deleted
+- soft_deleted → active (restoration, before expiry)
+- archived → active (new activity or manual restore)
+
+**State Inheritance:**
+Messages inherit lifecycle state from their session. When a session transitions, all its messages transition together to maintain referential integrity.
+
+**Webhook Events:**
+The system notifies webhook backends of all lifecycle transitions (`session.soft_deleted`, `session.hard_deleted`, `session.restored`, `session.lifecycle_changed`) to enable synchronized resource management.
+<!-- fdd-id-content -->
+
+#### Retention Policy Design Philosophy
+
+**ID**: `fdd-chat-engine-prd-context-retention-philosophy`
+
+<!-- fdd-id-content -->
+Retention policies enable automated data lifecycle management while balancing user safety, storage costs, and compliance requirements. The design prioritizes safety and flexibility over aggressive data deletion.
+
+**Design Principles:**
+
+1. **Safety by Default**
+   - Soft delete is the default deletion mechanism
+   - Grace period before permanent deletion protects against accidental data loss
+   - Hard delete requires explicit action or policy configuration
+
+2. **Flexibility Over Rigidity**
+   - Policies configured per session type (not global)
+   - Policies can be disabled for manual lifecycle management
+   - Different retention periods for different use cases
+
+3. **Compliance Support**
+   - Automatic hard delete supports data minimization (GDPR, CCPA)
+   - Configurable retention periods meet regulatory requirements
+   - Audit trail via webhook events for compliance reporting
+   - Immediate deletion option for right-to-erasure requests
+
+4. **Performance Optimization**
+   - Archival separates active and inactive data
+   - Automatic cleanup reduces storage growth over time
+   - Lifecycle operations maintain system performance at scale
+
+**Use Cases:**
+- **Temporary chat**: Short inactivity threshold, moderate retention period
+- **Support tickets**: Long inactivity threshold, extended retention for audit
+- **Legal compliance**: Minimal retention, automatic cleanup enabled
+- **User data (GDPR)**: Moderate thresholds, automatic cleanup for data minimization
 <!-- fdd-id-content -->
 
 #### Assumptions
