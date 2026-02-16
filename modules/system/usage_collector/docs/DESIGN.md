@@ -21,11 +21,11 @@ The architecture follows CyberFabric modular monolith conventions: an SDK crate 
 | `cpt-cf-uc-fr-counter-semantics` | Counter validation in ingestion pipeline (monotonicity per source+resource) |
 | `cpt-cf-uc-fr-gauge-semantics` | Gauge records stored as-is without monotonicity validation |
 | `cpt-cf-uc-fr-tenant-attribution` | Tenant derived from SecurityContext, immutable on record |
-| `cpt-cf-uc-fr-user-attribution` | Optional user_id derived from SecurityContext subject_id (when subject_type indicates a user) or explicit source attribution |
+| `cpt-cf-uc-fr-subject-attribution` | Optional subject_id + subject_type derived from SecurityContext or explicit source attribution |
 | `cpt-cf-uc-fr-resource-attribution` | Resource ID, type, and lineage stored per record |
 | `cpt-cf-uc-fr-tenant-isolation` | Tenant-scoped storage partitioning + query-time tenant filter |
 | `cpt-cf-uc-fr-source-authorization` | Types Registry lookup for source-to-usage-type bindings |
-| `cpt-cf-uc-fr-attribution-authorization` | SecurityContext scope validation for referenced users/resources |
+| `cpt-cf-uc-fr-attribution-authorization` | SecurityContext scope validation for referenced subjects/resources |
 | `cpt-cf-uc-fr-pluggable-storage` | Storage adapter trait with routing by usage type |
 | `cpt-cf-uc-fr-retention-policies` | Configurable retention per tenant/type with automated enforcement |
 | `cpt-cf-uc-fr-query-api` | Query service with cursor-based pagination and filtering |
@@ -176,7 +176,7 @@ UC must follow CyberFabric module conventions: SDK crate with public trait, doma
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-constraint-security-context`
 
-All operations derive tenant identity and user identity from the platform SecurityContext. Callers cannot specify arbitrary tenant IDs — tenant attribution is always determined by the authenticated security context. This constraint ensures tenant isolation cannot be bypassed.
+All operations derive tenant identity and subject identity (user, service account, etc.) from the platform SecurityContext. Callers cannot specify arbitrary tenant IDs — tenant attribution is always determined by the authenticated security context. This constraint ensures tenant isolation cannot be bypassed.
 
 #### Types Registry Dependency
 
@@ -217,7 +217,8 @@ UC relies on the platform's existing authentication infrastructure (OAuth 2.0, m
 **Key attributes of UsageRecord**:
 
 - tenant_id — Immutable, derived from SecurityContext
-- user_id — Optional, derived from SecurityContext subject_id (when subject_type indicates a user) or explicit source attribution
+- subject_id — Optional, derived from SecurityContext subject_id or explicit source attribution
+- subject_type — Optional, identifies the kind of subject (e.g., "user", "service_account"); derived from SecurityContext subject_type or explicit source attribution
 - source_id — Identifies the emitting usage source
 - resource_id — Resource instance identifier (mandatory; for tenant-level usage, use tenant_id as resource_id)
 - resource_type — Optional resource type classification
@@ -294,7 +295,7 @@ Core ingestion pipeline: rate limit check → source authorization → schema va
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-component-query-service`
 
-Executes filtered queries against storage with tenant isolation enforcement. Provides cursor-based pagination with stable ordering. Supports filtering by time range, tenant, user, resource, and usage type.
+Executes filtered queries against storage with tenant isolation enforcement. Provides cursor-based pagination with stable ordering. Supports filtering by time range, tenant, subject, resource, and usage type.
 
 #### Backfill Service
 
@@ -437,7 +438,8 @@ trait QueryService {
 
 struct QueryFilters {
     usage_type: Option<String>,
-    user_id: Option<Uuid>,
+    subject_id: Option<Uuid>,
+    subject_type: Option<String>,
     resource_id: Option<String>,
     resource_type: Option<String>,
     source_id: Option<String>,
@@ -629,7 +631,8 @@ HTTP and gRPC transports provide external access to the Rust service APIs. All e
 | HTTP Query Parameter | Rust Field | Description |
 |---------------------|------------|-------------|
 | `usage_type` | `QueryFilters.usage_type` | Filter by measuring unit type |
-| `user_id` | `QueryFilters.user_id` | Filter by user attribution |
+| `subject_id` | `QueryFilters.subject_id` | Filter by subject identifier |
+| `subject_type` | `QueryFilters.subject_type` | Filter by subject type (e.g., "user", "service_account") |
 | `resource_id` | `QueryFilters.resource_id` | Filter by resource instance |
 | `resource_type` | `QueryFilters.resource_type` | Filter by resource type |
 | `source_id` | `QueryFilters.source_id` | Filter by usage source |
@@ -707,7 +710,7 @@ For gRPC transport, equivalent metadata is provided in response trailing metadat
 **Type**: Platform service
 **Direction**: inbound
 **Protocol / Driver**: Middleware (OAuth 2.0, mTLS, API key)
-**Purpose**: Provides SecurityContext for all API requests — tenant identity, user identity, and authorization scope
+**Purpose**: Provides SecurityContext for all API requests — tenant identity, subject identity (user, service account, etc.), and authorization scope
 
 ### 3.6 Interactions & Sequences
 
@@ -930,7 +933,8 @@ sequenceDiagram
 |--------|------|-------------|
 | id | UUID | Primary key |
 | tenant_id | UUID, NOT NULL | Tenant attribution (from SecurityContext) |
-| user_id | UUID | Optional user attribution |
+| subject_id | UUID | Optional subject identifier (user, service account, etc.) |
+| subject_type | VARCHAR | Optional subject type (e.g., "user", "service_account") |
 | source_id | VARCHAR, NOT NULL | Identifies the emitting usage source |
 | resource_id | VARCHAR, NOT NULL | Resource instance identifier (use tenant_id for tenant-level usage) |
 | resource_type | VARCHAR | Optional resource type |
@@ -1005,7 +1009,7 @@ sequenceDiagram
 
 **User-Facing Architecture (UX)**: Not applicable because Usage Collector is a backend service with no user-facing frontend. Tenant administrators interact through API endpoints; operator dashboards for rate limit monitoring are provided by external monitoring systems consuming UC's observability metrics.
 
-**Privacy Architecture (COMPL-DESIGN-002)**: Not applicable because UC handles platform operational usage data (resource consumption metrics), not personal data subject to privacy regulations. Tenant isolation ensures data separation. Usage records may contain user_id for attribution but this is an internal platform identifier, not PII. Consent management, data subject rights, and cross-border controls do not apply to infrastructure metering data.
+**Privacy Architecture (COMPL-DESIGN-002)**: Not applicable because UC handles platform operational usage data (resource consumption metrics), not personal data subject to privacy regulations. Tenant isolation ensures data separation. Usage records may contain subject_id for attribution but this is an internal platform identifier, not PII. Consent management, data subject rights, and cross-border controls do not apply to infrastructure metering data.
 
 **CDN and Edge Computing (PERF-DESIGN-003 partial)**: Not applicable because UC is a backend metering service with no user-facing content delivery requirements. All access is server-to-server or operator API calls.
 

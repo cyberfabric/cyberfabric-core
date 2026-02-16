@@ -119,7 +119,7 @@ No module-specific environment constraints beyond project defaults.
 - Client-side SDK with batching (primary ingestion path)
 - API for usage ingestion and querying (Rust API, gRPC, HTTP)
 - Counter and gauge metric semantics
-- Per-tenant, per-user, and per-resource usage attribution
+- Per-tenant, per-subject (user, service account, etc.), and per-resource usage attribution
 - Pluggable storage adapter framework (ClickHouse, PostgreSQL, custom)
 - Custom measuring unit registration via API
 - Usage query API for raw record retrieval with filtering and pagination
@@ -204,15 +204,15 @@ The system **MUST** support attributing usage to specific resource instances wit
 **Rationale**: Granular resource attribution enables per-resource billing and usage analysis.
 **Actors**: `cpt-cf-uc-actor-usage-source`
 
-#### User Attribution
+#### Subject Attribution
 
-- [ ] `p1` - **ID**: `cpt-cf-uc-fr-user-attribution`
+- [ ] `p1` - **ID**: `cpt-cf-uc-fr-subject-attribution`
 
-The system **MUST** support attributing usage to specific users within a tenant, including user ID and optional user metadata. User attribution **MUST** be derived from the authenticated security context when available, or explicitly provided by the usage source when reporting usage for batch operations or background jobs.
+The system **MUST** support attributing usage to a subject within a tenant, identified by a `subject_id` and `subject_type` pair. Subject types include but are not limited to users and service accounts. Subject attribution **MUST** be derived from the authenticated security context when available, or explicitly provided by the usage source when reporting usage for batch operations or background jobs.
 
-The system **MUST** support both direct user attribution (user X consumed resource Y) and indirect attribution (background job initiated by user X consumed resource Y). User attribution is optional on a per-usage-record basis to accommodate system-level resource consumption that is not attributable to a specific user.
+The system **MUST** support both direct subject attribution (subject X consumed resource Y) and indirect attribution (background job initiated by subject X consumed resource Y). Subject attribution is optional on a per-usage-record basis to accommodate system-level resource consumption that is not attributable to a specific subject.
 
-**Rationale**: Per-user attribution enables chargeback, detailed usage analytics, per-user quota enforcement, and helps organizations understand which users are driving consumption. This is essential for multi-user tenants who need to allocate costs or enforce limits at the user level.
+**Rationale**: Per-subject attribution enables chargeback, detailed usage analytics, per-subject quota enforcement, and helps organizations understand which subjects (users, service accounts) are driving consumption. This is essential for multi-user tenants who need to allocate costs or enforce limits at the subject level, and for tracking consumption by automated service accounts alongside human users.
 **Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-tenant-admin`, `cpt-cf-uc-actor-billing-system`
 
 #### Tenant Isolation
@@ -237,11 +237,11 @@ The system **MUST** identify the source of each usage record through the platfor
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-fr-attribution-authorization`
 
-The system **MUST** verify that the resource and user referenced in a usage record are within the caller's SecurityContext reach. When a usage source attributes usage to a specific resource ID or user ID, the system **MUST** validate that the authenticated caller is authorized to attribute usage to those entities. The system **MUST** reject usage records that reference resources or users outside the caller's SecurityContext scope, failing closed on authorization failures.
+The system **MUST** verify that the resource and subject referenced in a usage record are within the caller's SecurityContext reach. When a usage source attributes usage to a specific resource ID or subject (subject_id + subject_type), the system **MUST** validate that the authenticated caller is authorized to attribute usage to those entities. The system **MUST** reject usage records that reference resources or subjects outside the caller's SecurityContext scope, failing closed on authorization failures.
 
-This requirement complements source authorization (`cpt-cf-uc-fr-source-authorization`): source authorization validates *what type* of usage a source may report, while attribution authorization validates *on whose behalf* (which users and resources) the usage is reported.
+This requirement complements source authorization (`cpt-cf-uc-fr-source-authorization`): source authorization validates *what type* of usage a source may report, while attribution authorization validates *on whose behalf* (which subjects and resources) the usage is reported.
 
-**Rationale**: Source authorization alone ensures a source can report a given usage type, but does not prevent a source from attributing usage to arbitrary users or resources beyond its organizational reach. Without attribution authorization, a compromised or misconfigured source could attribute usage to users or resources it does not manage, leading to incorrect billing, quota manipulation, and potential cross-boundary data pollution.
+**Rationale**: Source authorization alone ensures a source can report a given usage type, but does not prevent a source from attributing usage to arbitrary subjects or resources beyond its organizational reach. Without attribution authorization, a compromised or misconfigured source could attribute usage to subjects or resources it does not manage, leading to incorrect billing, quota manipulation, and potential cross-boundary data pollution.
 **Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-operator`
 
 ### 5.4 Storage & Retention
@@ -279,9 +279,9 @@ The system **MUST** monitor storage adapter health, buffer records during failur
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-fr-query-api`
 
-The system **MUST** provide an API for querying raw usage records with filtering by time range, tenant, user, resource, and usage type with cursor-based pagination. The API returns raw records; aggregation is the responsibility of downstream consumers.
+The system **MUST** provide an API for querying raw usage records with filtering by time range, tenant, subject (subject_id and/or subject_type), resource, and usage type with cursor-based pagination. The API returns raw records; aggregation is the responsibility of downstream consumers.
 
-**Rationale**: Downstream consumers need flexible access to raw usage data to apply their own aggregation, rating, and analysis logic. Per-user filtering enables chargeback scenarios and per-user usage analytics.
+**Rationale**: Downstream consumers need flexible access to raw usage data to apply their own aggregation, rating, and analysis logic. Per-subject filtering enables chargeback scenarios and per-subject usage analytics.
 **Actors**: `cpt-cf-uc-actor-billing-system`, `cpt-cf-uc-actor-monitoring-system`, `cpt-cf-uc-actor-tenant-admin`
 
 #### Stable Query Result Ordering
@@ -707,17 +707,17 @@ The system **MUST** continue accepting usage records even if downstream consumer
 - Billing period defined by Billing System
 
 **Main Flow**:
-1. Billing System queries usage API for billing period (time range, tenant, optional user filter, usage types)
+1. Billing System queries usage API for billing period (time range, tenant, optional subject filter, usage types)
 2. UC retrieves raw usage records matching the filter criteria in stable order
 3. UC returns first page with cursor token
 4. Billing System processes page and requests next page using cursor
 5. Steps 3-4 repeat until all pages retrieved
-6. Billing System aggregates and processes complete record set for rating (with optional per-user breakdown)
+6. Billing System aggregates and processes complete record set for rating (with optional per-subject breakdown)
 
 **Postconditions**:
 - Billing System has accurate, deduplicated raw usage records for its own aggregation and invoice generation
 - No records missed or duplicated due to concurrent insertions during pagination
-- If user filtering was applied, billing can generate per-user chargeback reports
+- If subject filtering was applied, billing can generate per-subject chargeback reports
 
 ### UC: Real-Time Quota Enforcement
 
@@ -785,22 +785,22 @@ The system **MUST** continue accepting usage records even if downstream consumer
 **Actor**: `cpt-cf-uc-actor-tenant-admin`
 
 **Main Flow**:
-1. Administrator queries usage API for a time period with optional user and resource filters
+1. Administrator queries usage API for a time period with optional subject and resource filters
 2. UC retrieves raw usage records scoped to the tenant only in stable order
-3. UC returns paginated raw records with cursor tokens, filtered by type, user, and resource
+3. UC returns paginated raw records with cursor tokens, filtered by type, subject, and resource
 4. Administrator retrieves all pages using cursors
 5. Administrator (or downstream reporting system) processes the complete data
 
 **Postconditions**:
 - Administrator receives only their tenant's raw usage records; no cross-tenant data exposure
 - Paginated results are consistent without gaps or duplicates
-- Administrator can analyze usage by specific users within their tenant
+- Administrator can analyze usage by specific subjects (users, service accounts) within their tenant
 
 ## 9. Acceptance Criteria
 
 - [ ] All billable platform services emit usage through UC
 - [ ] Downstream consumers (billing, monitoring) querying the same time range receive identical raw records
-- [ ] Usage records can be attributed to specific users within a tenant and queried by user ID
+- [ ] Usage records can be attributed to specific subjects (users, service accounts) within a tenant and queried by subject_id and/or subject_type
 - [ ] Custom unit registration completes in less than 5 minutes without code changes
 - [ ] High-volume services can emit 10,000+ events per second without blocking
 - [ ] 99.95%+ monthly availability maintained
