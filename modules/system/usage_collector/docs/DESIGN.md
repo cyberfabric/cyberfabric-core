@@ -402,6 +402,7 @@ struct RejectedRecord {
 enum IngestionError {
     RateLimitExceeded(RateLimitError),
     ValidationFailed(ValidationError),
+    TypeNotFound(TypeNotFoundError),
     AuthorizationFailed(AuthorizationError),
     DuplicateRecord(DuplicateError),
     CounterViolation(CounterError),
