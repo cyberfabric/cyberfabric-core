@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.session.soft_delete_request.v1~",
+  "title": "Session Soft Delete Request",
+  "description": "Request to mark a session as soft-deleted (recoverable)",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session to soft-delete"
+    }
+  },
+  "required": ["session_id"],
+  "additionalProperties": false
+}

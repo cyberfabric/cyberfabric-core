@@ -5,12 +5,30 @@
   "description": "Response after deleting a session",
   "type": "object",
   "properties": {
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session that was deleted"
+    },
     "deleted": {
       "type": "boolean",
       "const": true,
       "description": "Confirmation that session was deleted"
+    },
+    "deletion_type": {
+      "$ref": "../common/DeletionType.json",
+      "description": "Type of deletion performed"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session was deleted"
+    },
+    "scheduled_hard_delete_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When soft deleted, shows scheduled permanent deletion time"
     }
   },
-  "required": ["deleted"],
+  "required": ["session_id", "deleted", "deletion_type", "deleted_at"],
   "additionalProperties": false
 }

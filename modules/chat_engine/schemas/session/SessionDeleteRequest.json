@@ -8,6 +8,11 @@
     "session_id": {
       "$ref": "../common/GtsSessionId.json",
       "description": "Session identifier to delete"
+    },
+    "deletion_type": {
+      "$ref": "../common/DeletionType.json",
+      "description": "Type of deletion: soft (recoverable) or hard (permanent)",
+      "default": "soft"
     }
   },
   "required": ["session_id"],

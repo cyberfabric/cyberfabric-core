@@ -92,11 +92,22 @@
       },
       "delete": {
         "summary": "Delete session",
+        "description": "Delete a session (soft by default, hard if requested). Soft delete is recoverable.",
         "operationId": "deleteSession",
         "tags": ["Session Management"],
         "parameters": [
           {
             "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "deletion_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["soft", "hard"],
+              "default": "soft"
+            },
+            "description": "Type of deletion: soft (recoverable) or hard (permanent)"
           }
         ],
         "responses": {
@@ -105,13 +116,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deleted": {
-                      "type": "boolean",
-                      "example": true
-                    }
-                  }
+                  "$ref": "#/components/schemas/SessionDeleteResponse"
                 }
               }
             }
@@ -121,6 +126,100 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/soft-delete": {
+      "post": {
+        "summary": "Soft delete session",
+        "description": "Mark session as soft-deleted (recoverable within retention period)",
+        "operationId": "softDeleteSession",
+        "tags": ["Session Management"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionSoftDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session soft-deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSoftDeleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict - session already deleted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/restore": {
+      "post": {
+        "summary": "Restore soft-deleted session",
+        "description": "Restore a session from soft-deleted state back to active",
+        "operationId": "restoreSession",
+        "tags": ["Session Management"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRestoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session restored successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRestoreResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Conflict - session not in soft-deleted state"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -1305,6 +1404,88 @@
           },
           "details": {
             "type": "object"
+          }
+        }
+      },
+      "SessionDeleteResponse": {
+        "type": "object",
+        "required": ["session_id", "deleted", "deletion_type", "deleted_at"],
+        "properties": {
+          "session_id": {
+            "$ref": "../schemas/common/GtsSessionId.json"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "deletion_type": {
+            "type": "string",
+            "enum": ["soft", "hard"]
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scheduled_hard_delete_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "When soft deleted, shows scheduled permanent deletion time"
+          }
+        }
+      },
+      "SessionSoftDeleteRequest": {
+        "type": "object",
+        "required": ["session_id"],
+        "properties": {
+          "session_id": {
+            "$ref": "../schemas/common/GtsSessionId.json"
+          }
+        }
+      },
+      "SessionSoftDeleteResponse": {
+        "type": "object",
+        "required": ["session_id", "lifecycle_state", "deleted_at", "scheduled_hard_delete_at"],
+        "properties": {
+          "session_id": {
+            "$ref": "../schemas/common/GtsSessionId.json"
+          },
+          "lifecycle_state": {
+            "type": "string",
+            "enum": ["active", "archived", "soft_deleted", "hard_deleted"]
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scheduled_hard_delete_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SessionRestoreRequest": {
+        "type": "object",
+        "required": ["session_id"],
+        "properties": {
+          "session_id": {
+            "$ref": "../schemas/common/GtsSessionId.json"
+          }
+        }
+      },
+      "SessionRestoreResponse": {
+        "type": "object",
+        "required": ["session_id", "lifecycle_state", "restored_at"],
+        "properties": {
+          "session_id": {
+            "$ref": "../schemas/common/GtsSessionId.json"
+          },
+          "lifecycle_state": {
+            "type": "string",
+            "enum": ["active", "archived", "soft_deleted", "hard_deleted"]
+          },
+          "restored_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

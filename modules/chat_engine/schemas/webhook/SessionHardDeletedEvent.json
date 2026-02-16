@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_hard_deleted_event.v1~",
+  "title": "Session Hard Deleted Event",
+  "description": "Webhook event fired when a session is permanently deleted",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session.hard_deleted",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session that was permanently deleted"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Owner of the session"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session was permanently deleted"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event generation timestamp"
+    }
+  },
+  "required": ["event", "session_id", "deleted_at", "timestamp"],
+  "additionalProperties": false
+}

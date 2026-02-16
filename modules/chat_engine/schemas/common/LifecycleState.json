@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.common.lifecycle_state.v1~",
+  "title": "Lifecycle State",
+  "description": "Entity lifecycle state enumeration",
+  "type": "string",
+  "enum": ["active", "archived", "soft_deleted", "hard_deleted"],
+  "default": "active"
+}

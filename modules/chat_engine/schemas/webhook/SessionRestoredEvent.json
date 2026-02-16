@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_restored_event.v1~",
+  "title": "Session Restored Event",
+  "description": "Webhook event fired when a soft-deleted session is restored",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session.restored",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session that was restored"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Owner of the session"
+    },
+    "restored_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session was restored"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event generation timestamp"
+    }
+  },
+  "required": ["event", "session_id", "restored_at", "timestamp"],
+  "additionalProperties": false
+}

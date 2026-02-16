@@ -134,7 +134,7 @@
         },
         "required": ["operation_id", "event_type", "description", "request", "response", "timeout", "error_handling"]
       },
-      "minItems": 8,
+      "minItems": 12,
       "allOf": [
         {
           "contains": {
@@ -378,6 +378,134 @@
               "request": {
                 "properties": {
                   "schema": {"const": "../schemas/webhook/MessageReactionEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_soft_deleted"},
+              "event_type": {"const": "session.soft_deleted"},
+              "description": {"const": "Notify backend when a session is soft-deleted"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionSoftDeletedEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_hard_deleted"},
+              "event_type": {"const": "session.hard_deleted"},
+              "description": {"const": "Notify backend when a session is permanently deleted"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionHardDeletedEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_restored"},
+              "event_type": {"const": "session.restored"},
+              "description": {"const": "Notify backend when a soft-deleted session is restored"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionRestoredEvent.json"}
+                }
+              },
+              "response": {
+                "properties": {
+                  "streaming": {"const": false},
+                  "required": {"const": false}
+                }
+              },
+              "timeout": {
+                "properties": {
+                  "default_seconds": {"const": 10},
+                  "configurable": {"const": false}
+                }
+              },
+              "error_handling": {
+                "properties": {
+                  "retry": {"const": false},
+                  "circuit_breaker": {"const": false}
+                }
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "operation_id": {"const": "session_lifecycle_changed"},
+              "event_type": {"const": "session.lifecycle_changed"},
+              "description": {"const": "Notify backend when session lifecycle state changes"},
+              "request": {
+                "properties": {
+                  "schema": {"const": "../schemas/webhook/SessionLifecycleChangedEvent.json"}
                 }
               },
               "response": {

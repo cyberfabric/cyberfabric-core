@@ -44,8 +44,27 @@
       "type": ["string", "null"],
       "minLength": 32,
       "description": "Unique token for session sharing"
+    },
+    "lifecycle_state": {
+      "$ref": "./LifecycleState.json",
+      "description": "Current lifecycle state of the session"
+    },
+    "deleted_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp when session was soft-deleted"
+    },
+    "scheduled_hard_delete_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp when session will be permanently deleted"
+    },
+    "archived_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp when session was archived"
     }
   },
-  "required": ["session_id", "client_id", "session_type_id", "available_capabilities", "created_at", "updated_at"],
+  "required": ["session_id", "client_id", "session_type_id", "available_capabilities", "lifecycle_state", "created_at", "updated_at"],
   "additionalProperties": false
 }

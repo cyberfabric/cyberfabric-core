@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_lifecycle_changed_event.v1~",
+  "title": "Session Lifecycle Changed Event",
+  "description": "Generic webhook event fired when a session lifecycle state changes",
+  "type": "object",
+  "properties": {
+    "event": {
+      "type": "string",
+      "const": "session.lifecycle_changed",
+      "description": "Event type identifier"
+    },
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session whose lifecycle changed"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Owner of the session"
+    },
+    "old_state": {
+      "$ref": "../common/LifecycleState.json",
+      "description": "Previous lifecycle state"
+    },
+    "new_state": {
+      "$ref": "../common/LifecycleState.json",
+      "description": "New lifecycle state"
+    },
+    "changed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when lifecycle state changed"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event generation timestamp"
+    }
+  },
+  "required": ["event", "session_id", "old_state", "new_state", "timestamp"],
+  "additionalProperties": false
+}

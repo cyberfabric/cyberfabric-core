@@ -36,6 +36,13 @@
       "minimum": 1,
       "maximum": 300,
       "description": "Request timeout in seconds"
+    },
+    "retention_policy": {
+      "oneOf": [
+        { "$ref": "./RetentionPolicy.json" },
+        { "type": "null" }
+      ],
+      "description": "Data retention and lifecycle policy for sessions of this type"
     }
   },
   "required": ["session_type_id", "name", "webhook_url", "capabilities"],

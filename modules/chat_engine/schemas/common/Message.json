@@ -72,8 +72,17 @@
       "format": "date-time",
       "description": "Message creation timestamp",
       "examples": ["2024-01-15T10:30:00Z"]
+    },
+    "lifecycle_state": {
+      "$ref": "./LifecycleState.json",
+      "description": "Current lifecycle state (inherited from session)"
+    },
+    "deleted_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp when message was deleted (cascaded from session)"
     }
   },
-  "required": ["message_id", "session_id", "role", "content", "created_at"],
+  "required": ["message_id", "session_id", "role", "content", "lifecycle_state", "created_at"],
   "additionalProperties": false
 }

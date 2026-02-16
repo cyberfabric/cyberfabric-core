@@ -228,6 +228,51 @@ The system **SHOULD** support session summarization if enabled by session type c
 **Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
+#### FR-016: Conversation Memory Management Strategies
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-conversation-memory`
+
+<!-- fdd-id-content -->
+The system **SHOULD** provide guidance and capabilities to support conversation memory management strategies for handling long-running sessions that exceed LLM context window limits. Webhook backends can implement various strategies to optimize token usage while preserving conversation context.
+
+**Memory Management Strategies**:
+1. **Full History** (default) - Send complete message history (suitable for short conversations)
+2. **Sliding Window** - Keep last N messages or T tokens (predictable token usage)
+3. **Summarization + Recent** - Summarize old messages, keep recent ones verbatim
+4. **Importance Filtering** - Keep semantically important messages, filter filler
+5. **Hierarchical Summarization** - Multi-level summaries for very long conversations
+6. **Visibility Flags** - Use `is_hidden_from_llm` to exclude messages from context
+
+**System Capabilities Supporting Strategies**:
+- Session Summary (FR-011) - Webhook can request conversation summaries
+- Message Visibility Flags - Mark messages as `is_hidden_from_llm=true` to exclude from context
+- Branching (FR-006) - Create new conversation path with truncated history
+- Message Tree Navigation - Backends can traverse history to implement custom strategies
+- Session Metadata - Store strategy configuration and state (e.g., last summarization point)
+
+**Backend Responsibilities**:
+- Choose appropriate strategy based on session type and conversation length
+- Implement token counting and context window management
+- Handle summarization or filtering logic
+- Store strategy state in session metadata if needed
+- Monitor token usage and adjust strategy dynamically
+
+**Strategy Selection Guidelines**:
+- **<50 messages**: Full History (default)
+- **50-200 messages**: Sliding Window or Visibility Flags
+- **200-1000 messages**: Summarization + Recent Messages
+- **1000+ messages**: Hierarchical Summarization or Importance Filtering
+- **Context window limits**: Adjust strategy based on model (8K, 32K, 128K tokens)
+
+**Trade-offs**:
+- **Full History**: High fidelity but expensive for long conversations
+- **Sliding Window**: Predictable costs but loses older context
+- **Summarization**: Balanced approach but adds summarization overhead
+- **Importance Filtering**: Optimal quality but complex to implement
+
+**Actors**: `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
 #### FR-012: Search Session History
 
 - [ ] `p3` - **ID**: `fdd-chat-engine-fr-search-session`
@@ -554,6 +599,14 @@ WebSocket connection establishment must complete within 500ms at p95. Message ro
 WebSocket connections must support automatic reconnection with state restoration after network interruptions. Message delivery guarantees must match HTTP protocol (at-least-once for operations, exactly-once for streaming). System must handle graceful connection closure with pending operation completion or cancellation. Connection timeout must be 5 minutes for idle connections, configurable per deployment.
 <!-- fdd-id-content -->
 
+#### NFR-013: Message History Handling
+
+**ID**: `fdd-chat-engine-nfr-message-history`
+
+<!-- fdd-id-content -->
+System must support sessions with up to 10,000 messages without performance degradation. Message history forwarding to webhook backends must complete within 2 seconds at p95 for sessions with 1,000 messages. Backends must implement conversation memory management strategies when approaching context window limits (typically 4,000-100,000 tokens depending on LLM model). System must provide message count and estimated token count in session metadata to help backends make memory management decisions.
+<!-- fdd-id-content -->
+
 ## 6. Additional Context
 
 #### Integration with Webhook Backends
@@ -588,6 +641,28 @@ These flags enable flexible message handling patterns:
 - **Internal notes**: `is_hidden_from_user=true, is_hidden_from_llm=true` - Store metadata or debug information without affecting UI or LLM
 - **User feedback**: `is_hidden_from_user=false, is_hidden_from_llm=true` - Show user messages in UI but exclude from LLM context (e.g., rating messages)
 - **Normal messages**: `is_hidden_from_user=false, is_hidden_from_llm=false` - Standard visible messages that are part of conversation flow
+<!-- fdd-id-content -->
+
+#### Conversation Memory Management
+
+**ID**: `fdd-chat-engine-prd-context-memory-management`
+
+<!-- fdd-id-content -->
+Chat Engine forwards complete message history to webhook backends by default, enabling backends to implement their own memory management strategies. For long conversations that exceed LLM context window limits, backends should implement strategies such as sliding windows, summarization, or importance filtering.
+
+The system provides building blocks for memory management:
+- **Session Summary (FR-011)**: Request conversation summaries at any point
+- **Message Visibility Flags**: Mark messages to exclude from LLM context
+- **Branching (FR-006)**: Create new conversation paths with truncated history
+- **Session Metadata**: Store strategy state and configuration
+
+Backends are responsible for:
+- Monitoring conversation length and token usage
+- Choosing appropriate strategy for session type
+- Implementing token counting and context optimization
+- Storing strategy state in session metadata
+
+Common strategies include sending only recent messages (sliding window), summarizing older messages while keeping recent ones verbatim, or filtering messages by semantic importance.
 <!-- fdd-id-content -->
 
 #### Assumptions

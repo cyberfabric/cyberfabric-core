@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.session.soft_delete_response.v1~",
+  "title": "Session Soft Delete Response",
+  "description": "Response after soft-deleting a session",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session that was soft-deleted"
+    },
+    "lifecycle_state": {
+      "$ref": "../common/LifecycleState.json",
+      "description": "New lifecycle state (soft_deleted)"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session was soft-deleted"
+    },
+    "scheduled_hard_delete_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session will be permanently deleted"
+    }
+  },
+  "required": ["session_id", "lifecycle_state", "deleted_at", "scheduled_hard_delete_at"],
+  "additionalProperties": false
+}

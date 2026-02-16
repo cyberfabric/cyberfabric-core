@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.hyperspot.chat_engine.session.restore_response.v1~",
+  "title": "Session Restore Response",
+  "description": "Response after restoring a soft-deleted session",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "$ref": "../common/GtsSessionId.json",
+      "description": "Session that was restored"
+    },
+    "lifecycle_state": {
+      "$ref": "../common/LifecycleState.json",
+      "description": "New lifecycle state (active)"
+    },
+    "restored_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when session was restored"
+    }
+  },
+  "required": ["session_id", "lifecycle_state", "restored_at"],
+  "additionalProperties": false
+}
