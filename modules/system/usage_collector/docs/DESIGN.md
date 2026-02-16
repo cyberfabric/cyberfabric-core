@@ -591,12 +591,14 @@ trait RateLimiter {
 
 struct RateLimitCheck {
     allowed: bool,
+    limit: u32,
     remaining: u32,
     reset_at: SystemTime,
 }
 
 struct RateLimitError {
     retry_after_ms: u64,
+    limit: u32,
     remaining: u32,
     reset_at: SystemTime,
 }
@@ -664,10 +666,11 @@ HTTP and gRPC transports provide external access to the Rust service APIs. All e
 **Rate Limit Response Headers** (HTTP) — mapped from `RateLimitError`:
 
 - `Retry-After` ← `retry_after_ms / 1000` (seconds until retry is appropriate)
+- `X-RateLimit-Limit` ← `limit` (total request allowance in current window)
 - `X-RateLimit-Remaining` ← `remaining` (requests remaining in current window)
 - `X-RateLimit-Reset` ← `reset_at` (UTC epoch timestamp when window resets)
 
-For gRPC transport, equivalent metadata is provided in response trailing metadata.
+For gRPC transport, equivalent metadata is provided in response trailing metadata: `retry_after_ms`, `rate_limit_limit`, `rate_limit_remaining`, and `rate_limit_reset`.
 
 ### 3.4 Internal Dependencies
 
@@ -902,14 +905,14 @@ sequenceDiagram
     IS->>RL: check_rate(tenant, source)
 
     alt Rate limit exceeded
-        RL-->>IS: RateLimitError { retry_after_ms }
+        RL-->>IS: RateLimitError { retry_after_ms, limit, remaining, reset_at }
         IS-->>SDK: RateLimitError
         SDK->>SDK: Buffer events in bounded queue
         SDK->>SDK: Exponential backoff with jitter
         Note over SDK: Wait retry_after_ms (honoring hint)
         SDK->>IS: ingest_batch(records, SecurityContext) [retry]
     else Within limits
-        RL-->>IS: allowed { remaining, reset }
+        RL-->>IS: allowed { limit, remaining, reset_at }
         IS->>IS: Continue ingestion pipeline
         IS-->>SDK: IngestResult
     end
