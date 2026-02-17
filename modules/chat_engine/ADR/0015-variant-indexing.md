@@ -61,4 +61,3 @@ Chosen option: "0-based variant_index", because it provides intuitive sequential
 **Related ADRs**:
 * ADR-0014 (Message Variants with Index and Active Flag) - variant_index is core field for variants
 * ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Recreation increments variant_index
-* ADR-0014 (Message Variants with Index and Active Flag) - Multiple backends create consecutive variant_index values

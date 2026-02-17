@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.entities.message_id.v1~",
+  "$id": "gts://gts.x.chat_engine.entities.message_id.v1",
   "title": "GTS Message ID",
   "description": "GTS ID for a message instance",
   "type": "string",

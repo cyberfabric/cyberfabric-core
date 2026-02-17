@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.session.v1~",
+  "$id": "gts://gts.x.chat_engine.common.session.v1",
   "title": "Session",
   "description": "Chat session entity containing conversation context and metadata",
   "type": "object",

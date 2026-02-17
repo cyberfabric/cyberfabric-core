@@ -31,6 +31,8 @@ Sessions need additional metadata beyond core fields (session_id, client_id, ses
 
 Chosen option: "JSONB metadata column", because it enables schema-free extensibility (add metadata without migrations), supports PostgreSQL JSONB indexing (GIN index for tags), provides flexible storage for evolving needs, efficiently handles sparse data, and maintains simple session table schema.
 
+**Validation Strategy**: JSONB metadata schemas will be validated at the application level through registered GTS schemas (`gts.x.chat_engine.common.session_metadata.v1~`). This provides database-level flexibility for rapid iteration while maintaining type safety and schema evolution management at the application boundary. Clients must validate metadata against registered GTS schemas before persistence, and the types-registry module ensures schema consistency across all chat_engine services.
+
 ### Consequences
 
 * Good, because add new metadata fields without schema migrations

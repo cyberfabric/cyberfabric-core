@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_lifecycle_changed_event.v1~",
+  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_lifecycle_changed_event.v1",
   "title": "Session Lifecycle Changed Event",
   "description": "Generic webhook event fired when a session lifecycle state changes",
   "type": "object",

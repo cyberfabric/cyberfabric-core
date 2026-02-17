@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.webhook.session_created_event.v1~",
+  "$id": "gts://gts.x.chat_engine.webhook.session_created_event.v1",
   "title": "SessionCreatedEvent",
   "description": "Webhook event sent when a new session is created",
   "type": "object",

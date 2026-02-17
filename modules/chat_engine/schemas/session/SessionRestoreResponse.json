@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.session.restore_response.v1~",
+  "$id": "gts://gts.hyperspot.chat_engine.session.restore_response.v1",
   "title": "Session Restore Response",
   "description": "Response after restoring a soft-deleted session",
   "type": "object",

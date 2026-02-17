@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.streaming.start_event.v1~",
+  "$id": "gts://gts.x.chat_engine.streaming.start_event.v1",
   "title": "StreamingStartEvent",
   "description": "Event emitted when message streaming begins. Sent via HTTP chunked response as newline-delimited JSON (NDJSON).",
   "type": "object",

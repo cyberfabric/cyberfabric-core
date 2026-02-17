@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.search_result.v1~",
+  "$id": "gts://gts.x.chat_engine.common.search_result.v1",
   "title": "SearchResult",
   "description": "Search result for a message within a session",
   "type": "object",

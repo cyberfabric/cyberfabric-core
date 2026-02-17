@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.streaming.error_event.v1~",
+  "$id": "gts://gts.x.chat_engine.streaming.error_event.v1",
   "title": "StreamingErrorEvent",
   "description": "Event emitted when an error occurs during message streaming. Sent via HTTP chunked response as newline-delimited JSON (NDJSON).",
   "type": "object",

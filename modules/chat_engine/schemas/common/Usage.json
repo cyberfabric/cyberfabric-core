@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.usage.v1~",
+  "$id": "gts://gts.x.chat_engine.common.usage.v1",
   "title": "Usage",
   "description": "Token usage statistics for a message generation",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.session.summarize_request.v1~",
+  "$id": "gts://gts.x.chat_engine.session.summarize_request.v1",
   "title": "SessionSummarizeRequest",
   "description": "Request to generate a summary of session content (returns streaming response)",
   "type": "object",

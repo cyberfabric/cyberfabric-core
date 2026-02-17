@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.session.get_request.v1~",
+  "$id": "gts://gts.x.chat_engine.session.get_request.v1",
   "title": "SessionGetRequest",
   "description": "Request to retrieve session details",
   "type": "object",

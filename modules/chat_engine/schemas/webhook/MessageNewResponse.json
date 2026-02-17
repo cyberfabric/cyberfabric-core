@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.webhook.message_new_response.v1~",
+  "$id": "gts://gts.x.chat_engine.webhook.message_new_response.v1",
   "title": "MessageNewResponse",
   "description": "Webhook response for message.new event with assistant's generated message",
   "type": "object",

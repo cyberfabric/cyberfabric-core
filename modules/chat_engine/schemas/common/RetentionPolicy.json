@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.common.retention_policy.v1~",
+  "$id": "gts://gts.hyperspot.chat_engine.common.retention_policy.v1",
   "title": "Retention Policy",
   "description": "Data retention and lifecycle policy configuration",
   "type": "object",

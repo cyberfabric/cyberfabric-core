@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.webhook.message_recreate_response.v1~",
+  "$id": "gts://gts.x.chat_engine.webhook.message_recreate_response.v1",
   "title": "MessageRecreateResponse",
   "description": "Webhook response for message.recreate event with regenerated message",
   "type": "object",

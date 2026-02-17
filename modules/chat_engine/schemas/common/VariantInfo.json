@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.variant_info.v1~",
+  "$id": "gts://gts.x.chat_engine.common.variant_info.v1",
   "title": "VariantInfo",
   "description": "Information about message variants in a conversation tree",
   "type": "object",

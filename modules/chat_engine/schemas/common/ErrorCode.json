@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.error_code.v1~",
+  "$id": "gts://gts.x.chat_engine.common.error_code.v1",
   "title": "ErrorCode",
   "description": "Error codes used throughout the Chat Engine API",
   "type": "string",

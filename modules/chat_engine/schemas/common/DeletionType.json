@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.common.deletion_type.v1~",
+  "$id": "gts://gts.hyperspot.chat_engine.common.deletion_type.v1",
   "title": "Deletion Type",
   "description": "Type of deletion operation",
   "type": "string",

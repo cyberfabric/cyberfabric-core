@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.common.message.v1~",
+  "$id": "gts://gts.x.chat_engine.common.message.v1",
   "title": "Message",
   "description": "Chat message entity containing content and metadata",
   "type": "object",

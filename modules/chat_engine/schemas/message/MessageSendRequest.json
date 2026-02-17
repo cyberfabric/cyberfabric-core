@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.message.send_request.v1~",
+  "$id": "gts://gts.x.chat_engine.message.send_request.v1",
   "title": "MessageSendRequest",
   "description": "Request to send a new message in a session (returns streaming response)",
   "type": "object",

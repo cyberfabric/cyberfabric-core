@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_soft_deleted_event.v1~",
+  "$id": "gts://gts.hyperspot.chat_engine.webhook.session_soft_deleted_event.v1",
   "title": "Session Soft Deleted Event",
   "description": "Webhook event fired when a session is soft-deleted",
   "type": "object",

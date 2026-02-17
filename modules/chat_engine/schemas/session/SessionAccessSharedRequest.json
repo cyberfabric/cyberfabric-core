@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "gts://gts.x.chat_engine.session.access_shared_request.v1~",
+  "$id": "gts://gts.x.chat_engine.session.access_shared_request.v1",
   "title": "SessionAccessSharedRequest",
   "description": "Request to access a shared session using a share token",
   "type": "object",
