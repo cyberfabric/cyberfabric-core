@@ -52,21 +52,23 @@ impl Service {
             AuthNMode::StaticTokens => self.token_map.get(bearer_token)?,
         };
 
-        Some(build_result(identity, bearer_token))
+        build_result(identity, bearer_token)
     }
 }
 
-fn build_result(identity: &IdentityConfig, bearer_token: &str) -> AuthenticationResult {
+fn build_result(identity: &IdentityConfig, bearer_token: &str) -> Option<AuthenticationResult> {
     let ctx = SecurityContext::builder()
         .subject_id(identity.subject_id)
         .subject_tenant_id(identity.subject_tenant_id)
         .token_scopes(identity.token_scopes.clone())
         .bearer_token(bearer_token.to_owned())
-        .build();
+        .build()
+        .map_err(|e| tracing::error!("Failed to build SecurityContext from config: {e}"))
+        .ok()?;
 
-    AuthenticationResult {
+    Some(AuthenticationResult {
         security_context: ctx,
-    }
+    })
 }
 
 #[cfg(test)]

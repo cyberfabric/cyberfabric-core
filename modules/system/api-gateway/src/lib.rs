@@ -10,7 +10,6 @@ pub use module::ApiGateway;
 
 // === INTERNAL MODULES ===
 mod assets;
-mod auth;
 mod config;
 mod cors;
 pub mod error;

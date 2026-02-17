@@ -30,6 +30,7 @@ pub fn ctx_allow_tenants(tenants: &[Uuid]) -> SecurityContext {
         .subject_id(Uuid::new_v4())
         .subject_tenant_id(tenant_id)
         .build()
+        .unwrap()
 }
 
 /// Create a security context with a specific `subject_id` and tenant.
@@ -40,6 +41,7 @@ pub fn ctx_for_subject(subject_id: Uuid, tenant_id: Uuid) -> SecurityContext {
         .subject_id(subject_id)
         .subject_tenant_id(tenant_id)
         .build()
+        .unwrap()
 }
 
 #[must_use]

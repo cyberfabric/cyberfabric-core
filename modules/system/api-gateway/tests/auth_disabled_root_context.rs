@@ -33,7 +33,8 @@ async fn inject_default_tenant_context(mut req: Request, next: Next) -> Response
     let ctx = SecurityContext::builder()
         .subject_tenant_id(TEST_DEFAULT_TENANT_ID)
         .subject_id(TEST_DEFAULT_SUBJECT_ID)
-        .build();
+        .build()
+        .unwrap();
 
     req.extensions_mut().insert(ctx);
     next.run(req).await

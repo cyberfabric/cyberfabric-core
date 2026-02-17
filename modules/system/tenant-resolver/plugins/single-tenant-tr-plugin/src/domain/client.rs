@@ -178,8 +178,10 @@ mod tests {
 
     fn ctx_for_tenant(tenant_id: Uuid) -> SecurityContext {
         SecurityContext::builder()
+            .subject_id(Uuid::new_v4())
             .subject_tenant_id(tenant_id)
             .build()
+            .unwrap()
     }
 
     const TENANT_A: &str = "11111111-1111-1111-1111-111111111111";

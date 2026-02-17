@@ -594,7 +594,8 @@ fn mock_accepting_token(
                     security_context: SecurityContext::builder()
                         .subject_id(subject_id)
                         .subject_tenant_id(tenant_id)
-                        .build(),
+                        .build()
+                        .unwrap(),
                 })
             } else {
                 Err(AuthNResolverError::Unauthorized("invalid token".to_owned()))

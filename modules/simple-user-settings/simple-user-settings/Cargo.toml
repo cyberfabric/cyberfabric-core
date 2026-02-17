@@ -45,7 +45,6 @@ sea-orm-migration = { workspace = true }
 thiserror = { workspace = true }
 
 modkit = { workspace = true }
-modkit-auth = { workspace = true }
 modkit-db = { workspace = true }
 modkit-db-macros = { workspace = true }
 modkit-errors = { workspace = true }

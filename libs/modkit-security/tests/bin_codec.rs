@@ -13,7 +13,8 @@ fn round_trips_security_ctx_binary_payload() {
         .subject_id(subject_id)
         .subject_tenant_id(subject_tenant_id)
         .token_scopes(vec!["admin".to_owned(), "read:events".to_owned()])
-        .build();
+        .build()
+        .unwrap();
 
     let encoded = encode_bin(&ctx).expect("security context encodes");
     let decoded = decode_bin(&encoded).expect("security context decodes");
@@ -29,9 +30,7 @@ fn round_trips_security_ctx_binary_payload() {
 #[test]
 #[allow(clippy::unreadable_literal)] // UUID hex patterns are intentionally repeating
 fn decode_rejects_unknown_version() {
-    let subject_id = Uuid::from_u128(0x33333333333333333333333333333333);
-
-    let ctx = SecurityContext::builder().subject_id(subject_id).build();
+    let ctx = SecurityContext::anonymous();
 
     let mut encoded = encode_bin(&ctx).expect("encodes context");
     encoded[0] = SECCTX_BIN_VERSION.wrapping_add(1);

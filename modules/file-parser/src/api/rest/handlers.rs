@@ -18,7 +18,7 @@ use crate::domain::error::DomainError;
 use crate::domain::markdown::MarkdownRenderer;
 use crate::domain::service::FileParserService;
 use modkit::api::prelude::*;
-use modkit_auth::axum_ext::Authz;
+use modkit_security::SecurityContext;
 
 /// Query parameter for `render_markdown` flag
 #[derive(Debug, serde::Deserialize)]
@@ -36,7 +36,7 @@ pub struct RenderMarkdownQuery {
 )]
 #[axum::debug_handler]
 pub async fn get_parser_info(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
 ) -> ApiResult<JsonBody<FileParserInfoDto>> {
     info!("Getting file parser info");
@@ -57,7 +57,7 @@ pub async fn get_parser_info(
 )]
 #[axum::debug_handler]
 pub async fn parse_local(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     Query(query): Query<RenderMarkdownQuery>,
     Json(req_body): Json<ParseLocalFileRequest>,
@@ -100,7 +100,7 @@ pub async fn parse_local(
 )]
 #[axum::debug_handler]
 pub async fn upload_and_parse(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     Query(query): Query<UploadQuery>,
     headers: HeaderMap,
@@ -160,7 +160,7 @@ pub async fn upload_and_parse(
 )]
 #[axum::debug_handler]
 pub async fn parse_url(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     Query(query): Query<RenderMarkdownQuery>,
     Json(req_body): Json<ParseUrlRequest>,
@@ -203,7 +203,7 @@ pub async fn parse_url(
 )]
 #[axum::debug_handler]
 pub async fn parse_local_markdown(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     Json(req_body): Json<ParseLocalFileRequest>,
 ) -> ApiResult<Response> {
@@ -241,7 +241,7 @@ pub async fn parse_local_markdown(
 )]
 #[axum::debug_handler]
 pub async fn upload_and_parse_markdown(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     mut multipart: axum::extract::Multipart,
 ) -> ApiResult<Response> {
@@ -313,7 +313,7 @@ pub async fn upload_and_parse_markdown(
 )]
 #[axum::debug_handler]
 pub async fn parse_url_markdown(
-    Authz(_ctx): Authz,
+    Extension(_ctx): Extension<SecurityContext>,
     Extension(svc): Extension<std::sync::Arc<FileParserService>>,
     Json(req_body): Json<ParseUrlRequest>,
 ) -> ApiResult<Response> {

@@ -474,6 +474,7 @@ mod tests {
             .subject_id(uuid(SUBJECT))
             .subject_tenant_id(uuid(TENANT))
             .build()
+            .unwrap()
     }
 
     const TEST_RESOURCE: ResourceType = ResourceType {
@@ -864,7 +865,8 @@ mod tests {
             .subject_type("user")
             .token_scopes(vec!["admin".to_owned()])
             .bearer_token("test-token".to_owned())
-            .build();
+            .build()
+            .unwrap();
 
         let e = PolicyEnforcer::new(Arc::new(AllowAllMock))
             .with_capabilities(vec![Capability::TenantHierarchy]);
@@ -911,9 +913,7 @@ mod tests {
 
     #[test]
     fn builds_request_without_tenant_context() {
-        let ctx = SecurityContext::builder()
-            .subject_id(Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap())
-            .build();
+        let ctx = SecurityContext::anonymous();
 
         let e = enforcer(AllowAllMock);
 
@@ -939,7 +939,8 @@ mod tests {
         let ctx = SecurityContext::builder()
             .subject_id(Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap())
             .subject_tenant_id(tenant_id)
-            .build();
+            .build()
+            .unwrap();
 
         let e = enforcer(AllowAllMock);
         let access_req = AccessRequest::new()
@@ -967,7 +968,8 @@ mod tests {
         let ctx = SecurityContext::builder()
             .subject_id(Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap())
             .subject_tenant_id(tenant_id)
-            .build();
+            .build()
+            .unwrap();
 
         let e = enforcer(AllowAllMock);
         let access_req = AccessRequest::new().tenant_context(TenantContext {
@@ -991,7 +993,8 @@ mod tests {
         let ctx = SecurityContext::builder()
             .subject_id(Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap())
             .subject_tenant_id(subject_tenant)
-            .build();
+            .build()
+            .unwrap();
 
         let e = enforcer(AllowAllMock);
 
@@ -1015,7 +1018,8 @@ mod tests {
         let ctx = SecurityContext::builder()
             .subject_id(Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap())
             .subject_tenant_id(subject_tenant)
-            .build();
+            .build()
+            .unwrap();
 
         let e = enforcer(AllowAllMock);
         let access_req = AccessRequest::new().context_tenant_id(explicit_tenant);

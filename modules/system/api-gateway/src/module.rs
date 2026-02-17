@@ -27,8 +27,8 @@ use tracing::debug;
 
 use authn_resolver_sdk::AuthNResolverClient;
 
-use crate::auth;
 use crate::config::ApiGatewayConfig;
+use crate::middleware::auth;
 use modkit_security::SecurityContext;
 use modkit_security::constants::{DEFAULT_SUBJECT_ID, DEFAULT_TENANT_ID};
 
@@ -202,7 +202,7 @@ impl ApiGateway {
             let default_security_context = SecurityContext::builder()
                 .subject_id(DEFAULT_SUBJECT_ID)
                 .subject_tenant_id(DEFAULT_TENANT_ID)
-                .build();
+                .build()?;
 
             tracing::warn!(
                 "API Gateway auth is DISABLED: all requests will run with default tenant SecurityCtx. \

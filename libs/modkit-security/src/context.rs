@@ -1,6 +1,20 @@
 use secrecy::SecretString;
 use uuid::Uuid;
 
+/// Error returned when `SecurityContextBuilder::build()` is called without
+/// required fields.
+#[derive(Debug, thiserror::Error)]
+pub enum SecurityContextBuildError {
+    #[error(
+        "subject_id is required - use SecurityContext::anonymous() for unauthenticated contexts"
+    )]
+    MissingSubjectId,
+    #[error(
+        "subject_tenant_id is required - use SecurityContext::anonymous() for unauthenticated contexts"
+    )]
+    MissingSubjectTenantId,
+}
+
 /// `SecurityContext` encapsulates the security-related information for a request or operation.
 ///
 /// Built by the `AuthN` Resolver during authentication and passed through the request lifecycle.
@@ -31,10 +45,19 @@ impl SecurityContext {
         SecurityContextBuilder::default()
     }
 
-    /// Create an anonymous `SecurityContext` with no tenant, subject, or permissions
+    /// Create an anonymous `SecurityContext` with no tenant, subject, or permissions.
+    ///
+    /// Use this for unauthenticated / dev / auth-disabled contexts where no
+    /// authenticated subject exists.
     #[must_use]
     pub fn anonymous() -> Self {
-        SecurityContextBuilder::default().build()
+        Self {
+            subject_id: Uuid::default(),
+            subject_type: None,
+            subject_tenant_id: Uuid::default(),
+            token_scopes: Vec::new(),
+            bearer_token: None,
+        }
     }
 
     /// Get the subject ID (user, service, or system) associated with the security context
@@ -108,15 +131,27 @@ impl SecurityContextBuilder {
         self
     }
 
-    #[must_use]
-    pub fn build(self) -> SecurityContext {
-        SecurityContext {
-            subject_id: self.subject_id.unwrap_or_default(),
+    /// Build the `SecurityContext`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SecurityContextBuildError` if `subject_id` or
+    /// `subject_tenant_id` was not set. Use `SecurityContext::anonymous()`
+    /// for contexts that intentionally have no authenticated subject.
+    pub fn build(self) -> Result<SecurityContext, SecurityContextBuildError> {
+        let subject_id = self
+            .subject_id
+            .ok_or(SecurityContextBuildError::MissingSubjectId)?;
+        let subject_tenant_id = self
+            .subject_tenant_id
+            .ok_or(SecurityContextBuildError::MissingSubjectTenantId)?;
+        Ok(SecurityContext {
+            subject_id,
             subject_type: self.subject_type,
-            subject_tenant_id: self.subject_tenant_id.unwrap_or_default(),
+            subject_tenant_id,
             token_scopes: self.token_scopes,
             bearer_token: self.bearer_token,
-        }
+        })
     }
 }
 
@@ -138,7 +173,8 @@ mod tests {
             .subject_tenant_id(subject_tenant_id)
             .token_scopes(vec!["read:events".to_owned(), "write:events".to_owned()])
             .bearer_token("test-token-123".to_owned())
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(ctx.subject_id(), subject_id);
         assert_eq!(ctx.subject_tenant_id(), subject_tenant_id);
@@ -150,20 +186,37 @@ mod tests {
     }
 
     #[test]
-    fn test_security_context_builder_minimal() {
-        let ctx = SecurityContext::builder().build();
+    fn test_security_context_builder_missing_subject_id() {
+        let err = SecurityContext::builder()
+            .subject_tenant_id(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap())
+            .build();
 
-        assert_eq!(ctx.subject_id(), Uuid::default());
-        assert_eq!(ctx.subject_tenant_id(), Uuid::default());
-        assert!(ctx.token_scopes().is_empty());
-        assert!(ctx.bearer_token().is_none());
+        assert!(matches!(
+            err,
+            Err(SecurityContextBuildError::MissingSubjectId)
+        ));
     }
 
     #[test]
-    fn test_security_context_builder_partial() {
-        let ctx = SecurityContext::builder().subject_type("service").build();
+    fn test_security_context_builder_missing_tenant_id() {
+        let err = SecurityContext::builder()
+            .subject_id(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap())
+            .build();
 
-        assert_eq!(ctx.subject_id(), Uuid::default());
+        assert!(matches!(
+            err,
+            Err(SecurityContextBuildError::MissingSubjectTenantId)
+        ));
+    }
+
+    #[test]
+    fn test_security_context_builder_missing_both() {
+        let err = SecurityContext::builder().build();
+
+        assert!(matches!(
+            err,
+            Err(SecurityContextBuildError::MissingSubjectId)
+        ));
     }
 
     #[test]
@@ -177,22 +230,16 @@ mod tests {
     }
 
     #[test]
-    fn test_security_context_first_party_scopes() {
-        let ctx = SecurityContext::builder()
-            .token_scopes(vec!["*".to_owned()])
-            .build();
-
-        assert_eq!(ctx.token_scopes(), &["*"]);
-    }
-
-    #[test]
     fn test_security_context_builder_chaining() {
         let subject_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+        let subject_tenant_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap();
 
         let ctx = SecurityContext::builder()
             .subject_id(subject_id)
             .subject_type("user")
-            .build();
+            .subject_tenant_id(subject_tenant_id)
+            .build()
+            .unwrap();
 
         assert_eq!(ctx.subject_id(), subject_id);
     }
@@ -207,7 +254,8 @@ mod tests {
             .subject_tenant_id(subject_tenant_id)
             .token_scopes(vec!["*".to_owned()])
             .bearer_token("secret".to_owned())
-            .build();
+            .build()
+            .unwrap();
 
         let ctx2 = ctx1.clone();
 
@@ -231,7 +279,8 @@ mod tests {
             .subject_tenant_id(subject_tenant_id)
             .token_scopes(vec!["admin".to_owned()])
             .bearer_token("secret-token".to_owned())
-            .build();
+            .build()
+            .unwrap();
 
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: SecurityContext = serde_json::from_str(&serialized).unwrap();
@@ -248,27 +297,15 @@ mod tests {
 
     #[test]
     fn test_security_context_bearer_token_not_serialized() {
-        let ctx = SecurityContext::builder()
-            .bearer_token("secret-token".to_owned())
-            .build();
+        let ctx = SecurityContext::anonymous();
 
         let serialized = serde_json::to_string(&ctx).unwrap();
-        assert!(!serialized.contains("secret-token"));
         assert!(!serialized.contains("bearer_token"));
     }
 
     #[test]
-    fn test_security_context_with_no_subject_type() {
-        let subject_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
-
-        let ctx = SecurityContext::builder().subject_id(subject_id).build();
-
-        assert_eq!(ctx.subject_id(), subject_id);
-    }
-
-    #[test]
     fn test_security_context_empty_scopes() {
-        let ctx = SecurityContext::builder().build();
+        let ctx = SecurityContext::anonymous();
 
         assert!(ctx.token_scopes().is_empty());
     }

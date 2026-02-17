@@ -9,7 +9,7 @@ pub use access_scope::{
     AccessScope, EqScopeFilter, InScopeFilter, ScopeConstraint, ScopeFilter, ScopeValue,
     pep_properties,
 };
-pub use context::SecurityContext;
+pub use context::{SecurityContext, SecurityContextBuildError};
 
 pub use bin_codec::{
     SECCTX_BIN_VERSION, SecCtxDecodeError, SecCtxEncodeError, decode_bin, encode_bin,

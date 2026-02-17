@@ -30,7 +30,6 @@ time = { workspace = true }
 arc-swap = { workspace = true }
 tracing = { workspace = true }
 jsonwebtoken = { workspace = true }
-axum = { workspace = true, optional = true }
 tower = { workspace = true }
 http = { workspace = true }
 modkit-security = { workspace = true }
@@ -52,7 +51,3 @@ zeroize = { workspace = true }
 bytes = { workspace = true }
 http-body-util = { workspace = true }
 httpmock = { workspace = true }
-
-[features]
-default = ["axum-ext"]
-axum-ext = ["axum"]

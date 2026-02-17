@@ -95,6 +95,7 @@ pub struct GatewayRoutePolicy {
 }
 
 impl GatewayRoutePolicy {
+    #[must_use]
     pub fn new(
         route_matchers: Arc<HashMap<Method, RouteMatcher>>,
         public_matchers: Arc<HashMap<Method, PublicRouteMatcher>>,
@@ -108,6 +109,7 @@ impl GatewayRoutePolicy {
     }
 
     /// Resolve the authentication requirement for a given (method, path).
+    #[must_use]
     pub fn resolve(&self, method: &Method, path: &str) -> AuthRequirement {
         // Check if route is explicitly authenticated
         let is_authenticated = self
@@ -140,6 +142,11 @@ pub struct AuthState {
 }
 
 /// Helper to build `GatewayRoutePolicy` from operation requirements.
+///
+/// # Errors
+///
+/// Returns an error if a route pattern cannot be inserted into the matcher.
+#[allow(clippy::implicit_hasher)]
 pub fn build_route_policy(
     cfg: &crate::config::ApiGatewayConfig,
     authenticated_routes: std::collections::HashSet<(Method, String)>,

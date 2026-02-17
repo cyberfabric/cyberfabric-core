@@ -32,27 +32,3 @@ pub enum AuthError {
     #[error("Internal error: {0}")]
     Internal(String),
 }
-
-#[cfg(feature = "axum-ext")]
-impl axum::response::IntoResponse for AuthError {
-    fn into_response(self) -> axum::response::Response {
-        use axum::http::StatusCode;
-        use axum::response::Json;
-        use serde_json::json;
-
-        let (status, message) = match self {
-            AuthError::Unauthenticated | AuthError::InvalidToken(_) | AuthError::TokenExpired => {
-                (StatusCode::UNAUTHORIZED, self.to_string())
-            }
-            AuthError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
-        };
-
-        let body = Json(json!({
-            "error": message,
-            "status": status.as_u16(),
-        }));
-
-        (status, body).into_response()
-    }
-}

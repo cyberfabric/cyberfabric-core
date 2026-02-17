@@ -107,6 +107,7 @@ mod tests {
             .subject_id(Uuid::new_v4())
             .subject_tenant_id(Uuid::new_v4())
             .build()
+            .unwrap()
     }
 
     fn build_service(db: Db, config: ServiceConfig) -> ConcreteService {
@@ -376,11 +377,13 @@ mod tests {
         let user1 = SecurityContext::builder()
             .subject_id(Uuid::new_v4())
             .subject_tenant_id(tenant_id)
-            .build();
+            .build()
+            .unwrap();
         let user2 = SecurityContext::builder()
             .subject_id(Uuid::new_v4())
             .subject_tenant_id(tenant_id)
-            .build();
+            .build()
+            .unwrap();
 
         // User 1 creates settings
         let _ = service
@@ -410,11 +413,13 @@ mod tests {
         let tenant1 = SecurityContext::builder()
             .subject_id(user_id)
             .subject_tenant_id(Uuid::new_v4())
-            .build();
+            .build()
+            .unwrap();
         let tenant2 = SecurityContext::builder()
             .subject_id(user_id)
             .subject_tenant_id(Uuid::new_v4())
-            .build();
+            .build()
+            .unwrap();
 
         // Same user in tenant 1 creates settings
         let _ = service

@@ -146,7 +146,8 @@ async fn users_info_registers_sdk_client_and_handles_basic_crud() {
     let sec = SecurityContext::builder()
         .subject_id(Uuid::new_v4())
         .subject_tenant_id(tenant_id)
-        .build();
+        .build()
+        .unwrap();
 
     let created = client
         .create_user(

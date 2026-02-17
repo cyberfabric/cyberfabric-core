@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{Json, extract::Extension};
 use modkit::api::prelude::*;
-use modkit_auth::axum_ext::Authz;
+use modkit_security::SecurityContext;
 use simple_user_settings_sdk::models::SimpleUserSettingsUpdate;
 
 use crate::api::rest::routes::ConcreteService;
@@ -12,7 +12,7 @@ use super::dto::{
 };
 
 pub async fn get_settings(
-    Authz(ctx): Authz,
+    Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<ConcreteService>>,
 ) -> ApiResult<JsonBody<SimpleUserSettingsDto>> {
     let settings = svc.get_settings(&ctx).await?;
@@ -20,7 +20,7 @@ pub async fn get_settings(
 }
 
 pub async fn update_settings(
-    Authz(ctx): Authz,
+    Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<ConcreteService>>,
     Json(req): Json<UpdateSimpleUserSettingsRequest>,
 ) -> ApiResult<impl IntoResponse> {
@@ -34,7 +34,7 @@ pub async fn update_settings(
 }
 
 pub async fn patch_settings(
-    Authz(ctx): Authz,
+    Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<ConcreteService>>,
     Json(req): Json<PatchSimpleUserSettingsRequest>,
 ) -> ApiResult<JsonBody<SimpleUserSettingsDto>> {

@@ -26,9 +26,6 @@ pub mod validation;
 // Outbound OAuth2 client credentials
 pub mod oauth2;
 
-#[cfg(feature = "axum-ext")]
-pub mod axum_ext;
-
 // Core exports
 pub use claims::Claims;
 pub use errors::AuthError;

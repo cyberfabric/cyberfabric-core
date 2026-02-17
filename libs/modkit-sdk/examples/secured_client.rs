@@ -37,7 +37,8 @@ fn main() {
         .subject_tenant_id(tenant_id)
         .subject_id(subject_id)
         .subject_type("user")
-        .build();
+        .build()
+        .expect("valid security context");
 
     let secured = client.security_ctx(&ctx);
 
@@ -48,7 +49,9 @@ fn main() {
     // Context for internal operations (still scoped to a tenant)
     let internal_ctx = SecurityContext::builder()
         .subject_tenant_id(tenant_id)
-        .build();
+        .subject_id(subject_id)
+        .build()
+        .expect("valid security context");
     let secured_internal = client.security_ctx(&internal_ctx);
 
     println!("\nInternal context:");
