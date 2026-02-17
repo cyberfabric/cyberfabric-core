@@ -15,7 +15,7 @@
       "description": "Session that was restored"
     },
     "client_id": {
-      "type": "string",
+      "$ref": "../common/GtsClientId.json",
       "description": "Owner of the session"
     },
     "restored_at": {
@@ -29,6 +29,6 @@
       "description": "Event generation timestamp"
     }
   },
-  "required": ["event", "session_id", "restored_at", "timestamp"],
+  "required": ["event", "session_id", "client_id", "restored_at", "timestamp"],
   "additionalProperties": false
 }

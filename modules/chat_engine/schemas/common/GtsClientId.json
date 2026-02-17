@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gts://gts.x.chat_engine.entities.client_id.v1",
+  "title": "GTS Client ID",
+  "description": "GTS ID for a client/user entity",
+  "type": "string",
+  "pattern": "^gts\\.hyperspot\\.chat_engine\\.entities\\.client\\.v[0-9]+~[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+  "examples": [
+    "gts.hyperspot.chat_engine.entities.client.v1~123e4567-e89b-12d3-a456-426614174000"
+  ]
+}

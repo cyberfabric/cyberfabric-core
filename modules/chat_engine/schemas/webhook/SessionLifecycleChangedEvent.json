@@ -15,7 +15,7 @@
       "description": "Session whose lifecycle changed"
     },
     "client_id": {
-      "type": "string",
+      "$ref": "../common/GtsClientId.json",
       "description": "Owner of the session"
     },
     "old_state": {
@@ -37,6 +37,6 @@
       "description": "Event generation timestamp"
     }
   },
-  "required": ["event", "session_id", "old_state", "new_state", "timestamp"],
+  "required": ["event", "session_id", "client_id", "old_state", "new_state", "timestamp"],
   "additionalProperties": false
 }

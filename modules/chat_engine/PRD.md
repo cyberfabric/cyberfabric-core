@@ -648,7 +648,7 @@ Session history search must return results within 1 second at p95 for sessions w
 **ID**: `fdd-chat-engine-nfr-websocket-performance`
 
 <!-- fdd-id-content -->
-WebSocket connection establishment must complete within 500ms at p95. Message routing latency over WebSocket must be less than 50ms at p95 (lower than HTTP's 100ms target). Heartbeat interval must be 30 seconds with automatic reconnection using exponential backoff (maximum 60 seconds). System must support at least 5,000 concurrent WebSocket connections per instance.
+When WebSocket is enabled, connection establishment must complete within 500ms at p95. Message routing latency over WebSocket must be less than 50ms at p95 (lower than HTTP's 100ms target). Heartbeat interval must be 30 seconds with automatic reconnection using exponential backoff (maximum 60 seconds). The system must support at least 5,000 concurrent WebSocket connections per instance.
 <!-- fdd-id-content -->
 
 #### NFR-012: WebSocket Reliability
@@ -656,7 +656,7 @@ WebSocket connection establishment must complete within 500ms at p95. Message ro
 **ID**: `fdd-chat-engine-nfr-websocket-reliability`
 
 <!-- fdd-id-content -->
-WebSocket connections must support automatic reconnection with state restoration after network interruptions. Message delivery guarantees must match HTTP protocol (at-least-once for operations, exactly-once for streaming). System must handle graceful connection closure with pending operation completion or cancellation. Connection timeout must be 5 minutes for idle connections, configurable per deployment.
+When WebSocket is enabled, connections must support automatic reconnection with state restoration after network interruptions. Message delivery guarantees must match HTTP protocol (at-least-once for operations, exactly-once for streaming). The system must handle graceful connection closure with pending operation completion or cancellation. Connection timeout must be 5 minutes for idle connections, configurable per deployment.
 <!-- fdd-id-content -->
 
 #### NFR-013: Message History Handling

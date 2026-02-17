@@ -17,8 +17,7 @@
       "$ref": "../common/GtsSessionTypeId.json"
     },
     "client_id": {
-      "type": "string",
-      "minLength": 1,
+      "$ref": "../common/GtsClientId.json",
       "description": "Client identifier who created the session"
     },
     "timestamp": {

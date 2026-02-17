@@ -15,7 +15,7 @@
       "description": "Session that was soft-deleted"
     },
     "client_id": {
-      "type": "string",
+      "$ref": "../common/GtsClientId.json",
       "description": "Owner of the session"
     },
     "deleted_at": {
@@ -34,6 +34,6 @@
       "description": "Event generation timestamp"
     }
   },
-  "required": ["event", "session_id", "deleted_at", "scheduled_hard_delete_at", "timestamp"],
+  "required": ["event", "session_id", "client_id", "deleted_at", "scheduled_hard_delete_at", "timestamp"],
   "additionalProperties": false
 }
