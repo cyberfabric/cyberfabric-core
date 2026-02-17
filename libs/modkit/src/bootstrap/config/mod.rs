@@ -32,6 +32,8 @@ pub struct ModuleConfig {
     pub config: serde_json::Value,
     #[serde(default)]
     pub runtime: Option<ModuleRuntime>,
+    #[serde(default)] // Used by the CLI
+    pub metadata: serde_json::Value,
 }
 
 /// Runtime configuration for a module (local vs out-of-process).

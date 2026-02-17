@@ -792,7 +792,7 @@ pub fn module(attr: TokenStream, item: TokenStream) -> TokenStream {
             #(#capability_registrations)*
         }
 
-        ::inventory::submit! {
+        ::modkit::inventory::submit! {
             ::modkit::registry::Registrator(#registrator_name)
         }
 
