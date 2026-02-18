@@ -1070,7 +1070,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-auth"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "aliri_clock",
  "aliri_tokens",
@@ -1160,7 +1160,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-db"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-db-macros"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "heck 0.5.0",
  "proc-macro-error2",
@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-errors"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "axum",
  "http",
@@ -1222,7 +1222,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-errors-macro"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1233,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-http"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "bytes",
  "flate2",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-macros"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-macros-tests"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1294,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-node-info"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-odata"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "base64 0.22.1",
  "bigdecimal",
@@ -1332,7 +1332,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-odata-macros"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "cf-modkit-odata",
  "heck 0.5.0",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-sdk"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "cf-modkit-odata",
  "cf-modkit-odata-macros",
@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-security"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "postcard",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-transport-grpc"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "cf-modkit-security",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "cf-modkit-utils"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "humantime",
  "serde",
@@ -1566,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "cf-system-sdk-directory"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1581,7 +1581,7 @@ dependencies = [
 
 [[package]]
 name = "cf-system-sdks"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "cf-system-sdk-directory",
 ]
@@ -2911,7 +2911,7 @@ dependencies = [
 
 [[package]]
 name = "gts-docs-validator"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "clap",
@@ -3336,7 +3336,7 @@ dependencies = [
 
 [[package]]
 name = "hyperspot-server"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "calculator",
@@ -7117,7 +7117,7 @@ checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
 name = "types"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -7133,7 +7133,7 @@ dependencies = [
 
 [[package]]
 name = "types-sdk"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "async-trait",
  "cf-modkit-odata",
@@ -7283,7 +7283,7 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "users-info"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -7330,7 +7330,7 @@ dependencies = [
 
 [[package]]
 name = "users-info-sdk"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "async-trait",
  "cf-modkit-odata",

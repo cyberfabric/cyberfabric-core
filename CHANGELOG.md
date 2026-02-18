@@ -9,6 +9,121 @@ release-plz updates this file in the Release PR.
 
 ## [Unreleased]
 
+## [0.2.10](https://github.com/cyberfabric/cyberfabric-core/compare/types-sdk-v0.2.9...types-sdk-v0.2.10) - 2026-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.2](https://github.com/cyberfabric/cyberfabric-core/compare/cf-static-tr-plugin-v0.1.1...cf-static-tr-plugin-v0.1.2) - 2026-02-18
+
+### Added
+
+- implement authentication and authorization resolvers (by @aviator5) - #612
+
+### Fixed
+
+- validate GTS registration results instead of silently discarding them (by @aviator5) - #612
+- update module names to use kebab-case convention (by @yoskini) - #459
+
+### Other
+
+- release (by @github-actions[bot]) - #595
+
+### Security
+
+- *(auth)* require subject_id and subject_tenant_id in SecurityContext builder (by @aviator5)
+
+### Contributors
+
+* @github-actions[bot]
+* @aviator5
+* @yoskini
+
+## [0.1.0](https://github.com/cyberfabric/cyberfabric-core/releases/tag/cf-static-authz-plugin-v0.1.0) - 2026-02-18
+
+### Added
+
+- implement authentication and authorization resolvers (by @aviator5) - #612
+
+### Fixed
+
+- validate GTS registration results instead of silently discarding them (by @aviator5) - #612
+
+### Other
+
+- release (by @github-actions[bot]) - #595
+- *(plugins)* extract shared choose_plugin_instance into modkit::plugins (by @aviator5)
+
+### Security
+
+- *(authz)* deny access on nil/missing tenant in static-authz-plugin (by @aviator5)
+
+### Contributors
+
+* @github-actions[bot]
+* @aviator5
+
+## [0.1.0](https://github.com/cyberfabric/cyberfabric-core/releases/tag/cf-static-authn-plugin-v0.1.0) - 2026-02-18
+
+### Added
+
+- implement authentication and authorization resolvers (by @aviator5) - #612
+
+### Fixed
+
+- validate GTS registration results instead of silently discarding them (by @aviator5) - #612
+
+### Other
+
+- release (by @github-actions[bot]) - #595
+- *(config)* streamline quickstart.yaml auth configuration (by @aviator5)
+- *(plugins)* extract shared choose_plugin_instance into modkit::plugins (by @aviator5)
+
+### Security
+
+- *(auth)* require subject_id and subject_tenant_id in SecurityContext builder (by @aviator5)
+
+### Contributors
+
+* @github-actions[bot]
+* @aviator5
+
+## [0.1.2](https://github.com/cyberfabric/cyberfabric-core/compare/cf-single-tenant-tr-plugin-v0.1.1...cf-single-tenant-tr-plugin-v0.1.2) - 2026-02-18
+
+### Added
+
+- implement authentication and authorization resolvers (by @aviator5) - #612
+
+### Fixed
+
+- validate GTS registration results instead of silently discarding them (by @aviator5) - #612
+- update module names to use kebab-case convention (by @yoskini) - #459
+
+### Other
+
+- release (by @github-actions[bot]) - #595
+
+### Security
+
+- *(auth)* require subject_id and subject_tenant_id in SecurityContext builder (by @aviator5)
+
+### Contributors
+
+* @github-actions[bot]
+* @aviator5
+* @yoskini
+
+## [0.2.10](https://github.com/cyberfabric/cyberfabric-core/compare/cf-modkit-http-v0.2.8...cf-modkit-http-v0.2.10) - 2026-02-18
+
+### Other
+
+- enable let_underscore_must_use because coderabbitai check it (by @lansfy) - #616
+
+### Contributors
+
+* @lansfy
+
 ## [0.2.9](https://github.com/cyberfabric/cyberfabric-core/compare/types-sdk-v0.2.8...types-sdk-v0.2.9) - 2026-02-17
 
 ### Other

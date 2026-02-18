@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.2.9"
+version = "0.2.10"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Cyber Fabric"]
@@ -202,24 +202,24 @@ verbose_file_reads = "deny"
 
 [workspace.dependencies]
 # libs
-modkit = { package = "cf-modkit", version = "0.2.9", path = "libs/modkit" }
-modkit-http = { package = "cf-modkit-http", version = "0.2.9", path = "libs/modkit-http" }
-modkit-auth = { package = "cf-modkit-auth", version = "0.2.9", path = "libs/modkit-auth" }
-modkit-db = { package = "cf-modkit-db", version = "0.2.9", path = "libs/modkit-db" }
-modkit-db-macros = { package = "cf-modkit-db-macros", version = "0.2.9", path = "libs/modkit-db-macros" }
-modkit-errors = { package = "cf-modkit-errors", version = "0.2.9", path = "libs/modkit-errors" }
-modkit-errors-macro = { package = "cf-modkit-errors-macro", version = "0.2.9", path = "libs/modkit-errors-macro" }
-modkit-macros = { package = "cf-modkit-macros", version = "0.2.9", path = "libs/modkit-macros" }
-modkit-node-info = { package = "cf-modkit-node-info", version = "0.2.9", path = "libs/modkit-node-info" }
-modkit-odata = { package = "cf-modkit-odata", version = "0.2.9", path = "libs/modkit-odata" }
-modkit-odata-macros = { package = "cf-modkit-odata-macros", version = "0.2.9", path = "libs/modkit-odata-macros" }
-modkit-sdk = { package = "cf-modkit-sdk", version = "0.2.9", path = "libs/modkit-sdk" }
-modkit-security = { package = "cf-modkit-security", version = "0.2.9", path = "libs/modkit-security" }
-modkit-transport-grpc = { package = "cf-modkit-transport-grpc", version = "0.2.9", path = "libs/modkit-transport-grpc" }
-modkit-utils = { package = "cf-modkit-utils", version = "0.2.9", path = "libs/modkit-utils" }
+modkit = { package = "cf-modkit", version = "0.2.10", path = "libs/modkit" }
+modkit-http = { package = "cf-modkit-http", version = "0.2.10", path = "libs/modkit-http" }
+modkit-auth = { package = "cf-modkit-auth", version = "0.2.10", path = "libs/modkit-auth" }
+modkit-db = { package = "cf-modkit-db", version = "0.2.10", path = "libs/modkit-db" }
+modkit-db-macros = { package = "cf-modkit-db-macros", version = "0.2.10", path = "libs/modkit-db-macros" }
+modkit-errors = { package = "cf-modkit-errors", version = "0.2.10", path = "libs/modkit-errors" }
+modkit-errors-macro = { package = "cf-modkit-errors-macro", version = "0.2.10", path = "libs/modkit-errors-macro" }
+modkit-macros = { package = "cf-modkit-macros", version = "0.2.10", path = "libs/modkit-macros" }
+modkit-node-info = { package = "cf-modkit-node-info", version = "0.2.10", path = "libs/modkit-node-info" }
+modkit-odata = { package = "cf-modkit-odata", version = "0.2.10", path = "libs/modkit-odata" }
+modkit-odata-macros = { package = "cf-modkit-odata-macros", version = "0.2.10", path = "libs/modkit-odata-macros" }
+modkit-sdk = { package = "cf-modkit-sdk", version = "0.2.10", path = "libs/modkit-sdk" }
+modkit-security = { package = "cf-modkit-security", version = "0.2.10", path = "libs/modkit-security" }
+modkit-transport-grpc = { package = "cf-modkit-transport-grpc", version = "0.2.10", path = "libs/modkit-transport-grpc" }
+modkit-utils = { package = "cf-modkit-utils", version = "0.2.10", path = "libs/modkit-utils" }
 
-cf-system-sdks = { version = "0.1.11", path = "libs/system-sdks" }
-cf-system-sdk-directory = { version = "0.1.11", path = "libs/system-sdks/sdks/directory" }
+cf-system-sdks = { version = "0.1.12", path = "libs/system-sdks" }
+cf-system-sdk-directory = { version = "0.1.12", path = "libs/system-sdks/sdks/directory" }
 
 # system modules SDKs
 types-registry-sdk = { package = "cf-types-registry-sdk", version = "0.1.3", path = "modules/system/types-registry/types-registry-sdk" }
