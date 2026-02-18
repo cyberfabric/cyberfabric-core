@@ -566,10 +566,10 @@ The system **MUST** complete usage queries for 30-day ranges within 500ms (p95) 
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-nfr-exactly-once`
 
-The system **MUST** guarantee exactly-once processing for all usage records successfully accepted by the ingestion API; zero usage records lost or duplicated after ingestion under normal operation. This guarantee applies to the service layer (collector, storage adapters, query path) but does **NOT** apply to SDK-level drops caused by buffer exhaustion or sustained overload as defined in `cpt-cf-uc-fr-sdk-retry`.
+The system **MUST** guarantee exactly-once processing for all usage records successfully ingested by the API; zero usage records lost or duplicated after ingestion under normal operation. A record is considered **successfully ingested** only once the collector has **durably persisted** the record to storage **and** returned an acknowledgment (HTTP 2xx or gRPC OK) to the SDK. If the collector acknowledges a batch before durable persistence completes and a crash occurs, those records are **NOT** covered by the exactly-once guarantee and must be treated as SDK-level failures per `cpt-cf-uc-fr-sdk-retry`. This guarantee applies to the service layer (collector, storage adapters, query path) but does **NOT** apply to SDK-level drops caused by buffer exhaustion or sustained overload as defined in `cpt-cf-uc-fr-sdk-retry`.
 
 **Threshold**: Zero data loss or duplication after successful API ingestion under normal operation
-**Rationale**: Duplicate or missing records directly impact billing accuracy. The exactly-once guarantee begins when the collector accepts a record (returns success); SDK-level drops before acceptance are observable via metrics and alerts, enabling operators to address capacity or configuration issues.
+**Rationale**: Duplicate or missing records directly impact billing accuracy. The exactly-once guarantee begins when the collector durably persists a record and returns success (HTTP 2xx/gRPC OK); acknowledged records are guaranteed to be queryable by downstream consumers (billing, quota enforcement). SDK-level drops before acknowledgment are observable via metrics and alerts, enabling operators to address capacity or configuration issues.
 
 #### Audit Trail
 
