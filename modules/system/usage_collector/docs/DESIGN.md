@@ -1021,7 +1021,10 @@ sequenceDiagram
 
 **PK**: id
 
-**Constraints**: UNIQUE (tenant_id, source_id); NOT NULL on tenant_id, sustained_rate, burst_size
+**Constraints**:
+- UNIQUE INDEX rate_limit_tenant_level (tenant_id) WHERE source_id IS NULL
+- UNIQUE INDEX rate_limit_source_level (tenant_id, source_id) WHERE source_id IS NOT NULL
+- NOT NULL on tenant_id, sustained_rate, burst_size
 
 **Additional info**: Overrides inherit from system defaults for unspecified fields. Changes are hot-reloadable without service restart.
 
