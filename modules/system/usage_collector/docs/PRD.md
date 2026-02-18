@@ -738,23 +738,6 @@ The system **MUST** continue accepting usage records even if downstream consumer
 - No records missed or duplicated due to concurrent insertions during pagination
 - If subject filtering was applied, billing can generate per-subject chargeback reports
 
-### UC: Real-Time Quota Enforcement
-
-- [ ] `p1` - **ID**: `cpt-cf-uc-usecase-quota-enforcement`
-
-**Actor**: `cpt-cf-uc-actor-quota-enforcement`
-
-**Main Flow**:
-1. Quota Enforcement System queries UC API for current usage (tenant, usage type, time range)
-2. UC returns raw usage records in stable order with cursor-based pagination
-3. Quota Enforcement System retrieves all pages using cursors
-4. Quota Enforcement System aggregates records and compares against tenant limits
-5. Quota Enforcement System triggers enforcement if threshold exceeded
-
-**Postconditions**:
-- Tenant usage enforced before exceeding quota; no over-consumption
-- Quota calculations based on complete, consistent dataset
-
 ### UC: Add New Storage Backend
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-usecase-add-storage`
