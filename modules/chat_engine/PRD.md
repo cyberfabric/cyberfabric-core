@@ -273,6 +273,173 @@ The system **SHOULD** provide guidance and capabilities to support conversation 
 **Actors**: `fdd-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
 
+#### FR-017: Individual Message Deletion
+
+- [ ] `p1` - **ID**: `fdd-chat-engine-fr-delete-message`
+
+<!-- fdd-id-content -->
+The system **MUST** support deletion of individual messages within a session. When a message is deleted, all associated reactions are cascade-deleted automatically to maintain referential integrity. The system validates ownership (authenticated user must own the message) before deletion and notifies the webhook backend of the deletion event.
+
+**Deletion Behavior**:
+- **Hard delete only**: Messages are permanently removed (no soft delete for individual messages)
+- **Cascade delete reactions**: All reactions associated with the message are automatically deleted
+- **Ownership validation**: Only the message owner (authenticated user) can delete their messages
+- **Webhook notification**: Backend receives message_deleted event with message_id and timestamp
+- **Error handling**: Returns 403 Forbidden if user doesn't own message, 404 if message not found
+
+**Use Cases**:
+- User wants to remove a message they regret sending
+- User wants to clean up test messages or mistakes
+- User wants to remove sensitive information accidentally shared
+
+**Constraints**:
+- Cannot delete messages that are parent to other messages (would break conversation tree)
+- Cannot delete assistant messages (only user messages can be deleted by users)
+- Deletion is permanent and cannot be undone
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-018: Per-Message Feedback
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-message-feedback`
+
+<!-- fdd-id-content -->
+The system **SHOULD** support per-message feedback in the form of like/dislike reactions and optional text comments. Feedback enables quality monitoring, model evaluation, and user satisfaction tracking. Each message can have at most one reaction per user, with reaction changes (like → dislike) replacing the previous reaction. The system stores feedback metadata and optionally forwards it to webhook backends for analytics.
+
+**Reaction Types**:
+- **like**: Positive feedback (thumbs up)
+- **dislike**: Negative feedback (thumbs down)
+- **none**: Remove existing reaction
+
+**Feedback Schema**:
+- `message_id`: Message receiving feedback
+- `user_id`: User providing feedback (from auth context)
+- `reaction_type`: Enum (like, dislike, none)
+- `comment`: Optional text feedback (max 1000 chars)
+- `created_at`: Timestamp of feedback
+- `updated_at`: Timestamp of last reaction change
+
+**Webhook Integration**:
+- Backends receive `message_feedback` events when reactions are added/changed
+- Events include message_id, reaction_type, comment, user_id, timestamp
+- Backends can use feedback for model fine-tuning, quality metrics, A/B testing
+
+**Privacy & Data Handling**:
+- Feedback is tied to authenticated user (not anonymous)
+- Comments are stored encrypted if they contain sensitive information
+- Feedback can be queried by client for display or exported with session data
+
+**Capability Gating**: Enabled if session type supports feedback capability
+
+**Actors**: `fdd-chat-engine-actor-client`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-019: Context Overflow Strategies
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-context-overflow`
+
+<!-- fdd-id-content -->
+The system **SHOULD** provide explicit support for handling context window overflow when message history exceeds LLM token limits. Chat Engine provides primitives and metadata to enable webhook backends to implement various overflow strategies. The system does not enforce a specific strategy but provides the mechanisms for backends to implement their chosen approach.
+
+**Supported Strategy Primitives**:
+
+1. **Sliding Window**: Keep last N messages
+   - Backend requests messages with `limit` and `offset` parameters
+   - Chat Engine returns paginated message history
+   - Backend includes only recent messages in context
+
+2. **Hard Stop**: Reject new messages when limit reached
+   - Backend tracks total tokens sent
+   - Returns error when context limit would be exceeded
+   - User must start new session or delete messages
+
+3. **Drop-Middle**: Keep beginning and end, drop middle
+   - Backend fetches first N and last M messages
+   - Chat Engine supports filtering by message position
+   - Preserves conversation setup and recent context
+
+4. **Summarization**: Replace old messages with summaries
+   - Backend uses FR-011 (Session Summary) to generate summaries
+   - Summary stored in session metadata
+   - Backend includes summary + recent messages in context
+
+5. **Message Visibility Flags**: Hide messages from LLM context
+   - Backend marks messages with `is_hidden_from_llm=true`
+   - Chat Engine excludes these messages when backend fetches context
+   - Messages remain visible to users but not sent to LLM
+
+**System Support**:
+- Message metadata includes estimated token counts
+- Session metadata stores strategy configuration and state
+- Message tree navigation supports arbitrary filtering
+- FR-011 summarization endpoint for generating compressed context
+
+**Default Strategy**: Full History (send all messages until overflow, then error)
+
+**Backend Selection Guidelines**:
+- **Short sessions (<50 msgs)**: Full History
+- **Medium sessions (50-200 msgs)**: Sliding Window
+- **Long sessions (200-1000 msgs)**: Summarization + Recent
+- **Very long sessions (1000+ msgs)**: Hierarchical Summarization or Drop-Middle
+
+**Strategy Trade-offs**:
+- **Full History**: Highest fidelity, expensive for long conversations
+- **Sliding Window**: Predictable costs, loses context over time
+- **Summarization**: Balanced approach, adds latency for summary generation
+- **Drop-Middle**: Preserves key context, may lose important middle details
+- **Hard Stop**: Simplest, worst UX (forces session restart)
+
+**Capability Gating**: Strategy configuration exposed via session capabilities
+
+**Actors**: `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
+#### FR-020: Message Retention & Cleanup Policies
+
+- [ ] `p2` - **ID**: `fdd-chat-engine-fr-message-retention`
+
+<!-- fdd-id-content -->
+The system **SHOULD** support message-level retention policies that automatically clean up old messages while preserving session structure. Unlike session deletion (FR-014), message retention policies allow selective message cleanup to optimize storage costs while keeping sessions accessible. Cleanup operations preserve message tree integrity and notify webhook backends.
+
+**Message Retention Behavior**:
+- **Age-based cleanup**: Delete messages older than N days
+- **Count-based cleanup**: Keep only last N messages per session
+- **Selective cleanup**: Remove non-active conversation branches (unused variants)
+- **Tree-aware deletion**: Preserve parent messages required for tree structure
+- **Webhook notification**: Backend receives `messages_cleaned` event with deleted message IDs
+
+**Retention Policy Configuration** (per session type):
+- `message_retention_days`: Auto-delete messages older than N days (default: null/unlimited)
+- `max_messages_per_session`: Keep only last N messages (default: null/unlimited)
+- `cleanup_inactive_branches`: Remove unused message variants (default: false)
+- `preserve_favorited`: Keep messages marked with feedback reactions (default: true)
+
+**Cleanup Execution**:
+- Automated job runs daily to enforce retention policies
+- Cleanup preserves active conversation path (marked by is_active=true)
+- Parent messages required for tree structure are never deleted (even if old)
+- Webhook backends notified asynchronously after cleanup completes
+
+**Use Cases**:
+- Reduce storage costs for long-running sessions with thousands of messages
+- Comply with data minimization regulations (GDPR, CCPA)
+- Clean up experimental branches that users never navigate to
+- Archive old conversations while keeping recent context accessible
+
+**Constraints**:
+- Cannot delete messages that are parents to active messages (breaks tree)
+- Cannot delete messages with pending operations or incomplete streaming
+- Cleanup respects session lifecycle state (no cleanup on soft_deleted sessions)
+
+**Integration with Session Retention**:
+- Session retention (FR-014e) operates at session level (all-or-nothing)
+- Message retention operates within active sessions (selective cleanup)
+- When session is deleted, all messages are deleted (session takes precedence)
+
+**Actors**: `fdd-chat-engine-actor-system`, `fdd-chat-engine-actor-webhook-backend`
+<!-- fdd-id-content -->
+
 #### FR-012: Search Session History
 
 - [ ] `p3` - **ID**: `fdd-chat-engine-fr-search-session`
