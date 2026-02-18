@@ -54,11 +54,11 @@ jsonschema.validate(instance=data, schema=schema)
 
 **Rust**:
 ```rust
-use jsonschema::JSONSchema;
+use jsonschema;
 
 let schema = serde_json::from_str(include_str!("./schemas/common/Session.json"))?;
-let compiled = JSONSchema::compile(&schema)?;
-compiled.validate(&instance)?;
+let validator = jsonschema::validator_for(&schema)?;
+validator.validate(&instance)?;
 ```
 
 ## References

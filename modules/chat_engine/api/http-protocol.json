@@ -805,6 +805,41 @@
             "$ref": "#/components/responses/InternalServerError"
           }
         }
+      },
+      "delete": {
+        "summary": "Delete message",
+        "description": "Permanently delete a message and cascade delete all associated reactions. Requires message ownership.",
+        "operationId": "deleteMessage",
+        "tags": ["Message Operations"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MessageId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageDeleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
       }
     },
     "/messages/{id}/reaction": {
@@ -937,6 +972,16 @@
       },
       "Unauthorized": {
         "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Forbidden - authenticated but not authorized",
         "content": {
           "application/json": {
             "schema": {
@@ -1104,16 +1149,148 @@
         }
       },
       "ContentPart": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextContent"
+          },
+          {
+            "$ref": "#/components/schemas/CodeContent"
+          },
+          {
+            "$ref": "#/components/schemas/ImageContent"
+          },
+          {
+            "$ref": "#/components/schemas/AudioContent"
+          },
+          {
+            "$ref": "#/components/schemas/VideoContent"
+          },
+          {
+            "$ref": "#/components/schemas/DocumentContent"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/TextContent",
+            "code": "#/components/schemas/CodeContent",
+            "image": "#/components/schemas/ImageContent",
+            "audio": "#/components/schemas/AudioContent",
+            "video": "#/components/schemas/VideoContent",
+            "document": "#/components/schemas/DocumentContent"
+          }
+        }
+      },
+      "TextContent": {
         "type": "object",
-        "required": ["type"],
+        "required": ["type", "text"],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["text", "code", "image", "audio", "video", "document"]
+            "const": "text"
+          },
+          "text": {
+            "type": "string",
+            "description": "The text content"
           }
-        },
-        "discriminator": {
-          "propertyName": "type"
+        }
+      },
+      "CodeContent": {
+        "type": "object",
+        "required": ["type", "code"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "code"
+          },
+          "code": {
+            "type": "string",
+            "description": "The code content"
+          },
+          "language": {
+            "type": "string",
+            "description": "Programming language identifier"
+          }
+        }
+      },
+      "ImageContent": {
+        "type": "object",
+        "required": ["type", "image_url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "image"
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the image resource"
+          },
+          "alt_text": {
+            "type": "string",
+            "description": "Alternative text for accessibility"
+          }
+        }
+      },
+      "AudioContent": {
+        "type": "object",
+        "required": ["type", "audio_url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "audio"
+          },
+          "audio_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the audio resource"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration in seconds"
+          }
+        }
+      },
+      "VideoContent": {
+        "type": "object",
+        "required": ["type", "video_url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "video"
+          },
+          "video_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the video resource"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration in seconds"
+          }
+        }
+      },
+      "DocumentContent": {
+        "type": "object",
+        "required": ["type", "document_url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "document"
+          },
+          "document_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the document resource"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "MIME type of the document"
+          }
         }
       },
       "Capability": {
@@ -1303,6 +1480,26 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "MessageDeleteResponse": {
+        "type": "object",
+        "required": ["message_id", "deleted"],
+        "properties": {
+          "message_id": {
+            "$ref": "../schemas/common/GtsMessageId.json",
+            "description": "ID of the deleted message"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true,
+            "description": "Confirmation that the message was deleted"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the deletion occurred"
           }
         }
       },
