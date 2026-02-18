@@ -179,6 +179,8 @@ UC must follow CyberFabric module conventions: SDK crate with public trait, doma
 
 All operations derive tenant identity and subject identity (user, service account, etc.) from the platform SecurityContext. Callers cannot specify arbitrary tenant IDs — tenant attribution is always determined by the authenticated security context. This constraint ensures tenant isolation cannot be bypassed.
 
+**Exception for Operator Workflows**: BackfillRequest includes a `tenant_id` field for operator convenience, but the implementation MUST validate this against the SecurityContext. If the caller has elevated operator permissions (cross-tenant scope), the provided tenant_id is authorized and used. If the caller has single-tenant scope, the tenant_id must match the SecurityContext tenant or the operation fails with AuthorizationFailed. All backfill operations log that SecurityContext authorization takes precedence over the provided tenant_id.
+
 #### Types Registry Dependency
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-constraint-types-registry`
@@ -304,7 +306,7 @@ Executes filtered queries against storage with tenant isolation enforcement. Pro
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-component-backfill-service`
 
-Manages backfill operations: validates time boundaries, archives existing records in target range, persists replacement records, and creates audit trail. Supports blocking and non-blocking modes. Isolated from real-time ingestion with independent rate limits.
+Manages backfill operations: validates time boundaries and tenant authorization (validating provided tenant_id against SecurityContext scope), archives existing records in target range, persists replacement records, and creates audit trail. Supports blocking and non-blocking modes. Isolated from real-time ingestion with independent rate limits.
 
 #### Admin Service
 
@@ -489,6 +491,19 @@ trait BackfillService {
 }
 
 struct BackfillRequest {
+    /// Tenant ID for the backfill operation.
+    ///
+    /// **Security Note**: This field is provided for operator convenience but MUST
+    /// be validated against the SecurityContext. The actual tenant attribution is
+    /// ALWAYS derived from the SecurityContext's authenticated scope. Behavior:
+    /// - If caller has elevated operator permissions (cross-tenant scope), the
+    ///   provided tenant_id is validated and used after authorization checks.
+    /// - If caller has single-tenant scope, the provided tenant_id MUST match
+    ///   the SecurityContext tenant, otherwise AuthorizationFailed is returned.
+    /// - Implementation MUST log that SecurityContext takes precedence in authorization.
+    ///
+    /// This preserves the constraint `cpt-cf-uc-constraint-security-context` while
+    /// allowing operators to specify target tenants for multi-tenant backfill workflows.
     tenant_id: Uuid,
     usage_type: String,
     time_range: TimeRange,
@@ -850,6 +865,8 @@ sequenceDiagram
 
 **Description**: Operators submit backfill requests to correct gaps in usage data. The service validates time boundaries and elevated authorization, archives existing records (preserving them for audit), inserts replacement records, and creates an immutable audit trail. In blocking mode, real-time ingestion for the affected range is temporarily suspended.
 
+**Tenant Attribution**: The BackfillRequest includes a tenant_id field, but authorization is always derived from the SecurityContext. If the caller has cross-tenant operator permissions, the provided tenant_id is validated and authorized. If the caller has single-tenant scope, the tenant_id must match the SecurityContext tenant or the operation returns AuthorizationFailed. The implementation logs that SecurityContext takes precedence in all tenant attribution decisions.
+
 #### Custom Unit Registration
 
 **ID**: `cpt-cf-uc-seq-custom-unit-registration`
@@ -895,7 +912,7 @@ sequenceDiagram
 
 **Configuration Effects**: Storage routing, retention enforcement, and load shedding priority are configured for the new usage type.
 
-#### Rate Limited Ingestion
+#### Rate-Limited Ingestion
 
 **ID**: `cpt-cf-uc-seq-rate-limited-ingestion`
 
