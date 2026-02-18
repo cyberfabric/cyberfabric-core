@@ -483,10 +483,17 @@ All time-related values are in UTC. Clients **SHOULD** treat missing or unparsea
 
 - [ ] `p2` - **ID**: `cpt-cf-uc-fr-sdk-retry`
 
-The SDK **MUST** buffer usage events in a bounded in-memory queue and retry with exponential backoff and jitter on rate limit errors and backfill conflict errors, honoring the `retry_after_ms` field when present. When the buffer is full, the SDK **MUST** drop oldest events and report the loss via metrics. The SDK **MUST NOT** block the calling service due to rate limiting.
+The SDK **MUST** buffer usage events in a bounded in-memory queue and retry with exponential backoff and jitter on rate limit errors and backfill conflict errors, honoring the `retry_after_ms` field when present. Under buffer exhaustion or sustained overload, the SDK **MAY** drop oldest events and **MUST** emit loss metrics (count, rate, usage type, timestamp) and **MUST** trigger alerts when drop rate exceeds configurable thresholds. The SDK **MUST NOT** block the calling service due to rate limiting.
 
-**Rationale**: Usage sources generate events regardless of collector availability. The SDK must absorb temporary rate limiting transparently, retrying without burdening the caller. Exponential backoff with jitter prevents synchronized retry bursts across sources. Non-blocking behavior is critical because usage emission must not degrade the source service's primary function.
-**Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-developer`
+**Loss Conditions**: Data loss at the SDK level is acceptable under the following conditions:
+- Buffer exhaustion: The in-memory queue reaches capacity and new events arrive before older events can be successfully retried
+- Sustained overload: Rate limiting persists beyond the SDK's retry window and buffer capacity
+- Process termination: The SDK process crashes or is terminated before buffered events are flushed
+
+When loss occurs, the SDK **MUST** expose metrics including: `usage_events_dropped_total` (counter), `usage_events_dropped_rate` (gauge), `usage_buffer_utilization` (gauge), tagged by `usage_type`, `tenant_id`, and `drop_reason`. Operators **MUST** configure alerts on sustained drops (e.g., >1% drop rate over 5 minutes).
+
+**Rationale**: Usage sources generate events regardless of collector availability. The SDK must absorb temporary rate limiting transparently, retrying without burdening the caller. Exponential backoff with jitter prevents synchronized retry bursts across sources. Non-blocking behavior is critical because usage emission must not degrade the source service's primary function. Explicit loss conditions with observability enable operators to detect and remediate issues (e.g., increase rate limits, scale collectors, reduce event volume) rather than silently losing data.
+**Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-developer`, `cpt-cf-uc-actor-platform-operator`
 
 #### Priority-Based Load Shedding
 
@@ -559,10 +566,10 @@ The system **MUST** complete usage queries for 30-day ranges within 500ms (p95) 
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-nfr-exactly-once`
 
-The system **MUST** guarantee exactly-once processing; zero usage records lost or duplicated under normal operation.
+The system **MUST** guarantee exactly-once processing for all usage records successfully accepted by the ingestion API; zero usage records lost or duplicated after ingestion under normal operation. This guarantee applies to the service layer (collector, storage adapters, query path) but does **NOT** apply to SDK-level drops caused by buffer exhaustion or sustained overload as defined in `cpt-cf-uc-fr-sdk-retry`.
 
-**Threshold**: Zero data loss or duplication under normal operation
-**Rationale**: Duplicate or missing records directly impact billing accuracy.
+**Threshold**: Zero data loss or duplication after successful API ingestion under normal operation
+**Rationale**: Duplicate or missing records directly impact billing accuracy. The exactly-once guarantee begins when the collector accepts a record (returns success); SDK-level drops before acceptance are observable via metrics and alerts, enabling operators to address capacity or configuration issues.
 
 #### Audit Trail
 
@@ -604,10 +611,10 @@ The system **MUST** scale horizontally to handle increased load without architec
 
 - [ ] `p2` - **ID**: `cpt-cf-uc-nfr-fault-tolerance`
 
-The system **MUST** buffer usage records during storage backend failures and recover without data loss.
+The system **MUST** buffer usage records during storage backend failures and recover without data loss. This guarantee applies to records successfully accepted by the ingestion API; SDK-level drops due to buffer exhaustion before ingestion are covered by `cpt-cf-uc-fr-sdk-retry`.
 
-**Threshold**: Zero data loss during storage backend failures
-**Rationale**: Storage outages must not result in lost usage data.
+**Threshold**: Zero data loss during storage backend failures for records accepted by the collector
+**Rationale**: Storage outages must not result in lost usage data after successful ingestion. The service layer must buffer and retry to ensure durability.
 
 #### Configurable Retention
 
@@ -816,6 +823,8 @@ The system **MUST** continue accepting usage records even if downstream consumer
 - [ ] Custom unit registration completes in less than 5 minutes without code changes
 - [ ] High-volume services can emit 10,000+ events per second without blocking
 - [ ] 99.95%+ monthly availability maintained
+- [ ] Zero data loss or duplication after successful ingestion (usage records accepted by the collector API are persisted exactly once)
+- [ ] SDK buffer drops (pre-ingestion) are observable via metrics (`usage_events_dropped_total`, `usage_buffer_utilization`) and trigger alerts when drop rate exceeds configurable thresholds (as defined in `cpt-cf-uc-fr-sdk-retry`)
 - [ ] Backfill API can restore missing usage data for any time range within the backfill window
 - [ ] Zero data permanently deleted during backfill operations (archive-only)
 - [ ] Ledger metadata (event counts, watermarks) is available via API for external reconciliation systems
@@ -853,7 +862,7 @@ The system **MUST** continue accepting usage records even if downstream consumer
 | Insufficient ledger metadata | External reconciliation systems cannot detect gaps if UC does not expose adequate metadata | Expose per-source event counts, watermarks, and ingestion statistics via dedicated API |
 | Backfill data quality | Incorrect replacement data worsens the gap instead of fixing it | Full schema validation on backfill events; archive-not-delete allows rollback; audit trail enables investigation |
 | Noisy-neighbor ingestion | A single tenant or source exhausts ingestion capacity, degrading service for all tenants | Hierarchical rate limiting (global, per-tenant, per-source); priority-based load shedding |
-| Rate limit misconfiguration | Limits set too low cause legitimate data loss; too high provide no protection | System defaults with per-tenant hot-reloadable overrides; rate limit observability and approaching-limit alerts |
+| Rate limit misconfiguration | Limits set too low cause SDK buffer exhaustion and event drops (as defined in `cpt-cf-uc-fr-sdk-retry`); limits set too high provide no overload protection | System defaults with per-tenant hot-reloadable overrides; rate limit observability and approaching-limit alerts; SDK drop metrics and alerts enable operators to detect and remediate capacity issues |
 | Retry storms after rate limiting | Synchronized client retries after a rate limit event amplify load | SDK enforces exponential backoff with jitter; Retry-After headers provide explicit retry guidance |
 
 ## 13. Open Questions
