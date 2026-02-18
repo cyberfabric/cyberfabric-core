@@ -258,6 +258,19 @@ This requirement complements source authorization (`cpt-cf-uc-fr-source-authoriz
 
 ### 5.4 Storage & Retention
 
+#### Data Persistence Guarantees and Boundaries
+
+- [ ] `p1` - **ID**: `cpt-cf-uc-fr-persistence-guarantees`
+
+The system does **NOT** guarantee absolute persistence of all usage events under all conditions. The system provides limited persistence guarantees with explicit boundaries between guaranteed durability (post-ingestion) and acceptable data loss (pre-ingestion, overload scenarios).
+
+**Persistence guarantee applies only AFTER successful ingestion acknowledgment** (`cpt-cf-uc-nfr-exactly-once`, `cpt-cf-uc-nfr-fault-tolerance`). **Before acknowledgment**, data loss is possible and acceptable under SDK buffer exhaustion, process termination, rate limiting, and priority-based load shedding (`cpt-cf-uc-fr-sdk-retry`, `cpt-cf-uc-fr-load-shedding`). All loss scenarios **MUST** be observable via metrics and alerts.
+
+**Design Trade-off:** This design prioritizes system availability and ingestion performance over absolute durability. The Usage Collector remains available and responsive under overload conditions, accepting billing-critical usage data while shedding lower-priority events. The alternative—blocking all ingestion until buffers clear—would cause cascading failures in usage sources and block revenue-critical operations.
+
+**Rationale**: Explicit acknowledgment of persistence boundaries prevents false assumptions about data durability and sets correct expectations for operators and downstream consumers.
+**Actors**: `cpt-cf-uc-actor-platform-operator`, `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-developer`, `cpt-cf-uc-actor-billing-system`
+
 #### Pluggable Storage Framework
 
 - [ ] `p1` - **ID**: `cpt-cf-uc-fr-pluggable-storage`
