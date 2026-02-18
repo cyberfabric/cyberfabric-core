@@ -25,6 +25,11 @@
     clippy::expect_used
 )]
 
+mod error;
+mod normalize;
+mod scan_json;
+mod scan_markdown;
+mod scan_yaml;
 mod scanner;
 mod validator;
 
@@ -34,8 +39,8 @@ use std::process::ExitCode;
 use clap::Parser;
 use colored::Colorize;
 
+use crate::error::DocValidationError;
 use crate::scanner::{find_files, scan_file};
-use crate::validator::ValidationResult;
 
 /// GTS Documentation Validator (DE0903)
 ///
@@ -45,6 +50,7 @@ use crate::validator::ValidationResult;
 #[derive(Parser, Debug)]
 #[command(name = "gts-docs-validator")]
 #[command(author, version, about, long_about = None)]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Paths to scan (files or directories)
     /// Defaults to: docs, modules, libs, examples
@@ -70,6 +76,22 @@ struct Cli {
     /// Show verbose output including file scanning progress
     #[arg(long, short = 'v')]
     verbose: bool,
+
+    /// Maximum file size in bytes (default: 10 MB)
+    #[arg(long, default_value = "10485760")]
+    max_file_size: u64,
+
+    /// Scan JSON/YAML object keys for GTS identifiers (default: off)
+    #[arg(long)]
+    scan_keys: bool,
+
+    /// Strict mode: require all GTS identifiers to be perfectly formatted
+    /// (default: off, uses stricter discovery regex that catches malformed IDs)
+    ///
+    /// When enabled, uses permissive regex to catch and report ALL malformed GTS IDs.
+    /// When disabled (default), only validates well-formed patterns (fewer false positives).
+    #[arg(long)]
+    strict: bool,
 }
 
 /// Default directories to scan if none specified
@@ -122,127 +144,89 @@ fn main() -> ExitCode {
     }
 
     // Scan all files and collect errors
-    let mut result = ValidationResult::new(files.len());
+    let mut errors: Vec<DocValidationError> = Vec::new();
 
     for file_path in &files {
-        if cli.verbose {
-            eprintln!("  Scanning: {}", file_path.display());
-        }
-
-        let file_errors = scan_file(file_path, cli.vendor.as_deref(), cli.verbose);
-        result.add_errors(file_errors);
+        let file_errors = scan_file(
+            file_path,
+            cli.vendor.as_deref(),
+            cli.verbose,
+            cli.max_file_size,
+            cli.scan_keys,
+            cli.strict,
+        );
+        errors.extend(file_errors);
     }
 
     // Output results
     if cli.json {
-        print_json_results(&result);
+        print_json_results(&errors, files.len());
     } else {
-        print_results(&result, cli.verbose);
+        print_results(&errors, files.len(), cli.verbose);
     }
 
-    if result.is_ok() {
+    if errors.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
 }
 
-fn print_json_results(result: &ValidationResult) {
+fn print_json_results(errors: &[DocValidationError], files_scanned: usize) {
     let output = serde_json::json!({
-        "files_scanned": result.files_scanned,
-        "errors_count": result.errors.len(),
-        "ok": result.is_ok(),
-        "errors": result.errors.iter().map(|e| {
-            serde_json::json!({
-                "file": e.file.display().to_string(),
-                "line": e.line,
-                "column": e.column,
-                "gts_id": e.gts_id,
-                "error": e.error,
-            })
-        }).collect::<Vec<_>>(),
+        "files_scanned": files_scanned,
+        "errors_count": errors.len(),
+        "ok": errors.is_empty(),
+        "errors": errors
     });
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output).expect("Failed to serialize JSON")
-    );
+    let json = serde_json::to_string_pretty(&output).expect("Failed to serialize results");
+    println!("{json}");
 }
 
-fn print_results(result: &ValidationResult, verbose: bool) {
+fn print_results(errors: &[DocValidationError], files_scanned: usize, verbose: bool) {
     println!();
     println!("{}", "=".repeat(80));
     println!("  {}", "GTS DOCUMENTATION VALIDATOR (DE0903)".bold());
     println!("{}", "=".repeat(80));
     println!();
-    println!("  Files scanned: {}", result.files_scanned);
-    println!("  Errors found:  {}", result.errors.len());
+    println!("  Files scanned: {files_scanned}");
+    println!("  Errors found:  {}", errors.len());
     println!();
 
-    if !result.errors.is_empty() {
+    if !errors.is_empty() {
         println!("{}", "-".repeat(80));
         println!("  {}", "ERRORS".red().bold());
         println!("{}", "-".repeat(80));
 
-        // Group errors by file
-        let mut errors_by_file: std::collections::HashMap<&PathBuf, Vec<_>> =
-            std::collections::HashMap::new();
-        for err in &result.errors {
-            errors_by_file.entry(&err.file).or_default().push(err);
-        }
+        // Print errors
+        for error in errors {
+            println!("{}", error.format_human_readable().red());
 
-        let mut sorted_files: Vec<_> = errors_by_file.keys().collect();
-        sorted_files.sort();
-
-        for file_path in sorted_files {
-            let file_errors = &errors_by_file[file_path];
-            println!("\n  {}:", file_path.display().to_string().yellow());
-
-            let mut sorted_errors: Vec<_> = file_errors.iter().collect();
-            sorted_errors.sort_by_key(|e| e.line);
-
-            for err in sorted_errors {
-                println!(
-                    "    Line {}:{} - {}",
-                    err.line,
-                    err.column,
-                    err.gts_id.cyan()
-                );
-                println!("      Error: {}", err.error.red());
-                if verbose && !err.context.is_empty() {
-                    println!("      Context: {}", err.context.dimmed());
-                }
+            if verbose && !error.context.is_empty() {
+                println!("  Context: {}", error.context.dimmed());
             }
         }
         println!();
     }
 
     println!("{}", "=".repeat(80));
-    if result.is_ok() {
+    if errors.is_empty() {
         println!(
-            "  STATUS: {} {}",
-            "ALL GTS IDENTIFIERS VALID".green().bold(),
-            "\u{2713}".green()
+            "{}",
+            format!("\u{2713} All {files_scanned} files passed validation").green()
         );
     } else {
         println!(
-            "  STATUS: {} {}",
-            format!("{} INVALID GTS IDENTIFIERS FOUND", result.errors.len())
-                .red()
-                .bold(),
-            "\u{2717}".red()
+            "{}",
+            format!("\u{2717} {} invalid GTS identifiers found", errors.len()).red()
         );
         println!();
         println!("  To fix:");
         println!("    - Schema IDs must end with ~ (e.g., gts.x.core.type.v1~)");
-        println!("    - Each segment needs 5 parts: vendor.org.package.type.version");
+        println!("    - Each segment needs 5 parts: vendor.package.namespace.type.version");
         println!("    - No hyphens allowed, use underscores");
         println!("    - Wildcards (*) only in filter/pattern contexts");
-        if result
-            .errors
-            .iter()
-            .any(|e| e.error.contains("Vendor mismatch"))
-        {
+        if errors.iter().any(|e| e.error.contains("Vendor mismatch")) {
             println!("    - Ensure all GTS IDs use the expected vendor");
         }
     }

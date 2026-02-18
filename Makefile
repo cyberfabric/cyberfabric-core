@@ -155,13 +155,10 @@ lint:
 # Uses gts-docs-validator from apps/gts-docs-validator
 # Vendor enforcement is available via the gts-docs-vendor target (--vendor x)
 
-# REDUCING THE SCOPE OF THE VALIDATION UNTIL IT IS STABLE
 gts-docs:
 	cargo run -p gts-docs-validator -- \
 		--exclude "target/*" \
 		--exclude "docs/api/*" \
-		--exclude "*.md" \
-		--exclude "*.json" \
 		docs modules libs examples
 
 ## Validate GTS docs with vendor check (ensures all IDs use vendor "x")
