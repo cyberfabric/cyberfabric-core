@@ -155,7 +155,7 @@ All authorization checks (tenant isolation, source authorization, attribution au
 
 - [ ] `p2` - **ID**: `cpt-cf-uc-principle-storage-separation`
 
-To satisfy `cpt-cf-uc-nfr-query-isolation`, the system **SHOULD** separate operational (write-optimized) and historical (read-optimized) storage. Usage records are always written to the operational database optimized for low-latency ingestion. Historical records are asynchronously replicated or migrated to a separate historical database optimized for analytical queries and long-term retention.
+To satisfy `cpt-cf-uc-nfr-query-isolation`, the system **MUST** separate operational (write-optimized) and historical (read-optimized) storage. Usage records are always written to the operational database optimized for low-latency ingestion. Historical records are asynchronously replicated or migrated to a separate historical database optimized for analytical queries and long-term retention.
 
 This pattern achieves workload isolation:
 - **Operational DB**: Recent usage data (e.g., last 7-30 days), optimized for writes, minimal indexes, supports real-time ingestion without query contention

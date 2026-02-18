@@ -318,7 +318,7 @@ The system **MUST** implement cursor-based pagination for all query APIs. Each p
 
 - [ ] `p3` - **ID**: `cpt-cf-uc-fr-snapshot-reads`
 
-The system **SHOULD** support snapshot reads, allowing clients to query data with a consistent point-in-time view. When a query is initiated with snapshot isolation, all subsequent pagination requests in that query session **MUST** see the dataset as it existed at the snapshot timestamp, regardless of concurrent insertions, updates, or backfill operations.
+The system **MUST** support snapshot reads, allowing clients to query data with a consistent point-in-time view. When a query is initiated with snapshot isolation, all subsequent pagination requests in that query session **MUST** see the dataset as it existed at the snapshot timestamp, regardless of concurrent insertions, updates, or backfill operations.
 
 **Rationale**: Even with cursor-based pagination, concurrent data modifications (late-arriving events, backfill operations) can cause inconsistencies across paginated queries. Snapshot reads provide the strongest consistency guarantee: a billing system paginating through a month of data sees the exact same records on every page, as they existed when the query started. This is marked p3 because cursor-based pagination with stable ordering provides sufficient consistency for most use cases, but snapshot isolation is valuable when absolute consistency is required for auditing or financial reconciliation.
 **Actors**: `cpt-cf-uc-actor-billing-system`, `cpt-cf-uc-actor-monitoring-system`, `cpt-cf-uc-actor-tenant-admin`
@@ -474,7 +474,7 @@ When rate limits are exceeded, the system **MUST** respond with a rate limit err
 
 For HTTP transport specifically, these **MUST** be provided as response headers: `Retry-After` (in seconds), `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`, with HTTP 429 status. For gRPC transport, these **MUST** be provided in response metadata. For Rust API, these **MUST** be provided in error/response structures.
 
-All time-related values are in UTC. Clients **SHOULD** treat missing or unparseable values conservatively (i.e., assume the limit is exhausted and apply a default backoff).
+All time-related values are in UTC. Clients **MUST** treat missing or unparseable values conservatively (i.e., assume the limit is exhausted and apply a default backoff).
 
 **Rationale**: Rate limit metadata enables clients to track quota consumption and schedule retries, reducing wasted requests against an already-exhausted quota. Transport-specific encoding ensures the same information is available regardless of how clients integrate.
 **Actors**: `cpt-cf-uc-actor-usage-source`, `cpt-cf-uc-actor-platform-developer`
@@ -483,7 +483,7 @@ All time-related values are in UTC. Clients **SHOULD** treat missing or unparsea
 
 - [ ] `p2` - **ID**: `cpt-cf-uc-fr-sdk-retry`
 
-The SDK **MUST** buffer usage events in a bounded in-memory queue and retry with exponential backoff and jitter on rate limit errors and backfill conflict errors, honoring the `retry_after_ms` field when present. Under buffer exhaustion or sustained overload, the SDK **MAY** drop oldest events and **MUST** emit loss metrics (count, rate, usage type, timestamp) and **MUST** trigger alerts when drop rate exceeds configurable thresholds. The SDK **MUST NOT** block the calling service due to rate limiting.
+The SDK **MUST** buffer usage events in a bounded in-memory queue and retry with exponential backoff and jitter on rate limit errors and backfill conflict errors, honoring the `retry_after_ms` field when present. Under buffer exhaustion or sustained overload, the SDK will drop oldest events and **MUST** emit loss metrics (count, rate, usage type, timestamp) and **MUST** trigger alerts when drop rate exceeds configurable thresholds. The SDK **MUST NOT** block the calling service due to rate limiting.
 
 **Loss Conditions**: Data loss at the SDK level is acceptable under the following conditions:
 - Buffer exhaustion: The in-memory queue reaches capacity and new events arrive before older events can be successfully retried
