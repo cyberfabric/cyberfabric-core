@@ -876,3 +876,6 @@ The system **MUST** continue accepting usage records even if downstream consumer
 - Cursor encoding format (opaque token vs. base64-encoded position metadata)
 - Snapshot read implementation strategy (storage-native isolation vs. versioning metadata)
 - Cursor and snapshot expiration handling (graceful error responses when expired)
+- Federated-query merge strategy for operational/historical storage split (`cpt-cf-uc-principle-storage-separation`): how to guarantee stable ordering (`cpt-cf-uc-fr-stable-ordering`) when merging results from both tiers (e.g., merge by event timestamp + deterministic tiebreaker, or global sequence/watermark)
+- Cursor semantics for federated queries: cursor token payload format to support pagination across operational and historical storage tiers (must include source shard identifiers, per-source offsets, and global watermark)
+- Migration coordination for federated cursors: how cursors spanning an operational-to-historical migration are handled (e.g., migration watermark in cursor to consult both adapters, or invalidation error requiring cursor refresh)
