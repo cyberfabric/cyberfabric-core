@@ -620,7 +620,614 @@ impl RestClientProvider {
 // but manages tonic::transport::Channel instead of base URL
 ```
 
-#### 3.3 LazyClientError
+#### 3.3 Retry Policy and Idempotency
+
+**Location**: `libs/modkit/src/clients/retry.rs`
+
+The ADR distinguishes between two retry scenarios:
+
+1. **Endpoint resolution retries** — Handled by `RestClientProvider` backoff (inherently idempotent, read-only lookups)
+2. **HTTP request retries** — Requires explicit idempotency handling for mutating operations
+
+##### Retry Policy Configuration
+
+```rust
+/// Retry policy for transient failures.
+#[derive(Debug, Clone)]
+pub struct RetryPolicy {
+    /// Maximum retry attempts (0 = no retries).
+    pub max_retries: u32,
+    /// Status codes that trigger a retry (e.g., 502, 503, 504).
+    pub retryable_status_codes: Vec<u16>,
+    /// Whether to auto-generate idempotency keys for non-GET requests.
+    pub use_idempotency_keys: bool,
+    /// Base delay between retries (exponential backoff applied).
+    pub retry_base_delay: Duration,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 2,
+            retryable_status_codes: vec![502, 503, 504],
+            use_idempotency_keys: true,
+            retry_base_delay: Duration::from_millis(100),
+        }
+    }
+}
+```
+
+Add to `ClientConfig`:
+
+```rust
+pub struct ClientConfig {
+    // ... existing fields ...
+    
+    /// Retry policy for transient failures.
+    pub retry_policy: RetryPolicy,
+}
+```
+
+##### Idempotency Key Strategy
+
+For non-idempotent HTTP methods (POST, PATCH), the lazy client generates an `Idempotency-Key` header:
+
+```rust
+impl LazyCalculatorClient {
+    async fn create_calculation(&self, ctx: &SecurityContext, input: CreateInput) -> Result<Calculation, CalculatorError> {
+        let base_url = self.provider.get_base_url().await?;
+        let url = format!("{}/api/v1/calculations", base_url);
+        
+        // Generate idempotency key for POST request
+        let idempotency_key = Uuid::new_v4().to_string();
+        
+        self.execute_with_retry(|| async {
+            self.provider.http_client()
+                .post(&url)
+                .header("x-tenant-id", ctx.tenant_id_str())
+                .header("Idempotency-Key", &idempotency_key)  // Same key for all retries
+                .json(&input)
+                .send()
+                .await
+        }).await
+    }
+}
+```
+
+##### Idempotency Classification by HTTP Method
+
+| Method | Idempotent? | Retry Strategy |
+|--------|-------------|----------------|
+| GET, HEAD, OPTIONS | ✅ Yes | Retry on 5xx/timeout |
+| PUT, DELETE | ✅ Usually | Retry on 5xx/timeout |
+| POST, PATCH | ❌ No | Retry only with `Idempotency-Key` header |
+
+##### Server-Side Contract
+
+OoP modules receiving requests with `Idempotency-Key` header **must**:
+
+1. Store `(idempotency_key, tenant_id) → response` mapping with TTL (recommended: 24 hours)
+2. Return cached response if key+tenant combination seen before
+3. Process request normally if key is new
+
+```rust
+// Example server-side middleware (in OoP module)
+async fn idempotency_middleware(
+    State(cache): State<IdempotencyCache>,
+    headers: HeaderMap,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(key) = headers.get("Idempotency-Key") else {
+        return next.run(request).await;
+    };
+    
+    let tenant_id = headers.get("x-tenant-id").map(|v| v.to_str().unwrap_or(""));
+    let cache_key = format!("{}:{}", tenant_id.unwrap_or(""), key.to_str().unwrap_or(""));
+    
+    // Check for cached response
+    if let Some(cached) = cache.get(&cache_key).await {
+        return cached;
+    }
+    
+    // Process request and cache response
+    let response = next.run(request).await;
+    cache.set(&cache_key, &response, Duration::from_secs(86400)).await;
+    response
+}
+```
+
+##### Scope Note
+
+This ADR focuses on **client-side** idempotency (generating keys, retry logic). Server-side idempotency handling is the responsibility of each OoP module and should follow the contract above. A future ADR may standardize server-side idempotency middleware in ModKit.
+
+---
+
+#### 3.4 Circuit Breaking and Fallback Strategy
+
+**Location**: `libs/modkit/src/clients/circuit_breaker.rs`
+
+Circuit breaking prevents cascading failures by temporarily stopping requests to a failing OoP module, allowing it time to recover.
+
+##### Circuit Breaker States
+
+```text
+     ┌────────────────────────────────────────────────────────────┐
+     │                                                            │
+     ▼                                                            │
+┌─────────┐   failure_threshold  ┌──────┐   reset_timeout   ┌─────────────┐
+│ CLOSED  │ ──────────────────▶  │ OPEN │ ────────────────▶ │ HALF-OPEN   │
+│(normal) │   reached            │(fail │   elapsed         │(probe)      │
+└─────────┘                      │ fast)│                   └──────┬──────┘
+     ▲                           └──────┘                          │
+     │                               ▲                             │
+     │                               │ probe fails                 │
+     │                               └─────────────────────────────┤
+     │                                                             │
+     │                          probe succeeds                     │
+     └─────────────────────────────────────────────────────────────┘
+```
+
+##### Circuit Breaker Configuration
+
+```rust
+/// Circuit breaker configuration.
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerConfig {
+    /// Number of consecutive failures before opening the circuit.
+    pub failure_threshold: u32,
+    /// Duration to keep circuit open before allowing a probe request.
+    pub reset_timeout: Duration,
+    /// Number of successful probes required to close the circuit.
+    pub success_threshold: u32,
+    /// Whether circuit breaker is enabled.
+    pub enabled: bool,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            failure_threshold: 5,
+            reset_timeout: Duration::from_secs(30),
+            success_threshold: 2,
+            enabled: true,
+        }
+    }
+}
+```
+
+Add to `ClientConfig`:
+
+```rust
+pub struct ClientConfig {
+    // ... existing fields ...
+    
+    /// Circuit breaker configuration.
+    pub circuit_breaker: CircuitBreakerConfig,
+    /// Optional fallback behavior when circuit is open.
+    pub fallback: FallbackStrategy,
+}
+```
+
+##### Circuit Breaker Implementation
+
+```rust
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+pub struct CircuitBreaker {
+    config: CircuitBreakerConfig,
+    state: parking_lot::RwLock<CircuitState>,
+    failure_count: AtomicU32,
+    success_count: AtomicU32,
+    last_failure_time: AtomicU64,  // Unix timestamp millis
+}
+
+impl CircuitBreaker {
+    pub fn new(config: CircuitBreakerConfig) -> Self {
+        Self {
+            config,
+            state: parking_lot::RwLock::new(CircuitState::Closed),
+            failure_count: AtomicU32::new(0),
+            success_count: AtomicU32::new(0),
+            last_failure_time: AtomicU64::new(0),
+        }
+    }
+
+    /// Check if request should be allowed.
+    pub fn allow_request(&self) -> bool {
+        if !self.config.enabled {
+            return true;
+        }
+
+        let state = *self.state.read();
+        match state {
+            CircuitState::Closed => true,
+            CircuitState::Open => {
+                // Check if reset timeout has elapsed
+                let last_failure = self.last_failure_time.load(Ordering::Relaxed);
+                let elapsed = Duration::from_millis(
+                    now_millis().saturating_sub(last_failure)
+                );
+                if elapsed >= self.config.reset_timeout {
+                    // Transition to half-open
+                    *self.state.write() = CircuitState::HalfOpen;
+                    self.success_count.store(0, Ordering::Relaxed);
+                    true
+                } else {
+                    false
+                }
+            }
+            CircuitState::HalfOpen => true,  // Allow probe requests
+        }
+    }
+
+    /// Record a successful request.
+    pub fn record_success(&self) {
+        self.failure_count.store(0, Ordering::Relaxed);
+        
+        let state = *self.state.read();
+        if state == CircuitState::HalfOpen {
+            let successes = self.success_count.fetch_add(1, Ordering::Relaxed) + 1;
+            if successes >= self.config.success_threshold {
+                *self.state.write() = CircuitState::Closed;
+                tracing::info!("Circuit breaker closed after successful probes");
+            }
+        }
+    }
+
+    /// Record a failed request.
+    pub fn record_failure(&self) {
+        self.last_failure_time.store(now_millis(), Ordering::Relaxed);
+        self.success_count.store(0, Ordering::Relaxed);
+        
+        let state = *self.state.read();
+        match state {
+            CircuitState::Closed => {
+                let failures = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
+                if failures >= self.config.failure_threshold {
+                    *self.state.write() = CircuitState::Open;
+                    tracing::warn!(
+                        threshold = self.config.failure_threshold,
+                        "Circuit breaker opened after consecutive failures"
+                    );
+                }
+            }
+            CircuitState::HalfOpen => {
+                // Probe failed, reopen circuit
+                *self.state.write() = CircuitState::Open;
+                tracing::warn!("Circuit breaker reopened after probe failure");
+            }
+            CircuitState::Open => {}  // Already open
+        }
+    }
+
+    pub fn state(&self) -> CircuitState {
+        *self.state.read()
+    }
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+```
+
+##### Fallback Strategy
+
+When the circuit is open, the client can apply a fallback strategy:
+
+```rust
+/// Fallback behavior when circuit breaker is open.
+#[derive(Debug, Clone, Default)]
+pub enum FallbackStrategy {
+    /// Return error immediately (fail fast). Default behavior.
+    #[default]
+    FailFast,
+    /// Return a cached response if available.
+    CachedResponse {
+        /// Maximum age of cached response to use.
+        max_age: Duration,
+    },
+    /// Return a static default value (SDK must implement).
+    StaticDefault,
+    /// Call an alternative service.
+    AlternativeService {
+        /// Module name of the fallback service.
+        fallback_module: &'static str,
+    },
+}
+```
+
+##### Integration with RestClientProvider
+
+```rust
+impl RestClientProvider {
+    pub async fn execute<F, T, E>(&self, request_fn: F) -> Result<T, E>
+    where
+        F: FnOnce(&str) -> Fut,
+        Fut: Future<Output = Result<T, E>>,
+        E: From<RestProviderError>,
+    {
+        // Check circuit breaker
+        if !self.circuit_breaker.allow_request() {
+            tracing::debug!(module = self.module_name, "Circuit breaker is open");
+            return self.apply_fallback().await;
+        }
+
+        let base_url = self.get_base_url().await?;
+        
+        match request_fn(&base_url).await {
+            Ok(response) => {
+                self.circuit_breaker.record_success();
+                self.reset_failures();
+                Ok(response)
+            }
+            Err(e) => {
+                self.circuit_breaker.record_failure();
+                self.evict();
+                Err(e)
+            }
+        }
+    }
+
+    async fn apply_fallback<T, E>(&self) -> Result<T, E>
+    where
+        E: From<RestProviderError>,
+    {
+        match &self.config.fallback {
+            FallbackStrategy::FailFast => {
+                Err(RestProviderError::CircuitOpen {
+                    module_name: self.module_name,
+                }.into())
+            }
+            FallbackStrategy::CachedResponse { max_age } => {
+                // Implementation depends on response caching layer
+                todo!("Return cached response if available and fresh")
+            }
+            FallbackStrategy::StaticDefault => {
+                // SDK must override this behavior
+                Err(RestProviderError::CircuitOpen {
+                    module_name: self.module_name,
+                }.into())
+            }
+            FallbackStrategy::AlternativeService { fallback_module } => {
+                // Resolve and call alternative module
+                todo!("Route to fallback module")
+            }
+        }
+    }
+}
+```
+
+##### Error Type Extension
+
+```rust
+pub enum RestProviderError {
+    // ... existing variants ...
+
+    #[error("circuit breaker open for module: {module_name}")]
+    CircuitOpen { module_name: &'static str },
+}
+```
+
+##### Circuit Breaker vs Backoff
+
+| Mechanism | Purpose | Scope |
+|-----------|---------|-------|
+| **Backoff** | Rate-limit reconnection attempts after endpoint resolution failure | Endpoint discovery |
+| **Circuit Breaker** | Stop all requests to a failing service, allow recovery | Request execution |
+
+Both work together:
+- Backoff prevents hammering the directory service
+- Circuit breaker prevents hammering a failing OoP module
+
+##### Observability
+
+Circuit breaker state changes should emit metrics and logs:
+
+```rust
+// Metrics (example with prometheus)
+circuit_breaker_state.with_label_values(&[module_name]).set(state as i64);
+circuit_breaker_failures_total.with_label_values(&[module_name]).inc();
+circuit_breaker_opens_total.with_label_values(&[module_name]).inc();
+
+// Structured logging
+tracing::warn!(
+    module = module_name,
+    state = ?new_state,
+    failure_count = failures,
+    "Circuit breaker state changed"
+);
+```
+
+---
+
+#### 3.5 Non-Existent Modules and API Version Incompatibility
+
+##### Non-Existent Module Handling
+
+When a lazy client attempts to resolve a module that doesn't exist (never registered, misconfigured, or permanently removed):
+
+```rust
+// DirectoryClient returns error
+async fn resolve_rest_service(&self, module_name: &str) -> Result<RestEndpoint> {
+    if let Some((_, _, ep)) = self.mgr.pick_rest_endpoint_round_robin(module_name) {
+        return Ok(RestEndpoint::new(ep.uri));
+    }
+    
+    // Module not found - could be:
+    // 1. Module never registered (misconfiguration)
+    // 2. Module temporarily unavailable (will retry with backoff)
+    // 3. Module permanently removed (configuration error)
+    anyhow::bail!("REST service not found or no healthy instances: {module_name}")
+}
+```
+
+**Behavior:**
+1. `RestClientProvider::get_base_url()` returns `RestProviderError::ServiceNotFound`
+2. Backoff is applied (same as transient failures)
+3. After `max_retries`, circuit breaker opens
+4. Lazy client returns SDK-specific error (e.g., `CalculatorError::Unavailable`)
+5. REST handler maps to **HTTP 424 Failed Dependency**
+
+**Detection vs Transient Failure:**
+
+The system cannot distinguish between "module doesn't exist" and "module temporarily unavailable" at runtime. This is intentional:
+- Avoids hardcoding module existence assumptions
+- Allows modules to be deployed/undeployed dynamically
+- Same graceful degradation path for both cases
+
+For **startup validation** of required dependencies, use `ClientAvailabilityPolicy::Required`:
+
+```rust
+impl ClientDescriptor for CalculatorClientDescriptor {
+    // ...
+    fn config() -> ClientConfig {
+        ClientConfig {
+            availability_policy: ClientAvailabilityPolicy::Required,
+            ..ClientConfig::rest()
+        }
+    }
+}
+```
+
+With `Required` policy, the module's readiness probe will fail until the dependency is resolvable.
+
+##### API Version Incompatibility
+
+When the OoP module's API version is incompatible with the client SDK:
+
+**Detection Points:**
+
+| Detection Point | Error Type | Handling |
+|-----------------|------------|----------|
+| **Response parsing** | `ParseError` (missing/extra fields) | SDK error, HTTP 502 |
+| **HTTP 404 on endpoint** | Endpoint doesn't exist in target version | SDK error, HTTP 424 |
+| **HTTP 400 Bad Request** | Request schema mismatch | SDK error, HTTP 502 |
+| **Explicit version header** | `X-API-Version` mismatch | SDK error, HTTP 424 |
+
+**Version Header Strategy (Recommended):**
+
+SDKs should include an API version header, and OoP modules should validate it:
+
+```rust
+// Client-side (LazyCalculatorClient)
+impl LazyCalculatorClient {
+    const API_VERSION: &'static str = "v1";
+
+    async fn add(&self, ctx: &SecurityContext, a: i64, b: i64) -> Result<i64, CalculatorError> {
+        let base_url = self.provider.get_base_url().await?;
+        let url = format!("{}/api/v1/calculator/add", base_url);
+        
+        let response = self.provider.http_client()
+            .post(&url)
+            .header("X-API-Version", Self::API_VERSION)
+            .header("x-tenant-id", ctx.tenant_id_str())
+            .json(&serde_json::json!({ "a": a, "b": b }))
+            .send()
+            .await?;
+
+        // Check for version mismatch response
+        if response.status() == http::StatusCode::NOT_ACCEPTABLE {
+            return Err(CalculatorError::VersionMismatch {
+                expected: Self::API_VERSION.to_string(),
+                actual: response.headers()
+                    .get("X-API-Version")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("unknown")
+                    .to_string(),
+            });
+        }
+        // ... rest of handling
+    }
+}
+```
+
+```rust
+// Server-side middleware (OoP module)
+async fn version_check_middleware(
+    headers: HeaderMap,
+    request: Request,
+    next: Next,
+) -> Response {
+    const SUPPORTED_VERSIONS: &[&str] = &["v1", "v1.1"];
+    
+    if let Some(client_version) = headers.get("X-API-Version") {
+        let version = client_version.to_str().unwrap_or("");
+        if !SUPPORTED_VERSIONS.contains(&version) {
+            return Response::builder()
+                .status(StatusCode::NOT_ACCEPTABLE)
+                .header("X-API-Version", SUPPORTED_VERSIONS.join(", "))
+                .body(format!(
+                    "API version '{}' not supported. Supported: {:?}",
+                    version, SUPPORTED_VERSIONS
+                ))
+                .unwrap();
+        }
+    }
+    
+    next.run(request).await
+}
+```
+
+**Error Type Extension:**
+
+```rust
+pub enum LazyClientError {
+    // ... existing variants ...
+
+    #[error("API version mismatch: client={expected}, server={actual}")]
+    VersionMismatch {
+        expected: String,
+        actual: String,
+    },
+
+    #[error("module not found: {module_name}")]
+    ModuleNotFound {
+        module_name: &'static str,
+    },
+}
+```
+
+**HTTP Status Code Mapping:**
+
+| Error | HTTP Status | Rationale |
+|-------|-------------|-----------|
+| Module not found | 424 Failed Dependency | Dependency unavailable |
+| Version mismatch | 424 Failed Dependency | Dependency incompatible |
+| Parse error (schema drift) | 502 Bad Gateway | Upstream returned invalid response |
+| Request rejected (400) | 502 Bad Gateway | Upstream rejected our request |
+
+##### Version Compatibility Matrix
+
+SDKs should document their compatibility:
+
+```rust
+/// Calculator SDK v2.0
+/// 
+/// ## API Compatibility
+/// 
+/// | SDK Version | Module Versions Supported |
+/// |-------------|---------------------------|
+/// | 2.0.x       | calculator v2.0+          |
+/// | 1.5.x       | calculator v1.5 - v1.9    |
+/// | 1.0.x       | calculator v1.0 - v1.4    |
+pub struct CalculatorClientDescriptor;
+```
+
+---
+
+#### 3.6 LazyClientError
 
 **Location**: `libs/modkit/src/clients/error.rs`
 
@@ -635,6 +1242,17 @@ pub enum LazyClientError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[error("module not found: {module_name}")]
+    ModuleNotFound {
+        module_name: &'static str,
+    },
+
+    #[error("API version mismatch: client={expected}, server={actual}")]
+    VersionMismatch {
+        expected: String,
+        actual: String,
+    },
+
     #[error("request failed: {0}")]
     RequestFailed(String),
 
@@ -646,7 +1264,17 @@ impl LazyClientError {
     /// Returns true if this error indicates the service is temporarily unavailable.
     /// REST handlers should map this to HTTP 424 Failed Dependency.
     pub fn is_dependency_unavailable(&self) -> bool {
-        matches!(self, LazyClientError::Unavailable { .. })
+        matches!(
+            self,
+            LazyClientError::Unavailable { .. }
+                | LazyClientError::ModuleNotFound { .. }
+                | LazyClientError::VersionMismatch { .. }
+        )
+    }
+
+    /// Returns true if this error indicates a permanent incompatibility.
+    pub fn is_permanent(&self) -> bool {
+        matches!(self, LazyClientError::VersionMismatch { .. })
     }
 }
 ```
