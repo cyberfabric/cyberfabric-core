@@ -16,6 +16,8 @@ pub type OtelLayer = tracing_opentelemetry::OpenTelemetryLayer<
 #[cfg(not(feature = "otel"))]
 pub type OtelLayer = ();
 
+pub use super::observability::TokioConsoleLayer;
+
 // Keep a guard for non-blocking console to avoid being dropped.
 static CONSOLE_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
     std::sync::OnceLock::new();
@@ -182,7 +184,12 @@ fn create_rotating_writer_at_path(
 
 /// Unified initializer used by both functions above.
 #[allow(unknown_lints, de1301_no_print_macros)] // runs before tracing subscriber is installed
-pub fn init_logging_unified(cfg: &LoggingConfig, base_dir: &Path, otel_layer: Option<OtelLayer>) {
+pub fn init_logging_unified(
+    cfg: &LoggingConfig,
+    base_dir: &Path,
+    otel_layer: Option<OtelLayer>,
+    tokio_console_layer: Option<TokioConsoleLayer>,
+) {
     // Bridge `log` → `tracing` *before* installing the subscriber
     if let Err(e) = tracing_log::LogTracer::init() {
         eprintln!("LogTracer init skipped: {e}");
@@ -192,7 +199,7 @@ pub fn init_logging_unified(cfg: &LoggingConfig, base_dir: &Path, otel_layer: Op
 
     if data.crate_sections.is_empty() && data.default_section.is_none() {
         // Minimal fallback (INFO to console; honors RUST_LOG)
-        init_minimal(otel_layer);
+        init_minimal(otel_layer, tokio_console_layer);
         return;
     }
 
@@ -213,6 +220,7 @@ pub fn init_logging_unified(cfg: &LoggingConfig, base_dir: &Path, otel_layer: Op
         file_router,
         console_format,
         otel_layer,
+        tokio_console_layer,
     );
 }
 
@@ -367,6 +375,8 @@ fn install_subscriber(
     file_router: MultiFileRouter,
     console_format: ConsoleFormat,
     #[cfg_attr(not(feature = "otel"), allow(unused_variables))] otel_layer: Option<OtelLayer>,
+    #[cfg_attr(not(feature = "tokio-console"), allow(unused_variables))]
+    tokio_console_layer: Option<TokioConsoleLayer>,
 ) {
     use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt};
 
@@ -427,8 +437,9 @@ fn install_subscriber(
     // Build subscriber:
     // 1) OTEL first (because your OtelLayer is bound to `Registry`);
     //    also filter OTEL by the SAME console targets from YAML.
-    // 2) Then EnvFilter (caps console/file if RUST_LOG is set).
-    // 3) Then console (text or json) + file fmt layers.
+    // 2) Tokio Console level.
+    // 3) Then EnvFilter (caps console/file if RUST_LOG is set).
+    // 4) Then console (text or json) + file fmt layers.
     let subscriber = {
         let base = Registry::default();
 
@@ -438,6 +449,11 @@ fn install_subscriber(
             base.with(otel_opt)
         };
         #[cfg(not(feature = "otel"))]
+        let base = base;
+
+        #[cfg(feature = "tokio-console")]
+        let base = base.with(tokio_console_layer);
+        #[cfg(not(feature = "tokio-console"))]
         let base = base;
 
         let base = base.with(env);
@@ -451,6 +467,8 @@ fn install_subscriber(
 
 fn init_minimal(
     #[cfg_attr(not(feature = "otel"), allow(unused_variables))] otel: Option<OtelLayer>,
+    #[cfg_attr(not(feature = "tokio-console"), allow(unused_variables))]
+    tokio_console_layer: Option<TokioConsoleLayer>,
 ) {
     use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt};
 
@@ -469,6 +487,11 @@ fn init_minimal(
         #[cfg(feature = "otel")]
         let base = base.with(otel);
         #[cfg(not(feature = "otel"))]
+        let base = base;
+
+        #[cfg(feature = "tokio-console")]
+        let base = base.with(tokio_console_layer);
+        #[cfg(not(feature = "tokio-console"))]
         let base = base;
 
         base.with(env).with(fmt_layer)

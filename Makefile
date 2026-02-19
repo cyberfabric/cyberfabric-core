@@ -149,7 +149,7 @@ geiger:
 
 ## Check there are no compile time warnings
 lint:
-	RUSTFLAGS="-D warnings" cargo check --workspace --all-targets --all-features
+	RUSTFLAGS="-D warnings --cfg tokio_unstable" cargo check --workspace --all-targets --all-features
 
 ## Validate GTS identifiers in .md and .json files (DE0903)
 # Uses gts-docs-validator from apps/gts-docs-validator

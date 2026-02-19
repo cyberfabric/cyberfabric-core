@@ -34,7 +34,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
     env:
-      RUSTFLAGS: "-C debuginfo=0"
+      RUSTFLAGS: "-C debuginfo=0 --cfg tokio_unstable"
     steps:
       - name: Force LF in working tree (w/a for Windows)
         if: runner.os == 'Windows'
@@ -93,7 +93,7 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: "-C debuginfo=0"
+      RUSTFLAGS: "-C debuginfo=0 --cfg tokio_unstable"
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -202,7 +202,7 @@ jobs:
       # Generate lcov.info for upload. Customize flags/features as needed.
       - name: Coverage (lcov)
         env:
-          RUSTFLAGS: "-C debuginfo=0 --cfg coverage_nightly"
+          RUSTFLAGS: "-C debuginfo=0 --cfg coverage_nightly --cfg tokio_unstable"
           CARGO_LLVM_COV_TARGET_DIR: llvm-cov-target
           CARGO_LLVM_COV_BUILD_DIR: llvm-cov-build
         run: |
@@ -245,7 +245,7 @@ jobs:
       - name: Run dylint tests
         working-directory: dylint_lints
         env:
-          RUSTFLAGS: "-C debuginfo=0"
+          RUSTFLAGS: "-C debuginfo=0 --cfg tokio_unstable"
         run: cargo test
 
       - name: Run dylint on all crates

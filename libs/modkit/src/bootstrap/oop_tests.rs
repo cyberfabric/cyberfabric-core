@@ -24,6 +24,7 @@ fn minimal_app_config() -> AppConfig {
         database: None,
         logging: default_logging_config(),
         tracing: None,
+        tokio_console: None,
         modules_dir: None,
         modules: HashMap::new(),
     }
