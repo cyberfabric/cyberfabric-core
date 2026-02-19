@@ -102,6 +102,13 @@ modules:
         title: "HyperSpot API"
         version: "0.1.0"
         description: "HyperSpot Server API Documentation"
+
+      defaults:
+        body_limit_bytes: 64000000
+        rate_limit:
+          rps: 1000
+          burst: 200
+          in_flight: 64
       
       # Authentication Configuration
       auth_disabled: true
@@ -166,6 +173,13 @@ modules:
       default_page_size: 5
       max_page_size: 100
 
+  simple-user-settings:
+    database:
+      server: "sqlite_users"
+      file: "settings.db"
+    config:
+      max_field_length: 100
+
   tenant-resolver:
     config:
       vendor: "Fabrikam"
@@ -179,36 +193,37 @@ modules:
       tenants:
         # Root tenant (company level)
         - id: "00000000000000000000000000000001"
+          parent_id: null
           status: ACTIVE
           is_accessible_by_parent: true
 
         # Division 1: Engineering
-        - id: "00000000000000000000000000000010"
+        - id: "00000000000000000000000000000002"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
 
         # Division 2: Sales
-        - id: "00000000000000000000000000000011"
+        - id: "00000000000000000000000000000005"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
 
-        # Department under Engineering: Backend
-        - id: "00000000000000000000000000000100"
-          parent_id: "00000000000000000000000000000010"
-          status: ACTIVE
-          is_accessible_by_parent: true
-
         # Department under Engineering: Frontend (soft-deleted, not accessible)
-        - id: "00000000000000000000000000000101"
-          parent_id: "00000000000000000000000000000010"
+        - id: "00000000000000000000000000000003"
+          parent_id: "00000000000000000000000000000002"
           status: SOFT_DELETED
           is_accessible_by_parent: false
 
+        # Department under Engineering: Backend
+        - id: "00000000000000000000000000000004"
+          parent_id: "00000000000000000000000000000002"
+          status: ACTIVE
+          is_accessible_by_parent: true
+
         # Department under Sales: Enterprise
-        - id: "00000000000000000000000000000110"
-          parent_id: "00000000000000000000000000000011"
+        - id: "00000000000000000000000000000006"
+          parent_id: "00000000000000000000000000000005"
           status: ACTIVE
           is_accessible_by_parent: true
 

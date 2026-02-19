@@ -11,8 +11,13 @@ workspace = true
 
 [features]
 default = ["odata"]
-odata = []          # enable streaming API with typed queries
-integration = []    # gate integration tests
+odata = []                  # enable streaming API with typed queries
+integration = ["db-sqlite"] # gate integration tests
+
+# Database driver selection - choose one at build time
+db-sqlite = ["sea-orm/sqlx-sqlite", "sea-orm-migration/sqlx-sqlite", "modkit-db/sqlite"]
+db-pg = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "modkit-db/pg"]
+db-mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql", "modkit-db/mysql"]
 
 [dependencies]
 # SDK - public API, models, and errors
@@ -51,13 +56,12 @@ uuid = { workspace = true }
 
 # Database - SeaORM
 sea-orm = { workspace = true, features = [
-    "sqlx-sqlite",
     "runtime-tokio-rustls",
     "macros",
     "with-time",
     "with-uuid",
 ] }
-sea-orm-migration = { workspace = true, features = ["sqlx-sqlite"] }
+sea-orm-migration = { workspace = true, features = [] }
 
 # Error handling
 thiserror = { workspace = true }

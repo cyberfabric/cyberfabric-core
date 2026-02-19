@@ -80,7 +80,7 @@ async def test_list_upstreams_includes_created(
 async def test_update_upstream_alias(
     oagw_base_url, oagw_headers, mock_upstream_url, mock_upstream,
 ):
-    """PUT /oagw/v1/upstreams/{id} updates the alias."""
+    """PATCH /oagw/v1/upstreams/{id} updates the alias."""
     _ = mock_upstream
     alias = unique_alias("mgmt-upd")
     new_alias = unique_alias("mgmt-upd-v2")
@@ -90,7 +90,7 @@ async def test_update_upstream_alias(
         )
         uid = upstream["id"]
 
-        resp = await client.put(
+        resp = await client.patch(
             f"{oagw_base_url}/oagw/v1/upstreams/{uid}",
             headers={**oagw_headers, "content-type": "application/json"},
             json={"alias": new_alias},

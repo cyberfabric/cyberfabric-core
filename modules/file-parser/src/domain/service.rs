@@ -52,7 +52,7 @@ pub struct FileParserInfo {
 }
 
 impl FileParserService {
-    /// Create a new service with the given parsers
+    /// Create a new service with the given parsers.
     #[must_use]
     pub fn new(parsers: Vec<Arc<dyn FileParserBackend>>, config: ServiceConfig) -> Self {
         Self { parsers, config }
@@ -96,7 +96,7 @@ impl FileParserService {
         Self::validate_local_path(path)?;
 
         // Canonicalize to resolve symlinks. This also serves as the
-        // existence check — canonicalize fails with NotFound on missing paths.
+        // existence check - canonicalize fails with NotFound on missing paths.
         let canonical = path.canonicalize().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 DomainError::file_not_found(path.display().to_string())

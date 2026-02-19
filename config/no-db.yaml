@@ -24,3 +24,8 @@ modules:
       enable_docs: true
       cors_enabled: true
       auth_disabled: true
+
+  # File parser module configuration (no database needed)
+  file-parser:
+    config:
+      allowed_local_base_dir: /tmp

@@ -57,7 +57,8 @@ def mock_upstream():
 
     # Parse port from URL.
     port = int(url.rsplit(":", 1)[-1].split("/")[0])
-    server = MockUpstreamServer(host="127.0.0.1", port=port)
+    bind_host = "0.0.0.0" if os.getenv("E2E_DOCKER_MODE") else "127.0.0.1"
+    server = MockUpstreamServer(host=bind_host, port=port)
 
     # Run the mock server in a background thread with its own event loop
     # so it can actually serve requests while tests run.

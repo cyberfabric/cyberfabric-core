@@ -1,4 +1,72 @@
+# Common environment variables for all HyperSpot API services
+x-common-env: &common-env
+  RUST_LOG: info
+  APP__MODULES__api_gateway__CONFIG__BIND_ADDR: "0.0.0.0:8086"
+  APP__MODULES__api_gateway__CONFIG__ENABLE_DOCS: "true"
+  APP__MODULES__api_gateway__CONFIG__CORS_ENABLED: "true"
+
+# Common configuration for all HyperSpot API services
+x-hyperspot-api-common: &hyperspot-api-common
+  image: hyperspot-api:e2e
+  build:
+    context: ../..
+    dockerfile: testing/docker/hyperspot.Dockerfile
+  ports:
+    - "8086:8086"
+  extra_hosts:
+    # Allow container to access host machine via host.docker.internal
+    - "host.docker.internal:host-gateway"
+  healthcheck:
+    test: ["CMD-SHELL", "curl -f http://localhost:8086/healthz || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 60s
+  command: ["/app/hyperspot-server", "--config", "/app/config/e2e-local.yaml"]
+
 services:
+  # PostgreSQL database service
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: hyperspot
+      POSTGRES_PASSWORD: hyperspot_pass
+      POSTGRES_DB: hyperspot_db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hyperspot -d hyperspot_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # MariaDB database service
+  mariadb:
+    image: mariadb:11
+    profiles: ["mariadb"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pass
+      MYSQL_DATABASE: hyperspot_db
+      MYSQL_USER: hyperspot
+      MYSQL_PASSWORD: hyperspot_pass
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./init-mariadb.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Mock HTTP service for testing
   mock:
     build:
       context: ..
@@ -6,32 +74,61 @@ services:
     ports:
       - "18080:8080"  # Optional host access
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/ping')" ]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/ping')"]
       interval: 5s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 30s
 
-  file-parser-api:
-    image: hyperspot-api:e2e
-    build:
-      context: ../..
-      dockerfile: testing/docker/hyperspot.Dockerfile
-    ports:
-      - "8086:8086"
-    extra_hosts:
-      # Allow container to access host machine via host.docker.internal
-      - "host.docker.internal:host-gateway"
-    environment:
-      # No external dependencies needed for file-parser module
-      - RUST_LOG=info
-      - APP__MODULES__api_gateway__CONFIG__BIND_ADDR=0.0.0.0:8086
-      - APP__MODULES__api_gateway__CONFIG__ENABLE_DOCS=true
-      - APP__MODULES__api_gateway__CONFIG__CORS_ENABLED=true
+  # HyperSpot API without database (default profile)
+  hyperspot_api:
+    <<: *hyperspot-api-common
+    profiles: ["default"]
+    environment: *common-env
     depends_on:
       mock:
         condition: service_healthy
-    # No external dependencies required for file-parser module
-    # (file-parser doesn't need Postgres, MinIO, etc.)
-    # Readiness is checked by the Makefile e2e target
 
+  # HyperSpot API with PostgreSQL
+  hyperspot_api_pg:
+    <<: *hyperspot-api-common
+    image: hyperspot-api-postgres:e2e
+    profiles: ["postgres"]
+    environment:
+      <<: *common-env
+      # Module-specific database credentials
+      USERS_INFO_DB_PASSWORD: users_info_pass
+      SETTINGS_DB_PASSWORD: settings_pass
+    command:
+      - "/app/hyperspot-server"
+      - "--config"
+      - "/app/config/e2e-local-postgres.yaml"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock:
+        condition: service_healthy
+
+  # HyperSpot API with MariaDB
+  hyperspot_api_mariadb:
+    <<: *hyperspot-api-common
+    image: hyperspot-api-mariadb:e2e
+    profiles: ["mariadb"]
+    environment:
+      <<: *common-env
+      # Module-specific database credentials
+      USERS_INFO_DB_PASSWORD: users_info_pass
+      SETTINGS_DB_PASSWORD: settings_pass
+    command:
+      - "/app/hyperspot-server"
+      - "--config"
+      - "/app/config/e2e-local-mysql.yaml"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      mock:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  mariadb_data:

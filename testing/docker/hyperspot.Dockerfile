@@ -2,8 +2,8 @@
 # Stage 1: Builder
 FROM rust:1.92-bookworm@sha256:e90e846de4124376164ddfbaab4b0774c7bdeef5e738866295e5a90a34a307a2 AS builder
 
-# Build arguments for cargo features
-ARG CARGO_FEATURES
+# Build arguments for additional cargo arguments
+ARG CARGO_BUILD_ARGS
 
 # Install protobuf-compiler for prost-build
 RUN apt-get update && \
@@ -17,7 +17,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY rust-toolchain.toml ./
 
 # Copy all workspace members
-COPY apps/hyperspot-server ./apps/hyperspot-server
+COPY apps ./apps
 COPY libs ./libs
 COPY modules ./modules
 COPY examples ./examples
@@ -26,9 +26,9 @@ COPY proto ./proto
 
 # Build the hyperspot-server binary in release mode
 # Using --bin to build only the specific binary
-# Features can be customized via CARGO_FEATURES build arg
-RUN if [ -n "$CARGO_FEATURES" ]; then \
-        cargo build --bin hyperspot-server --package=hyperspot-server --features "$CARGO_FEATURES"; \
+# Additional cargo args can be customized via CARGO_BUILD_ARGS build arg
+RUN if [ -n "$CARGO_BUILD_ARGS" ]; then \
+        cargo build --bin hyperspot-server --package=hyperspot-server $CARGO_BUILD_ARGS; \
     else \
         cargo build --bin hyperspot-server --package=hyperspot-server; \
     fi
