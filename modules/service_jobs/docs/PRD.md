@@ -48,14 +48,14 @@ Currently, services implement ad-hoc async patterns leading to inconsistent beha
 
 #### Platform Service Developer
 
-**ID**: `fdd-service-jobs-actor-developer`
+**ID**: `cpt-service-jobs-actor-developer`
 
 **Role**: Primary users who define job handlers and submit jobs from platform services.
 **Needs**: Simple APIs for job submission, clear error handling, minimal boilerplate.
 
 #### Platform Operator
 
-**ID**: `fdd-service-jobs-actor-operator`
+**ID**: `cpt-service-jobs-actor-operator`
 
 **Role**: Monitor job health, handle failures, manage DLQ.
 **Needs**: Visibility into job status, ability to retry/cancel jobs, DLQ management.
@@ -64,7 +64,7 @@ Currently, services implement ad-hoc async patterns leading to inconsistent beha
 
 #### Platform Service
 
-**ID**: `fdd-service-jobs-actor-service`
+**ID**: `cpt-service-jobs-actor-service`
 
 **Role**: Internal services that submit and manage jobs programmatically.
 
@@ -98,16 +98,16 @@ No module-specific environment constraints beyond project defaults.
 
 #### Async Job Submission
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-submit`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-submit`
 
 The system **MUST** allow services to submit jobs and receive a job ID immediately while execution proceeds in the background.
 
 **Rationale**: Enable non-blocking submission of async work.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-service`
 
 #### Job Status Tracking
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-status`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-status`
 
 The system **MUST** track job status through its lifecycle with APIs to query current status:
 - `pending` - queued, not yet started
@@ -118,11 +118,11 @@ The system **MUST** track job status through its lifecycle with APIs to query cu
 - `dead_lettered` - failed after retry exhaustion, moved to DLQ for manual review
 
 **Rationale**: Enable visibility into job progress and completion.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`
 
 #### Native Rust Handler Execution
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-handler`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-handler`
 
 The system **MUST** execute job handlers implemented as native Rust async functions:
 
@@ -131,11 +131,11 @@ async fn handler(ctx: JobContext, input: T) -> Result<O, JobError>
 ```
 
 **Rationale**: Provide type-safe, performant job execution.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Retry with Backoff
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-retry`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-retry`
 
 The system **MUST** support configurable retry policies with:
 - Maximum retry attempts
@@ -144,47 +144,47 @@ The system **MUST** support configurable retry policies with:
 - Backoff multiplier
 
 **Rationale**: Enable resilient job execution without custom retry logic.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Job Result Retrieval
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-result`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-result`
 
 The system **MUST** store job results (success or error) and provide APIs to retrieve them after completion.
 
 **Rationale**: Allow callers to obtain job output.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-service`
 
 #### Dead Letter Queue
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-dlq`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-dlq`
 
 The system **MUST** move jobs to a dead letter queue after retry exhaustion, preserving job details for analysis and manual recovery.
 
 **Rationale**: Prevent failed jobs from being lost, enable manual intervention.
-**Actors**: `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-operator`
 
 #### Job Cancellation
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-cancel`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-cancel`
 
 The system **MUST** support canceling pending and running jobs. Running jobs receive a cancellation token for cooperative cancellation.
 
 **Rationale**: Allow aborting unnecessary work.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`
 
 #### Idempotent Submission
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-idempotent`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-idempotent`
 
 The system **MUST** support idempotency keys to prevent duplicate job creation when the same key is submitted multiple times.
 
 **Rationale**: Prevent duplicate work on retry or network issues.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-service`
 
 #### REST Job Status API
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-rest-status`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-rest-status`
 
 The system **MUST** expose a REST API for querying job status and results. The API provides:
 - Get job status by ID (status, progress, timestamps)
@@ -194,76 +194,76 @@ The system **MUST** expose a REST API for querying job status and results. The A
 Job submission, cancellation, and DLQ management remain internal (native Rust API only).
 
 **Rationale**: Enable external clients, UIs, and cross-service consumers to poll job status without requiring in-process Rust access.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`, `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`, `cpt-service-jobs-actor-service`
 
 #### Tenant-Scoped Access Control
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-tenant-scope`
+- [ ] `p1` - **ID**: `cpt-service-jobs-fr-tenant-scope`
 
 The system **MUST** enforce tenant-scoped access control for job submission, status queries, result retrieval, cancellation, and DLQ management. Every job has a `tenant_id`; idempotency keys are scoped by tenant and handler. System-level jobs (e.g., platform maintenance) run under the root tenant.
 
 **Rationale**: Prevent cross-tenant data access and ensure isolation.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`
 
 ### 5.2 P2 (Important)
 
 #### Progress Reporting
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-progress`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-progress`
 
 The system **MUST** allow job handlers to report progress (percentage, status message) during execution for long-running jobs.
 
 **Rationale**: Provide visibility into job execution for users and operators.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`
 
 #### Job Timeout
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-timeout`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-timeout`
 
 The system **MUST** enforce configurable timeouts per job type, canceling jobs that exceed their timeout.
 
 **Rationale**: Prevent runaway jobs from consuming resources indefinitely.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Completion Callbacks
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-callbacks`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-callbacks`
 
 The system **MUST** support callbacks when jobs complete (success or failure). Callbacks are defined as methods on the handler trait (`on_success`, `on_failure`), not per-job, ensuring they survive restarts since handlers re-register on startup.
 
 **Rationale**: Enable reactive workflows triggered by job completion.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Restart Recovery
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-restart`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-restart`
 
 The system **MUST** detect and recover jobs that were running when the service restarted. Orphaned jobs (status=running but worker is gone) are reset to pending for re-execution.
 
 **Rationale**: Ensure work is not lost on service restart.
-**Actors**: `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-service`
 
 #### Checkpointing
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-checkpoint`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-checkpoint`
 
 The system **MUST** allow restartable jobs to save checkpoint data during execution. When recovered after restart, the checkpoint data is available to the handler so it can resume from where it left off.
 
 **Rationale**: Enable efficient recovery of long-running jobs.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Handler Discovery
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-discovery`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-discovery`
 
 The system **MUST** maintain a registry of job handlers discoverable by `handler_id`. This enables looking up the correct handler when recovering orphaned jobs after restart. Handlers register using the Global Type System (GTS) pattern.
 
 **Rationale**: Enable restart recovery by mapping persisted jobs to handlers.
-**Actors**: `fdd-service-jobs-actor-service`
+**Actors**: `cpt-service-jobs-actor-service`
 
 #### Large File Download Handler
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-download`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-download`
 
 The system **MUST** provide a built-in handler for downloading large files with automatic checkpointing. Uses HTTP Range requests to resume downloads after restart.
 
@@ -276,36 +276,36 @@ job_service.submit(DownloadFileInput {
 ```
 
 **Rationale**: Common use case that demonstrates checkpointing capabilities.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Delayed Execution
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-delay`
+- [ ] `p2` - **ID**: `cpt-service-jobs-fr-delay`
 
 The system **MUST** support scheduling jobs for future execution with a specified delay or execution time.
 
 **Rationale**: Enable scheduled background work.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 ### 5.3 P3 (Nice-to-have)
 
 #### Job Dependencies
 
-- [ ] `p3` - **ID**: `fdd-service-jobs-req-deps`
+- [ ] `p3` - **ID**: `cpt-service-jobs-fr-deps`
 
 The system **MUST** support declaring dependencies between jobs, where a job only runs after its dependencies complete.
 
 **Rationale**: Enable simple workflow patterns.
-**Actors**: `fdd-service-jobs-actor-developer`
+**Actors**: `cpt-service-jobs-actor-developer`
 
 #### Job Prioritization
 
-- [ ] `p3` - **ID**: `fdd-service-jobs-req-priority`
+- [ ] `p3` - **ID**: `cpt-service-jobs-fr-priority`
 
 The system **MUST** support job priority levels so urgent jobs are processed before lower-priority jobs.
 
 **Rationale**: Enable priority-based scheduling.
-**Actors**: `fdd-service-jobs-actor-developer`, `fdd-service-jobs-actor-operator`
+**Actors**: `cpt-service-jobs-actor-developer`, `cpt-service-jobs-actor-operator`
 
 ## 6. Non-Functional Requirements
 
@@ -313,7 +313,7 @@ The system **MUST** support job priority levels so urgent jobs are processed bef
 
 #### Submission Latency
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-submission-latency`
+- [ ] `p1` - **ID**: `cpt-service-jobs-nfr-submission-latency`
 
 The system **MUST** complete job submission within 50ms at p99.
 
@@ -323,7 +323,7 @@ The system **MUST** complete job submission within 50ms at p99.
 
 #### Execution Start Time
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-execution-start`
+- [ ] `p2` - **ID**: `cpt-service-jobs-nfr-execution-start`
 
 The system **MUST** start job execution within 1 second of submission under normal load.
 
@@ -333,7 +333,7 @@ The system **MUST** start job execution within 1 second of submission under norm
 
 #### Throughput
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-throughput`
+- [ ] `p2` - **ID**: `cpt-service-jobs-nfr-throughput`
 
 The system **MUST** support at least 1,000 job submissions per second per instance.
 
@@ -343,7 +343,7 @@ The system **MUST** support at least 1,000 job submissions per second per instan
 
 #### Result Retention
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-retention`
+- [ ] `p2` - **ID**: `cpt-service-jobs-nfr-retention`
 
 The system **MUST** retain job results for at least 24 hours (configurable).
 
@@ -353,7 +353,7 @@ The system **MUST** retain job results for at least 24 hours (configurable).
 
 #### Security and Isolation
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-req-security`
+- [ ] `p1` - **ID**: `cpt-service-jobs-nfr-security`
 
 The system **MUST** validate job inputs, enforce tenant isolation for all persisted data, and require authenticated/authorized access for all job APIs. Job payloads **MUST NOT** include secrets; secrets must be provided via environment/configuration.
 
@@ -367,7 +367,7 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### Job Service API
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-interface-service`
+- [ ] `p1` - **ID**: `cpt-service-jobs-interface-service`
 
 **Type**: Rust module/trait
 **Stability**: stable
@@ -376,7 +376,7 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### Job Handler Trait
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-interface-handler`
+- [ ] `p1` - **ID**: `cpt-service-jobs-interface-handler`
 
 **Type**: Rust trait
 **Stability**: stable
@@ -385,7 +385,7 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### Job Status REST API
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-interface-rest-status`
+- [ ] `p1` - **ID**: `cpt-service-jobs-interface-rest-status`
 
 **Type**: REST API
 **Stability**: stable
@@ -396,7 +396,7 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### Job Status REST Contract
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-contract-rest-status`
+- [ ] `p1` - **ID**: `cpt-service-jobs-contract-rest-status`
 
 **Direction**: provided by library
 **Protocol/Format**: HTTP/REST, JSON responses
@@ -406,9 +406,9 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### UC: Generate Report Asynchronously
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-report`
+- [ ] `p2` - **ID**: `cpt-service-jobs-usecase-report`
 
-**Actor**: `fdd-service-jobs-actor-developer`
+**Actor**: `cpt-service-jobs-actor-developer`
 
 **Preconditions**:
 - Report handler is registered
@@ -432,9 +432,9 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### UC: Restart Recovery of Long-Running Job
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-restart-recovery`
+- [ ] `p2` - **ID**: `cpt-service-jobs-usecase-restart-recovery`
 
-**Actor**: `fdd-service-jobs-actor-service`
+**Actor**: `cpt-service-jobs-actor-service`
 
 **Preconditions**:
 - A restartable job with checkpointing is running
@@ -458,9 +458,9 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### UC: DLQ Management After Retry Exhaustion
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-dlq-management`
+- [ ] `p2` - **ID**: `cpt-service-jobs-usecase-dlq-management`
 
-**Actor**: `fdd-service-jobs-actor-operator`
+**Actor**: `cpt-service-jobs-actor-operator`
 
 **Preconditions**:
 - A job has failed and exhausted all configured retries
@@ -481,9 +481,9 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 #### UC: Fire-and-Forget Stream Processing (Non-Restartable)
 
-- [ ] `p2` - **ID**: `fdd-service-jobs-req-non-restartable`
+- [ ] `p2` - **ID**: `cpt-service-jobs-usecase-non-restartable`
 
-**Actor**: `fdd-service-jobs-actor-developer`
+**Actor**: `cpt-service-jobs-actor-developer`
 
 **Preconditions**:
 - A non-restartable handler is registered (non-serializable input)
@@ -503,13 +503,13 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 
 ## 9. Acceptance Criteria
 
-- [ ] Job submission latency meets `fdd-service-jobs-req-submission-latency` threshold
+- [ ] Job submission latency meets `cpt-service-jobs-nfr-submission-latency` threshold
 - [ ] Duplicate submissions with same idempotency key return existing job ID
-- [ ] Job execution start time meets `fdd-service-jobs-req-execution-start` threshold
+- [ ] Job execution start time meets `cpt-service-jobs-nfr-execution-start` threshold
 - [ ] Failed jobs are retried according to configured policy
 - [ ] Jobs that exhaust retries are moved to DLQ
 - [ ] Job status is queryable throughout the job lifecycle
-- [ ] Job result retention meets `fdd-service-jobs-req-retention` threshold
+- [ ] Job result retention meets `cpt-service-jobs-nfr-retention` threshold
 - [ ] Pending jobs can be canceled immediately
 - [ ] Running jobs receive cancellation signal within 1 second
 - [ ] (P2) Orphaned jobs are detected within 5 minutes of service restart
@@ -554,5 +554,5 @@ The system **MUST** validate job inputs, enforce tenant isolation for all persis
 ## 14. Traceability
 
 - **Design**: [DESIGN.md](./DESIGN.md)
-- **ADRs**: [`ADR-0001` Embedded PostgreSQL-Backed Job System](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md)
+- **ADRs**: [`ADR-0001` Embedded PostgreSQL-Backed Job System](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md)
 - **Features**: Deferred (no feature specs for this module yet)

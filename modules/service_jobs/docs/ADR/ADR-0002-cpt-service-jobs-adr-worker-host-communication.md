@@ -522,13 +522,13 @@ SSE has no built-in backpressure. A slow client causes the server to buffer even
 
 **Links**:
 <!-- cpt:list:links -->
-- [`cpt-service-jobs-fr-status`](./PRD.md) — Job status tracking requirement
-- [`cpt-service-jobs-fr-rest-status`](./PRD.md) — REST status queries requirement
-- [`cpt-service-jobs-fr-progress`](./PRD.md) — Progress reporting requirement
-- [`cpt-service-jobs-fr-restart`](./PRD.md) — Restart recovery requirement
-- [DESIGN.md § 3.1](./DESIGN.md) — `report_progress()` on `JobContext`
-- [DESIGN.md § 3.11](./DESIGN.md) — `job_status_v` view + `SecureConn` (current polling-based status query path)
-- [DESIGN.md § 3.16](./DESIGN.md) — Deployment topology
+- [`cpt-service-jobs-fr-status`](../PRD.md) — Job status tracking requirement
+- [`cpt-service-jobs-fr-rest-status`](../PRD.md) — REST status queries requirement
+- [`cpt-service-jobs-fr-progress`](../PRD.md) — Progress reporting requirement
+- [`cpt-service-jobs-fr-restart`](../PRD.md) — Restart recovery requirement
+- [DESIGN.md § 3.1](../DESIGN.md) — `report_progress()` on `JobContext`
+- [DESIGN.md § 3.11](../DESIGN.md) — `job_status_v` view + `SecureConn` (current polling-based status query path)
+- [DESIGN.md § 3.16](../DESIGN.md) — Deployment topology
 - [ADR-0001](./ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md) — Open Items § LISTEN/NOTIFY
 - [`SseBroadcaster` + `.sse_json()`](../../../docs/modkit_unified_system/04_rest_operation_builder.md) — Production-ready SSE pattern for API→client streaming
 - [Tokio `broadcast` + `select!`](../../../docs/modkit_unified_system/08_lifecycle_stateful_tasks.md) — In-process event fan-out with cooperative shutdown

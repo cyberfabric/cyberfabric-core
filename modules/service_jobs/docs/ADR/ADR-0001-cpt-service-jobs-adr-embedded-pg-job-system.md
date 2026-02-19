@@ -311,8 +311,8 @@ REST endpoints serve **restartable jobs only**. Non-restartable jobs have no dat
 
 **Links**:
 <!-- cpt:list:links -->
-- [`PRD`](./PRD.md)
-- [`DESIGN`](./DESIGN.md)
+- [`PRD`](../PRD.md)
+- [`DESIGN`](../DESIGN.md)
 - [Underway GitHub](https://github.com/maxcountryman/underway)
 <!-- cpt:list:links -->
 <!-- cpt:##:body -->

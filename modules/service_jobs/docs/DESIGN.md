@@ -12,7 +12,7 @@ The architecture supports two types of async work:
 
 Both types are exposed through a unified `JobService` API with consistent timeout, cancellation, progress reporting, and observability primitives.
 
-> **ADR status: proposed.** The persistence backend for restartable jobs is under evaluation — purpose-built (Secure ORM), upstream contribution to [Underway](https://github.com/maxcountryman/underway), or Underway fork. See [ADR-0001](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md) for the three options and the Secure ORM compatibility analysis. Sections marked **(Underway-specific)** apply only to Options B/C.
+> **ADR status: proposed.** The persistence backend for restartable jobs is under evaluation — purpose-built (Secure ORM), upstream contribution to [Underway](https://github.com/maxcountryman/underway), or Underway fork. See [ADR-0001](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md) for the three options and the Secure ORM compatibility analysis. Sections marked **(Underway-specific)** apply only to Options B/C.
 
 ### 1.2 Architecture Drivers
 
@@ -20,21 +20,21 @@ Both types are exposed through a unified `JobService` API with consistent timeou
 
 | Requirement | Design Response |
 |-------------|-----------------|
-| `fdd-service-jobs-req-submit` | Restartable: transactional enqueue (job commits atomically with business logic). Non-restartable: in-memory channel |
-| `fdd-service-jobs-req-restart` | Heartbeat-based fencing with automatic stale task reclamation |
-| `fdd-service-jobs-req-discovery` | GTS handler IDs mapped to queue names at registration |
-| `fdd-service-jobs-req-tenant-scope` | `tenant_id` injected from `SecurityContext` at submission (never caller-supplied); `SET LOCAL app.tenant_id` in execution transaction; status queries via `SecureConn` on database view |
-| `fdd-service-jobs-req-rest-status` | REST API layer backed by `SecureConn` on `service_jobs.job_status_v` view; restartable jobs only |
+| `cpt-service-jobs-fr-submit` | Restartable: transactional enqueue (job commits atomically with business logic). Non-restartable: in-memory channel |
+| `cpt-service-jobs-fr-restart` | Heartbeat-based fencing with automatic stale task reclamation |
+| `cpt-service-jobs-fr-discovery` | GTS handler IDs mapped to queue names at registration |
+| `cpt-service-jobs-fr-tenant-scope` | `tenant_id` injected from `SecurityContext` at submission (never caller-supplied); `SET LOCAL app.tenant_id` in execution transaction; status queries via `SecureConn` on database view |
+| `cpt-service-jobs-fr-rest-status` | REST API layer backed by `SecureConn` on `service_jobs.job_status_v` view; restartable jobs only |
 
 #### NFR Allocation
 
 | NFR ID | NFR Summary | Allocated To | Design Response | Verification Approach |
 |--------|-------------|--------------|-----------------|----------------------|
-| `fdd-service-jobs-req-submission-latency` | Submit ≤50ms p99 | Job submission path | Non-restartable: in-memory channel. Restartable: transactional INSERT | Load test benchmark |
-| `fdd-service-jobs-req-throughput` | ≥1000 jobs/sec | Worker pool | Configurable concurrency + advisory locks | Load test benchmark |
-| `fdd-service-jobs-req-execution-start` | Start ≤1s | Worker pool | Polling interval (configurable, default 1s) + channel dispatch for non-restartable | Load test benchmark |
-| `fdd-service-jobs-req-retention` | Results retained ≥24h | Per-task TTL | TTL-based retention with background cleanup | Integration test |
-| `fdd-service-jobs-req-security` | Zero cross-tenant leaks, authenticated access | Submission + execution + query paths | `tenant_id` from `SecurityContext` (not caller); `SET LOCAL app.tenant_id` in execution tx; `SecureConn` on status view; input validation; no secrets in payloads | Security tests, code review |
+| `cpt-service-jobs-nfr-submission-latency` | Submit ≤50ms p99 | Job submission path | Non-restartable: in-memory channel. Restartable: transactional INSERT | Load test benchmark |
+| `cpt-service-jobs-nfr-throughput` | ≥1000 jobs/sec | Worker pool | Configurable concurrency + advisory locks | Load test benchmark |
+| `cpt-service-jobs-nfr-execution-start` | Start ≤1s | Worker pool | Polling interval (configurable, default 1s) + channel dispatch for non-restartable | Load test benchmark |
+| `cpt-service-jobs-nfr-retention` | Results retained ≥24h | Per-task TTL | TTL-based retention with background cleanup | Integration test |
+| `cpt-service-jobs-nfr-security` | Zero cross-tenant leaks, authenticated access | Submission + execution + query paths | `tenant_id` from `SecurityContext` (not caller); `SET LOCAL app.tenant_id` in execution tx; `SecureConn` on status view; input validation; no secrets in payloads | Security tests, code review |
 
 ### 1.3 Architecture Layers
 
@@ -82,7 +82,7 @@ graph TB
 
 **P1 (In-Memory):** Core job execution with all features running in-memory. Both restartable and non-restartable jobs use in-memory channels. Jobs support retry/cancellation/progress but do not survive service restarts.
 
-**P2 (Persistence):** Adds persistent queue backend for restartable jobs — transactional enqueue, heartbeat-based fencing, advisory locks, and automatic stale task reclamation. Non-restartable jobs continue to use the P1 in-memory channel. Backend choice (purpose-built, Underway upstream, or Underway fork) per [ADR-0001](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md).
+**P2 (Persistence):** Adds persistent queue backend for restartable jobs — transactional enqueue, heartbeat-based fencing, advisory locks, and automatic stale task reclamation. Non-restartable jobs continue to use the P1 in-memory channel. Backend choice (purpose-built, Underway upstream, or Underway fork) per [ADR-0001](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md).
 
 ## 2. Principles & Constraints
 
@@ -90,9 +90,9 @@ graph TB
 
 #### Two Types of Async Work
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-design-two-types`
+- [ ] `p1` - **ID**: `cpt-service-jobs-principle-two-types`
 
-**ADRs**: [`fdd-service-jobs-adr-embedded-pg-job-system`](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md)
+**ADRs**: [`cpt-service-jobs-adr-embedded-pg-job-system`](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md)
 
 All async work uses this module for consistent timeouts, cancellation, and observability. The key difference is persistence:
 
@@ -105,9 +105,9 @@ Non-restartable jobs skip database writes entirely, avoiding persistence overhea
 
 #### Local Worker Execution
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-design-local-workers`
+- [ ] `p1` - **ID**: `cpt-service-jobs-principle-local-workers`
 
-**ADRs**: [`fdd-service-jobs-adr-embedded-pg-job-system`](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md)
+**ADRs**: [`cpt-service-jobs-adr-embedded-pg-job-system`](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md)
 
 Workers are Tokio tasks within the service process, not separate processes or external services. This keeps the architecture simple with no external job runner infrastructure.
 
@@ -125,9 +125,9 @@ Workers are Tokio tasks within the service process, not separate processes or ex
 
 #### No External Queue Infrastructure
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-design-no-external`
+- [ ] `p1` - **ID**: `cpt-service-jobs-constraint-no-external`
 
-**ADRs**: [`fdd-service-jobs-adr-embedded-pg-job-system`](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md)
+**ADRs**: [`cpt-service-jobs-adr-embedded-pg-job-system`](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md)
 
 The system uses PostgreSQL-backed queuing (P2) and in-memory channels (P1) rather than external message queues like RabbitMQ or SQS. The queue runs embedded within the service process — no external job runner or queue infrastructure is required.
 
@@ -446,7 +446,7 @@ When `idempotency_key` is provided, `submit_with_options` enforces uniqueness on
 
 For restartable jobs, this maps to Underway's `concurrency_key` column, set to `{handler_id}:{idempotency_key}`. Underway's `ON CONFLICT` handling on `concurrency_key` returns the existing task ID. For non-restartable jobs, idempotency is checked in-memory against active and recently completed jobs.
 
-This satisfies the PRD acceptance criterion: "Duplicate submissions with same idempotency key return existing job ID" (`fdd-service-jobs-req-idempotent`).
+This satisfies the PRD acceptance criterion: "Duplicate submissions with same idempotency key return existing job ID" (`cpt-service-jobs-fr-idempotent`).
 
 **Handler Interface**: `JobHandler` trait (see § 3.5)
 
@@ -502,7 +502,7 @@ Read-only REST endpoints for external consumers. Backed by the same `JobService`
 
 #### Job Status REST API
 
-- [ ] `p1` - **ID**: `fdd-service-jobs-design-interface-rest-status`
+- [ ] `p1` - **ID**: `cpt-service-jobs-ext-interface-rest-status`
 
 **Type**: Protocol
 
@@ -744,7 +744,7 @@ let worker = underway::Worker::new(queue.into(), tenant_aware_task);
 worker.run_every(jiff::Span::new().seconds(1)).await?;
 ```
 
-Underway's worker internally uses `FOR UPDATE SKIP LOCKED` for atomic claiming with heartbeat-based lease fencing. Stale tasks (where heartbeat has stopped) are automatically reclaimed with an incremented attempt number, preventing split-brain scenarios. See [ADR-0001 § Tenant Isolation Strategy](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy) for how tenant context is injected during execution.
+Underway's worker internally uses `FOR UPDATE SKIP LOCKED` for atomic claiming with heartbeat-based lease fencing. Stale tasks (where heartbeat has stopped) are automatically reclaimed with an incremented attempt number, preventing split-brain scenarios. See [ADR-0001 § Tenant Isolation Strategy](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy) for how tenant context is injected during execution.
 
 #### Worker Configuration
 
@@ -878,7 +878,7 @@ pub struct DownloadFileOutput {
 5. Server responds with `206 Partial Content`
 6. Download resumes from byte 5,000,000
 
-### 3.11 Database Schema (P2) — Underway-specific, Options B/C
+### 3.11 Database schemas & tables — Underway-specific, Options B/C
 
 > **Note**: A purpose-built system (Option A) would define its own schema using Secure ORM entities and standard migrations, with `tenant_id` as a first-class column. The view-based approach below is specific to Underway integration.
 
@@ -932,7 +932,7 @@ Tenant context is stored inside the `input` JSONB column as part of the `TenantE
 }
 ```
 
-Status queries extract `tenant_id` from `input->>'tenant_id'`. See [ADR-0001 § Tenant Isolation Strategy](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy) for the full isolation model.
+Status queries extract `tenant_id` from `input->>'tenant_id'`. See [ADR-0001 § Tenant Isolation Strategy](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy) for the full isolation model.
 
 #### Status Query View (Secure ORM Compliant)
 
@@ -1068,9 +1068,9 @@ Underway handles cleanup internally — completed tasks past their TTL are purge
 - Dead-lettered jobs use the DLQ queue's TTL (configurable independently)
 - Metrics track `jobs_cleaned_total` by status (emitted from our observability layer)
 
-### 3.15 Sequences & Interactions
+### 3.15 Interactions & Sequences
 
-**Key Flows**: `fdd-service-jobs-req-submit`, `fdd-service-jobs-req-restart`, `fdd-service-jobs-req-rest-status`, `fdd-service-jobs-req-report`
+**Key Flows**: `cpt-service-jobs-fr-submit`, `cpt-service-jobs-fr-restart`, `cpt-service-jobs-fr-rest-status`, `cpt-service-jobs-usecase-report`
 
 **Job Submission Flow (Restartable):**
 
@@ -1164,7 +1164,7 @@ Workers run as Tokio tasks within each service instance. No external job runner 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
 | Runtime | Rust + Tokio | Async runtime already used by platform services |
-| Job Queue (P2) | TBD per [ADR-0001](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md) | Purpose-built (Secure ORM), Underway upstream contribution, or Underway fork |
+| Job Queue (P2) | TBD per [ADR-0001](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md) | Purpose-built (Secure ORM), Underway upstream contribution, or Underway fork |
 | Persistence (P2) | PostgreSQL | Already available; schema managed by chosen backend |
 | Serialization | serde_json | Standard for Rust JSON serialization; `TenantEnvelope<T>` stored as JSONB |
 | Cancellation | tokio_util::CancellationToken | Cooperative cancellation pattern |
@@ -1174,7 +1174,7 @@ Workers run as Tokio tasks within each service instance. No external job runner 
 
 #### Tenant Isolation
 
-- **Restartable jobs**: `tenant_id` is embedded in the `TenantEnvelope` input. During execution, `SET LOCAL app.tenant_id` scopes all Secure ORM queries on business tables. Status queries use the `service_jobs.job_status_v` view with `Scopable` tenant scoping via `SecureConn`. See [ADR-0001 § Tenant Isolation Strategy](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy).
+- **Restartable jobs**: `tenant_id` is embedded in the `TenantEnvelope` input. During execution, `SET LOCAL app.tenant_id` scopes all Secure ORM queries on business tables. Status queries use the `service_jobs.job_status_v` view with `Scopable` tenant scoping via `SecureConn`. See [ADR-0001 § Tenant Isolation Strategy](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md#tenant-isolation-strategy).
 - **Non-restartable jobs**: `tenant_id` is carried in the in-memory `JobContext`. Handlers may still access business tables via `SecureConn` — workers establish tenant context by passing an `AccessScope` built from the job's `SecurityContext` (see § 3.6). Status is only available on the submitting instance via the in-process Rust API (not cross-instance REST).
 
 #### Secure ORM Compliance
@@ -1216,7 +1216,7 @@ The Secure ORM policy (`docs/modkit_unified_system/06_secure_orm_db_access.md`) 
 
 ### Alternatives Considered
 
-See [ADR-0001](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md) for the full evaluation of five existing Rust job queue libraries (Underway, Graphile Worker RS, rust-task-queue, kafru, backie) and the three implementation paths under consideration.
+See [ADR-0001](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md) for the full evaluation of five existing Rust job queue libraries (Underway, Graphile Worker RS, rust-task-queue, kafru, backie) and the three implementation paths under consideration.
 
 | Alternative | Status |
 |-------------|--------|
@@ -1237,5 +1237,5 @@ See [ADR-0001](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md) for th
 ## 5. Traceability
 
 - **PRD**: [PRD.md](./PRD.md)
-- **ADRs**: [`ADR-0001` Embedded PostgreSQL-Backed Job System](./ADR-0001-fdd-service-jobs-adr-embedded-pg-job-system.md)
+- **ADRs**: [`ADR-0001` Embedded PostgreSQL-Backed Job System](./ADR/ADR-0001-cpt-service-jobs-adr-embedded-pg-job-system.md)
 - **Features**: Deferred (no feature specs for this module yet)
