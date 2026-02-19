@@ -59,10 +59,6 @@
       "patterns": ["modules/system/nodes-registry/*"]
     },
     {
-      "reason": "Ignore module 'oagw' (not SDLC-documented yet: missing required PRD/DESIGN).",
-      "patterns": ["modules/system/oagw/*"]
-    },
-    {
       "reason": "Ignore module 'tenant-resolver' (not SDLC-documented yet: missing required PRD/DESIGN).",
       "patterns": ["modules/system/tenant-resolver/*"]
     },
