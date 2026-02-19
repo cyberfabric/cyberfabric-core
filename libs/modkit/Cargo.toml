@@ -34,6 +34,9 @@ otel = [
     "dep:opentelemetry-otlp",
     "dep:tonic",
 ]
+# tokio-console support for async runtime inspection (debug/preprod only)
+tokio-console = ["dep:console-subscriber"]
+
 bootstrap = [
     "db",
     "dep:serde-saphyr",
@@ -114,6 +117,9 @@ opentelemetry-otlp = { workspace = true, optional = true }
 
 # gRPC support only for otel (optional)
 tonic = { workspace = true, optional = true }
+
+# tokio-console support (optional)
+console-subscriber = { workspace = true, optional = true }
 
 # Unix-specific dependencies for graceful process termination
 [target.'cfg(unix)'.dependencies]

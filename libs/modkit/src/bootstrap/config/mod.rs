@@ -73,6 +73,19 @@ pub enum RuntimeKind {
     Oop,
 }
 
+/// Configuration for tokio-console async runtime inspector.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TokioConsoleConfig {
+    /// Bind address for the console-subscriber gRPC server.
+    /// Default: `"127.0.0.1:6669"`.
+    #[serde(default = "default_console_server_addr")]
+    pub server_addr: String,
+}
+
+fn default_console_server_addr() -> String {
+    "127.0.0.1:6669".to_owned()
+}
+
 /// Main application configuration with strongly-typed global sections
 /// and a flexible per-module configuration bag.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -87,6 +100,9 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
     /// Tracing configuration (optional, disabled if None).
     pub tracing: Option<TracingConfig>,
+    /// tokio-console configuration (optional).
+    #[serde(default)]
+    pub tokio_console: Option<TokioConsoleConfig>,
     /// Directory containing per-module YAML files (optional).
     #[serde(default)]
     pub modules_dir: Option<String>,
@@ -102,7 +118,8 @@ impl Default for AppConfig {
             server,
             database: None,
             logging: default_logging_config(),
-            tracing: None, // Disabled by default
+            tracing: None,
+            tokio_console: None,
             modules_dir: None,
             modules: HashMap::new(),
         }
