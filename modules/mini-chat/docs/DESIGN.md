@@ -29,8 +29,9 @@ Long conversations are managed via thread summaries - a Level 1 compression stra
 | `cpt-cf-mini-chat-fr-quota-enforcement` | See `quota_service` component and `quota_usage` table |
 | `cpt-cf-mini-chat-fr-token-budget` | See constraint **Context Window Budget** and ContextPlan truncation rules |
 | `cpt-cf-mini-chat-fr-license-gate` | See constraint **License Gate** and dependency `license_manager (platform)` |
-| `cpt-cf-mini-chat-fr-audit` | Emit audit events to platform `audit_service` for every AI interaction |
+| `cpt-cf-mini-chat-fr-audit` | Emit audit events to platform `audit_service` for completed chat turns and policy decisions (one structured event per completed turn) |
 | `cpt-cf-mini-chat-fr-ux-recovery` | See **Streaming Contract** (Idempotency + reconnect rule) and **Turn Status API** |
+| `cpt-cf-mini-chat-fr-turn-mutations` | Retry / edit / delete last turn via Turn Mutation API; see **Turn Mutation Rules (P0)** and turn mutation endpoints |
 | `cpt-cf-mini-chat-fr-group-chats` | Deferred to P2+ — see `cpt-cf-mini-chat-adr-group-chat-usage-attribution` |
 
 #### NFR Allocation
@@ -105,6 +106,12 @@ The system favors compressed summaries over unbounded message history. Old messa
 **ID**: `cpt-cf-mini-chat-principle-streaming-first`
 
 All LLM responses are streamed. The primary delivery path is SSE from LLM provider (OpenAI / Azure OpenAI) -> OAGW -> chat_service -> api_gateway -> UI. Non-streaming responses are not supported for chat completion. Both providers use an identical SSE event format for the Responses API.
+
+#### Linear Conversation Model
+
+**ID**: `cpt-cf-mini-chat-principle-linear-conversation`
+
+Conversations are strictly linear sequences of turns. P0 does not support branching, history forks, or rewriting arbitrary historical messages. Only the most recent turn may be mutated (retry, edit, or delete). This constraint keeps the data model simple, avoids version-graph complexity, and ensures deterministic context assembly for the LLM.
 
 ### 2.2 Constraints
 
@@ -284,6 +291,9 @@ Background tasks (thread summary update, document summary generation) MUST run w
 | `POST` | `/v1/chats/{id}/messages:stream` | Send message, receive SSE stream | stable |
 | `POST` | `/v1/chats/{id}/attachments` | Upload file attachment | stable |
 | `GET` | `/v1/chats/{id}/turns/{request_id}` | Get authoritative turn status (read-only) | stable |
+| `POST` | `/v1/chats/{id}/turns/{request_id}:retry` | Retry last turn (new generation) | stable |
+| `PATCH` | `/v1/chats/{id}/turns/{request_id}` | Edit last turn (replace content + regenerate) | stable |
+| `DELETE` | `/v1/chats/{id}/turns/{request_id}` | Delete last turn (soft-delete) | stable |
 
 **Streaming Contract** (`POST /v1/chats/{id}/messages:stream`) — **ID**: `cpt-cf-mini-chat-contract-sse-streaming`:
 
@@ -309,11 +319,9 @@ If `request_id` is omitted, the server treats the request as non-idempotent (no 
 
 The UI MUST generate a new `request_id` per user send action. The UI MUST NOT auto-retry with the same `request_id` unless it intends to resume/retrieve the same generation.
 
- Active generation detection and completed replay are based on a durable `chat_turns` record (see section 3.7). `messages.request_id` uniqueness alone is not sufficient to represent `running` state.
+Active generation detection and completed replay are based on a durable `chat_turns` record (see section 3.7). `messages.request_id` uniqueness alone is not sufficient to represent `running` state.
 
- Reconnect rule (P0): if the SSE stream disconnects before a terminal `done`/`error`, the UI MUST NOT automatically retry `POST /messages:stream` with the same `request_id` (it will most likely hit `409 Conflict`). The UI should treat the send as indeterminate and require explicit user action (resend with a new `request_id`).
-
- **P2+ note**: add a read API for turn state (planned), for example `GET /v1/chats/{id}/turns/{request_id}`, allowing the UI to distinguish "double send" vs "network reconnect" and enabling clean resume behavior.
+Reconnect rule (P0): if the SSE stream disconnects before a terminal `done`/`error`, the UI MUST NOT automatically retry `POST /messages:stream` with the same `request_id` (it will most likely hit `409 Conflict`). The UI should treat the send as indeterminate and require explicit user action (resend with a new `request_id`).
 
 **P0 optional, recommended**: expose a read API for turn state backed by `chat_turns` (for example `GET /v1/chats/{id}/turns/{request_id}`) so support and UI recovery flows can query authoritative turn state rather than inferring it from client retry outcomes.
 
@@ -336,7 +344,7 @@ To support reconnect UX and reduce support reliance on direct DB inspection, the
 - API `error` corresponds to internal `chat_turns.state = failed` and terminal `event: error`
 - API `cancelled` corresponds to internal `chat_turns.state = cancelled` and indicates cancellation was processed; the UI should treat it as terminal and allow resend with a new `request_id`
 
- UI guidance: if the SSE stream disconnects before a terminal event, the UI SHOULD show a user-visible banner: "Message delivery uncertain due to connection loss. You can resend." Resend MUST use a new `request_id`.
+UI guidance: if the SSE stream disconnects before a terminal event, the UI SHOULD show a user-visible banner: "Message delivery uncertain due to connection loss. You can resend." Resend MUST use a new `request_id`.
 
 #### SSE Event Definitions
 
@@ -790,13 +798,18 @@ Tracks idempotency and in-progress generation state for `request_id`. This avoid
 | provider_response_id | VARCHAR(128) | Provider response ID (nullable) |
 | assistant_message_id | UUID | Persisted assistant message ID (nullable until completed) |
 | error_code | VARCHAR(64) | Terminal error code (nullable) |
-| started_at | TIMESTAMPTZ | Start time |
+| deleted_at | TIMESTAMPTZ | Soft-delete timestamp for turn mutations (nullable). Set when a turn is replaced by retry or edit, or explicitly deleted. |
+| replaced_by_request_id | UUID | `request_id` of the new turn that replaced this one via retry or edit (nullable). Stored on the old (soft-deleted) turn to provide audit traceability. Not used by delete. |
+| started_at | TIMESTAMPTZ | DB-assigned turn creation timestamp (set on INSERT). Used for ordering and latest-turn selection in P0. |
 | completed_at | TIMESTAMPTZ | Completion time (nullable) |
 | updated_at | TIMESTAMPTZ | Last update time |
 
 **PK**: `id`
 
 **Constraints**: UNIQUE on `(chat_id, request_id)`. FK `chat_id` -> `chats.id` ON DELETE CASCADE.
+
+**Indexes (P0)**:
+- `(chat_id, started_at DESC) WHERE deleted_at IS NULL`
 
 A `chat_turns` row MUST be created before starting the outbound provider request; initial state is `running`.
 
@@ -805,6 +818,11 @@ State machine:
 - Terminal states: `completed`, `failed`, `cancelled`
 - Terminal states MUST be immutable
 - At most one `running` turn per `(chat_id, request_id)`
+
+Soft-delete rules:
+- Turns with `deleted_at IS NOT NULL` are excluded from active conversation history and context assembly.
+- Soft-deleted turns remain in storage for audit traceability.
+- The "latest turn" for mutation eligibility is the turn with the greatest `started_at` where `deleted_at IS NULL`.
 
 #### Table: attachments
 
@@ -871,9 +889,9 @@ Creation protocol (P0): `chat_service` uses a get-or-create flow with database u
 2. If not present, create the vector store via OAGW and attempt INSERT.
 3. If INSERT fails due to unique violation (concurrent creator), re-read the row and use the existing `vector_store_id`. Best-effort delete the newly created provider vector store to avoid orphans.
 
- **P0**: run a periodic reconcile/orphan reaper job (for example nightly) to reconcile provider state with `tenant_vector_stores`:
- - If a provider vector store exists but is not referenced in DB -> delete it.
- - If a DB row exists but the provider vector store is missing -> recreate the vector store and update the DB row.
+**P0**: run a periodic reconcile/orphan reaper job (for example nightly) to reconcile provider state with `tenant_vector_stores`:
+- If a provider vector store exists but is not referenced in DB -> delete it.
+- If a DB row exists but the provider vector store is missing -> recreate the vector store and update the DB row.
 
 #### Table: quota_usage
 
@@ -969,11 +987,15 @@ The authorized resource is **Chat**. Sub-resources (Message, Attachment, ThreadS
 | `POST /v1/chats/{id}/messages:stream` | `send_message` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `POST /v1/chats/{id}/attachments` | `upload` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `GET /v1/chats/{id}/turns/{request_id}` | `read_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `POST /v1/chats/{id}/turns/{request_id}:retry` | `retry_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `PATCH /v1/chats/{id}/turns/{request_id}` | `edit_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `DELETE /v1/chats/{id}/turns/{request_id}` | `delete_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 
 **Notes**:
-- `send_message` and `upload` are actions on the Chat resource, not on Message or Attachment resources. The `resource.id` is the chat's ID.
-- For streaming (`send_message`), authorization is evaluated once at SSE connection establishment. The entire streaming session operates under the initial authorization decision. No per-message re-authorization.
+- `send_message`, `upload`, `retry_turn`, `edit_turn`, and `delete_turn` are actions on the Chat resource, not on Message or Turn sub-resources. The `resource.id` is the chat's ID.
+- For streaming (`send_message`, `retry_turn`, `edit_turn`), authorization is evaluated once at SSE connection establishment. The entire streaming session operates under the initial authorization decision. No per-message re-authorization.
 - For `create`, the PEP passes `resource.properties.owner_tenant_id` and `resource.properties.user_id` from the SecurityContext. The PDP validates permission without returning constraints.
+- Turn mutation endpoints (`retry_turn`, `edit_turn`, `delete_turn`) additionally enforce latest-turn and terminal-state checks in `chat_service` after authorization succeeds (see section 3.9).
 
 #### Evaluation Request/Response Examples
 
@@ -1164,7 +1186,7 @@ Mini Chat recognizes the following token scopes for third-party application narr
 |-------|---------|
 | `ai:chat` | All chat operations (umbrella scope) |
 | `ai:chat:read` | `list`, `read` actions only |
-| `ai:chat:write` | `create`, `update`, `delete`, `send_message`, `upload` actions |
+| `ai:chat:write` | `create`, `update`, `delete`, `send_message`, `upload`, `retry_turn`, `edit_turn`, `delete_turn` actions |
 
 First-party applications (UI) use `token_scopes: ["*"]`. Third-party integrations receive narrowed scopes. Scope enforcement is handled by the PDP - the PEP includes `token_scopes` in the evaluation request context.
 
@@ -1179,6 +1201,99 @@ When Projects / chat sharing is introduced (P2+), the authorization model extend
 
 No changes to the PEP flow or constraint compilation logic are needed. The PDP's response structure naturally handles multiple access paths through OR'd constraints.
 
+### 3.9 Turn Mutation Rules (P0)
+
+**ID**: `cpt-cf-mini-chat-design-turn-mutations`
+
+P0 supports retry, edit, and delete for the last turn only. These are tail-only mutations that preserve the linear conversation model (see `cpt-cf-mini-chat-principle-linear-conversation`).
+
+#### Definition
+
+A turn is a user-message + assistant-response pair identified by `request_id` in `chat_turns`. The "last turn" is the turn with the greatest `started_at` for the given `chat_id` where `deleted_at IS NULL`. `started_at` is set to `now()` at row INSERT time by the database at INSERT time and is used for latest-turn selection. Ordering is deterministic within a single transaction boundary but not guaranteed to be strictly monotonic across concurrent inserts. Index: `(chat_id, started_at DESC) WHERE deleted_at IS NULL`.
+
+#### Allowed Operations
+
+| Operation | Effect |
+|-----------|--------|
+| **Retry** | Soft-deletes the last turn (sets `deleted_at`, sets `replaced_by_request_id` to the new turn's `request_id`). Creates a new turn. The original user message content is re-submitted to the LLM for a new assistant response. |
+| **Edit** | Soft-deletes the last turn (sets `deleted_at`, sets `replaced_by_request_id` to the new turn's `request_id`). Creates a new turn with the updated user message content and generates a new assistant response. |
+| **Delete** | Soft-deletes the last turn (sets `deleted_at`). No new turn is created. |
+
+#### Rules
+
+1. Only the most recent non-deleted turn for a `chat_id` may be mutated. If the target `request_id` does not match the latest turn, the request MUST be rejected with `409 Conflict`.
+2. The target turn MUST belong to the requesting user (`requester_user_id` matches `subject.id`). If not, reject with `403 Forbidden`.
+3. Retry, edit, and delete are allowed only if the target turn is in a terminal state (`completed`, `failed`, or `cancelled`). If the turn is `running`, reject with `400 Bad Request` — the client must wait for completion or cancel by disconnecting the SSE stream (see `cpt-cf-mini-chat-seq-cancellation`).
+4. Retry and edit soft-delete the previous turn (set `deleted_at`) and set `replaced_by_request_id` on the old turn pointing to the new turn's `request_id`. Delete sets `deleted_at` only (no replacement turn). Mutation eligibility considers only non-deleted turns, so delete cannot target an already replaced (soft-deleted) turn.
+5. Soft-deleted turns (`deleted_at IS NOT NULL`) are excluded from active conversation history and context assembly but retained in storage for audit traceability.
+
+#### Turn Mutation API Contracts
+
+##### Retry Last Turn
+
+**Endpoint**: `POST /v1/chats/{id}/turns/{request_id}:retry`
+
+**Request body**: none
+
+**Response** (success): SSE stream (same contract as `POST /v1/chats/{id}/messages:stream`). The server soft-deletes the previous turn, creates a new turn, and streams the new assistant response.
+
+**Errors**:
+
+| Code | HTTP Status | Condition |
+|------|-------------|-----------|
+| `not_latest_turn` | 409 | Target `request_id` is not the most recent turn |
+| `invalid_turn_state` | 400 | Turn is not in a terminal state |
+| `insufficient_permissions` | 403 | Turn does not belong to the requesting user |
+| `chat_not_found` | 404 | Chat does not exist or not accessible |
+
+##### Edit Last Turn
+
+**Endpoint**: `PATCH /v1/chats/{id}/turns/{request_id}`
+
+**Request body**:
+```json
+{
+  "content": "new text"
+}
+```
+
+**Response** (success): SSE stream (same contract as `POST /v1/chats/{id}/messages:stream`). The server soft-deletes the previous turn, creates a new turn with the updated content, and streams the new assistant response.
+
+**Errors**: same as retry.
+
+##### Delete Last Turn
+
+**Endpoint**: `DELETE /v1/chats/{id}/turns/{request_id}`
+
+**Request body**: none
+
+**Response** (success): `200 OK` with:
+```json
+{
+  "chat_id": "uuid",
+  "request_id": "uuid",
+  "deleted": true
+}
+```
+
+**Errors**: same as retry (except no streaming).
+
+#### Summary Interaction on Turn Mutation
+
+Since only the last turn can be retried, edited, or deleted, existing thread summaries typically remain valid (summaries cover older messages, not the latest turn). In the uncommon case where a `thread_summary` exists whose `summarized_up_to` references a message within the mutated turn, the summary is considered stale. `chat_service` MUST mark the summary for lazy recomputation on the next turn that triggers the summary threshold. The system MUST NOT proactively regenerate the summary on mutation alone.
+
+#### Audit Events for Turn Mutations
+
+Three additional audit event types MUST be emitted for turn mutations:
+
+| Event Type | Trigger | Required Fields |
+|------------|---------|----------------|
+| `turn_retry` | Retry last turn | `actor_user_id`, `chat_id`, `original_request_id`, `new_request_id`, `timestamp` |
+| `turn_edit` | Edit last turn | `actor_user_id`, `chat_id`, `original_request_id`, `new_request_id`, `timestamp` |
+| `turn_delete` | Delete last turn | `actor_user_id`, `chat_id`, `request_id`, `timestamp` |
+
+These events are emitted to platform `audit_service` following the same emission rules as other Mini Chat audit events (redaction, size limits, structured format).
+
 ## 4. Additional Context
 
 ### P0 Scope Boundaries
@@ -1187,6 +1302,7 @@ No changes to the PEP flow or constraint compilation logic are needed. The PDP's
 - Single-tenant vector store per tenant (not per workspace)
 - Thread summary as only compression mechanism
 - On-upload document summary via File Search (Variant 1 from draft)
+- Retry, edit, and delete for the last turn only (tail-only mutation; see section 3.9)
 - Quota enforcement: daily + monthly per user
 - Temporary chats with 24h scheduled cleanup
 - File Search per-message call limit is configurable per deployment (default: 2 tool calls per message)
@@ -1197,6 +1313,8 @@ No changes to the PEP flow or constraint compilation logic are needed. The PDP's
 - Non-OpenAI-compatible provider support (e.g., Anthropic, Google) - OpenAI and Azure OpenAI are both supported at P0 via a shared API surface
 - Complex retrieval policies (beyond simple limits)
 - Per-workspace vector stores
+- Full conversation history editing (editing/deleting arbitrary historical messages)
+- Thread branching or multi-version conversations
 
 ### Data Classification and Retention (P0)
 
@@ -1397,6 +1515,11 @@ The following metric series MUST be exposed (types and label sets shown). These 
 - `mini_chat_summary_regen_total{reason}` (counter; `reason` MUST be from a bounded allowlist)
 - `mini_chat_summary_fallback_total` (counter)
 
+##### Turn mutations
+
+- `mini_chat_turn_mutation_total{op,result}` (counter; `op`: `retry|edit|delete`; `result`: `ok|not_latest|invalid_state|forbidden`)
+- `mini_chat_turn_mutation_latency_ms{op}` (histogram)
+
 ##### Provider / OAGW interaction
 
 - `mini_chat_provider_requests_total{provider,endpoint}` (counter; `endpoint`: `responses_stream|responses|files|vector_store_add|vector_store_remove|file_delete`)
@@ -1527,14 +1650,14 @@ Operators MUST be able to reconstruct the full request lifecycle using logs, tra
 2. Query authoritative turn state via `GET /v1/chats/{chat_id}/turns/{request_id}`.
 3. If completed/failed, correlate with `provider_response_id` (from turn state and persisted message) and inspect provider dashboards only as a secondary signal.
 4. Query `audit_service` for the corresponding audit event(s) and confirm:
-   - prompt/response were emitted
-   - redaction rules applied
-   - usage (tokens, model) was recorded
+  - prompt/response were emitted
+  - redaction rules applied
+  - usage (tokens, model) was recorded
 5. Consult operational dashboards/alerts:
-   - streaming health (`mini_chat_stream_failed_total`, `mini_chat_provider_errors_total`)
-   - cancellation health (`mini_chat_time_to_abort_ms`, `mini_chat_cancel_orphan_total`)
-   - summary health (`mini_chat_summary_regen_total`, `mini_chat_summary_fallback_total`)
-   - cleanup/audit health (`mini_chat_cleanup_backlog`, `mini_chat_audit_emit_total`)
+  - streaming health (`mini_chat_stream_failed_total`, `mini_chat_provider_errors_total`)
+  - cancellation health (`mini_chat_time_to_abort_ms`, `mini_chat_cancel_orphan_total`)
+  - summary health (`mini_chat_summary_regen_total`, `mini_chat_summary_fallback_total`)
+  - cleanup/audit health (`mini_chat_cleanup_backlog`, `mini_chat_audit_emit_total`)
 
 ### SSE Infrastructure Requirements
 
@@ -1555,13 +1678,13 @@ When a chat is deleted:
 1. Soft-delete the chat record (`deleted_at` set)
 2. Mark all attachments for cleanup (`cleanup_status=pending`) and return immediately (no synchronous provider cleanup in the HTTP request)
 3. A background cleanup worker performs idempotent retries:
-    - Remove file from tenant vector store via OAGW
-    - Delete provider file via OAGW
-    - Cleanup worker rules:
-      - Cleanup worker MUST treat "not found" for vector store file removal as success
-      - Cleanup worker MUST treat "already deleted" / "not found" for provider file deletion as success
-      - Recommended order remains: remove from vector store, then delete provider file
-      - Cleanup MUST tolerate missing vector store (for example recreated by orphan reaper) and proceed to delete provider file when possible
+  - Remove file from tenant vector store via OAGW
+  - Delete provider file via OAGW
+  - Cleanup worker rules:
+    - Cleanup worker MUST treat "not found" for vector store file removal as success
+    - Cleanup worker MUST treat "already deleted" / "not found" for provider file deletion as success
+    - Recommended order remains: remove from vector store, then delete provider file
+    - Cleanup MUST tolerate missing vector store (for example recreated by orphan reaper) and proceed to delete provider file when possible
 4. Partial failures are recorded per attachment (`cleanup_attempts`, `last_cleanup_error`) and retried with backoff
 5. Temporary chats follow the same flow, triggered by a scheduled job after 24h
 

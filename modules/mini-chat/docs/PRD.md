@@ -83,6 +83,7 @@ This PRD uses **P0/P1/P2** to describe phased scope. The `p1`/`p2` tags on requi
 - Token budget enforcement and context truncation
 - License feature gate (`ai_chat`)
 - Emit audit events to platform `audit_service` (append-only semantics owned by `audit_service`)
+- Retry, edit, and delete for the last turn only (tail-only mutation)
 - Streaming cancellation when client disconnects
 - Cleanup of external resources (provider files, vector store entries) on chat deletion
 
@@ -96,6 +97,9 @@ This PRD uses **P0/P1/P2** to describe phased scope. The `p1`/`p2` tags on requi
 - Image or non-document file support
 - Custom audit storage (audit events are emitted to platform `audit_service`)
 - Chat export or migration
+- Full conversation history editing (editing or deleting arbitrary historical messages)
+- Thread versioning / branching (multi-branch conversations, history forks)
+- Multi-branch recovery or resume-from-middle editing
 - Web search tool support (P1+; schema provisions exist in `quota_usage.web_search_calls`)
 - URL content extraction
 - Admin configuration UI for AI policies, model selection, or provider settings (P0 uses deployment configuration; see DESIGN.md Section 2.2 constraints and emergency flags)
@@ -206,6 +210,35 @@ The system MUST allow users to mark a chat as temporary. Temporary chats MUST be
 **Rationale**: Users need disposable conversations for quick questions without cluttering their chat list.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`, `cpt-cf-mini-chat-actor-cleanup-scheduler`
 
+#### Message Actions (P0 Scope)
+
+- [ ] `p0` - **ID**: `cpt-cf-mini-chat-fr-turn-mutations`
+
+P0 supports retry, edit, and delete for the **last turn only**. Full message history editing is deferred to P1/P2.
+
+**Supported actions (P0)**:
+
+- **Retry last turn**: Re-submit the last user message to generate a new assistant response. The previous turn is soft-deleted and a new turn is created with a fresh assistant response.
+- **Edit last user turn**: Replace the content of the last user message and regenerate the assistant response. The previous turn is soft-deleted and a new turn is created with the updated content.
+- **Delete last turn**: Remove the most recent turn (user message + assistant response) from the active conversation. The turn is soft-deleted.
+
+**Functional constraints**:
+
+- Only the most recent turn may be retried, edited, or deleted.
+- The target turn MUST be in a terminal state (`completed`, `failed`, or `cancelled`) before retry, edit, or delete is allowed. A running turn must complete or be cancelled (via client disconnect) first.
+- The target turn MUST belong to the requesting user.
+- Conversations remain strictly linear. These operations do not create branches.
+
+**Explicitly out of scope (P0)**:
+
+- Editing or deleting arbitrary historical messages
+- Thread branching or history forks
+- Multi-version conversations
+- Purging subsequent messages after editing middle history
+
+**Rationale**: Users commonly need to correct a typo, rephrase a question, or retry after a poor response. Restricting mutations to the last turn keeps the conversation model simple and linear while covering the most frequent use cases.
+**Actors**: `cpt-cf-mini-chat-actor-chat-user`
+
 ### 5.4 Cost Control & Governance
 
 #### Per-User Usage Quotas
@@ -241,7 +274,7 @@ The system MUST verify that the user's tenant has the `ai_chat` feature enabled 
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-audit`
 
-The system MUST emit structured audit events to the platform's `audit_service` for every AI interaction. Each event MUST include: tenant, user, chat reference, event type, model used, token counts, latency metrics, and policy decisions (quota checks, license gate results). Mini Chat does not store audit data locally.
+The system MUST emit structured audit events to the platform's `audit_service` for completed chat turns and policy decisions (one structured event per completed turn). Each event MUST include: tenant, user, chat reference, event type, model used, token counts, latency metrics, and policy decisions (quota checks, license gate results). Mini Chat does not store audit data locally.
 
 Before emitting events, `chat_service` MUST redact obvious secret patterns from any included content. P0 redaction rules MUST include at least:
 
@@ -410,6 +443,11 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 
 - `mini_chat_summary_regen_total{reason}`
 - `mini_chat_summary_fallback_total`
+
+##### Turn mutations
+
+- `mini_chat_turn_mutation_total{op,result}`
+- `mini_chat_turn_mutation_latency_ms{op}`
 
 ##### Provider / OAGW interaction
 
@@ -656,6 +694,83 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 **Postconditions**:
 - All expired temporary chats and their external resources are removed
 
+#### UC-007: Retry Last Turn
+
+- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-retry-turn`
+
+**Actor**: `cpt-cf-mini-chat-actor-chat-user`
+
+**Preconditions**:
+- Chat exists and belongs to the user
+- The last turn is in a terminal state (`completed`, `failed`, or `cancelled`)
+
+**Main Flow**:
+1. User requests retry of the last turn
+2. System verifies the target turn is the most recent and in a terminal state
+3. System soft-deletes the previous turn and creates a new turn
+4. System re-submits the original user message for a new assistant response (same streaming flow as UC-001)
+5. System emits `turn_retry` audit event
+
+**Postconditions**:
+- New assistant response persisted as a new turn; previous turn soft-deleted but retained for audit
+- Audit event emitted
+
+**Alternative Flows**:
+- **Not the latest turn**: System rejects with `409 Conflict`
+- **Turn still running**: System rejects with `400 Bad Request`. Client may cancel streaming by disconnecting the SSE stream; once the turn reaches a terminal state, mutation is allowed.
+
+#### UC-008: Edit Last User Turn
+
+- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-edit-turn`
+
+**Actor**: `cpt-cf-mini-chat-actor-chat-user`
+
+**Preconditions**:
+- Chat exists and belongs to the user
+- The last turn is in a terminal state (`completed`, `failed`, or `cancelled`)
+
+**Main Flow**:
+1. User submits edited content for the last turn
+2. System verifies the target turn is the most recent and in a terminal state
+3. System soft-deletes the previous turn
+4. System creates a new turn with the updated user message content
+5. System generates a new assistant response (same streaming flow as UC-001)
+6. System emits `turn_edit` audit event
+
+**Postconditions**:
+- New turn with updated content and new assistant response persisted
+- Previous turn soft-deleted but retained for audit
+- Audit event emitted
+
+**Alternative Flows**:
+- **Not the latest turn**: System rejects with `409 Conflict`
+- **Turn still running**: System rejects with `400 Bad Request`. Client may cancel streaming by disconnecting the SSE stream; once the turn reaches a terminal state, mutation is allowed.
+
+#### UC-009: Delete Last Turn
+
+- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-delete-turn`
+
+**Actor**: `cpt-cf-mini-chat-actor-chat-user`
+
+**Preconditions**:
+- Chat exists and belongs to the user
+- The last turn is in a terminal state (`completed`, `failed`, or `cancelled`)
+
+**Main Flow**:
+1. User requests deletion of the last turn
+2. System verifies the target turn is the most recent and in a terminal state
+3. System soft-deletes the turn (user message + assistant response)
+4. System emits `turn_delete` audit event
+
+**Postconditions**:
+- Turn no longer visible in active conversation history
+- Soft-deleted turn retained for audit
+- Audit event emitted
+
+**Alternative Flows**:
+- **Not the latest turn**: System rejects with `409 Conflict`
+- **Turn still running**: System rejects with `400 Bad Request`. Client may cancel streaming by disconnecting the SSE stream; once the turn reaches a terminal state, mutation is allowed.
+
 ## 9. Acceptance Criteria
 
 - [ ] User can create a chat, send messages, and receive streamed AI responses with `mini_chat_ttft_overhead_ms` p99 < 50 ms platform overhead (excluding provider latency)
@@ -665,8 +780,9 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - [ ] User exceeding daily quota receives a clear error message and is auto-downgraded to a base model
 - [ ] Temporary chats are automatically deleted within 25 hours
 - [ ] Deleted chat resources are removed from the external provider (target: within 1 hour under normal conditions; eventual with retry/backoff)
-- [ ] Every AI interaction emits audit events to platform `audit_service` with usage metrics
+- [ ] Every completed chat turn emits a structured audit event to platform `audit_service` (one event per completed turn) including usage metrics
 - [ ] Long conversations (50+ turns) remain functional via thread summary compression
+- [ ] User can retry, edit, or delete the last turn; operations on non-latest turns are rejected with `409 Conflict`
 
 ## 10. Dependencies
 
