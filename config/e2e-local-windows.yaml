@@ -163,7 +163,7 @@ modules:
 
   grpc-hub:
     config:
-      listen_addr: "uds:///tmp/hyperspot-grpc-e2e"
+      listen_addr: "127.0.0.1:50051"
 
   users-info:
     # Module-specific database configuration
@@ -228,7 +228,7 @@ tracing:
   # Sampling configuration
   sampler:
     parent_based_ratio: # parent_based_always_on | parent_based_ratio | always_on | always_off
-      ratio: 1.0  # Sample 20% of traces (only used with ratio strategies)
+      ratio: 1.0  # Sample 100% of traces (only used with ratio strategies)
 
   # Propagation configuration
   propagation:

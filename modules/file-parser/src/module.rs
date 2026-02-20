@@ -41,7 +41,7 @@ impl Module for FileParserModule {
         let cfg: FileParserConfig = ctx.config()?;
         debug!(
             "Loaded file-parser config: max_file_size_mb={}",
-            cfg.max_file_size_mb
+            cfg.max_file_size_mb,
         );
 
         // Build parser backends

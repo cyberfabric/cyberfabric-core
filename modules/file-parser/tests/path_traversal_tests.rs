@@ -15,6 +15,7 @@ fn build_service(allowed_local_base_dir: PathBuf) -> FileParserService {
         max_file_size_bytes: 10 * 1024 * 1024,
         allowed_local_base_dir,
     };
+
     FileParserService::new(parsers, config)
 }
 
