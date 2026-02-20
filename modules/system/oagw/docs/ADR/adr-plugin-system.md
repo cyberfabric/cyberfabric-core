@@ -1,10 +1,12 @@
 # ADR: Plugin System
 
+**ID**: `cpt-cf-oagw-adr-plugin-system`
+
 - **Status**: Accepted
 - **Date**: 2026-02-09
 - **Deciders**: OAGW Team
 
-## Context
+## Context and Problem Statement
 
 OAGW needs extensibility for request/response processing. Different use cases require different behaviors:
 
@@ -12,9 +14,23 @@ OAGW needs extensibility for request/response processing. Different use cases re
 - Validation: Timeouts, CORS, rate limiting, custom rules
 - Transformation: Logging, metrics, request ID, custom headers
 
-## Decision
+## Decision Drivers
 
-**Plugin system with three plugin types**, executed by Data Plane:
+- Clear separation of plugin responsibilities (auth, validation, transformation)
+- Same trait interface for built-in and external plugins
+- Native Rust performance for hot-path operations
+- Modkit integration for external plugin modules
+- Extensibility without modifying OAGW core
+
+## Considered Options
+
+1. **Three Plugin Types** (Recommended): AuthPlugin, GuardPlugin, TransformPlugin with distinct traits
+2. **Single Extension Trait**: One generic trait for all plugin purposes
+3. **Starlark Only**: Interpreted scripts for all plugins
+
+## Decision Outcome
+
+**Chosen**: Option 1 — Plugin system with three plugin types, executed by Data Plane:
 
 ### Plugin Types
 
@@ -152,7 +168,7 @@ impl ControlPlane {
 }
 ```
 
-## Rationale
+### Rationale
 
 - **Clear trait boundaries**: Each plugin type has specific purpose
 - **Same traits for built-in and external**: No special-casing
@@ -160,7 +176,7 @@ impl ControlPlane {
 - **Native Rust performance**: No WASM overhead for MVP
 - **Type safety**: Compile-time guarantees for built-in plugins
 
-## Consequences
+### Consequences
 
 ### Positive
 
@@ -178,6 +194,31 @@ impl ControlPlane {
 
 - **Starlark plugins**: For simple transforms (p3)
 - **WASM plugins**: For sandboxed untrusted code (p3)
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests for each plugin trait (AuthPlugin, GuardPlugin, TransformPlugin)
+- Integration tests verifying plugin execution order (auth → guard → transform)
+- External plugin loading via modkit module registration
+
+## Pros and Cons of the Options
+
+### Option 1: Three Plugin Types
+
+- **Good**: Clear trait boundaries, type-safe, same interface for built-in and external
+- **Bad**: External plugins require Rust implementation, changes require recompilation
+
+### Option 2: Single Extension Trait
+
+- **Good**: Simple, fewer traits to maintain
+- **Bad**: Too generic, loses type safety and clear semantics
+
+### Option 3: Starlark Only
+
+- **Good**: Easy scripting, no recompilation needed
+- **Bad**: Too slow for hot path operations (auth, guards)
 
 ## Alternatives Considered
 

@@ -1,5 +1,7 @@
 # ADR: Component Architecture
 
+**ID**: `cpt-cf-oagw-adr-component-architecture`
+
 - **Status**: Superseded
 - **Date**: 2026-02-09
 - **Deciders**: OAGW Team
@@ -23,9 +25,15 @@ OAGW is being designed as a greenfield project without existing code. We need to
 - Maintainability: Clear boundaries and responsibilities via domain trait interfaces
 - Simplicity: Avoid multi-crate coordination overhead when not needed
 
-## Decision
+## Considered Options
 
-OAGW is implemented as a single module (`oagw` crate) with internal service isolation via domain traits and DDD-Light layering:
+1. **Single Module with Trait-Based Isolation** (Recommended): One `oagw` crate with DDD-Light layering and domain traits
+2. **Multi-Crate Architecture**: Separate library crates (`oagw`, `oagw-cp`, `oagw-dp`)
+3. **Monolithic Service**: Single crate with no internal CP/DP separation
+
+## Decision Outcome
+
+**Chosen**: Option 1 — OAGW is implemented as a single module (`oagw` crate) with internal service isolation via domain traits and DDD-Light layering:
 
 ### Internal Services
 
@@ -71,7 +79,7 @@ All services communicate via in-process trait method calls. There is no inter-se
 - `DataPlaneServiceImpl` holds an `Arc<dyn ControlPlaneService>` for config resolution
 - Services are wired together during ModKit module initialization in `module.rs`
 
-## Consequences
+### Consequences
 
 ### Positive
 
@@ -89,6 +97,31 @@ All services communicate via in-process trait method calls. There is no inter-se
 ### Risks
 
 - **Future scaling needs**: If CP and DP need independent scaling, extraction into separate crates would require refactoring. Mitigated by clean trait boundaries — the domain traits already define the split points.
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests demonstrating trait-based service isolation (mock `ControlPlaneService` in DP tests)
+- Dylint linter enforcement of DDD-Light layering (`domain/infra/api`)
+- Integration tests verifying zero-overhead in-process communication
+
+## Pros and Cons of the Options
+
+### Option 1: Single Module with Trait-Based Isolation
+
+- **Good**: Zero overhead (direct function calls), simple build, clean trait boundaries, testable
+- **Bad**: No independent scaling of CP and DP, single deployment unit
+
+### Option 2: Multi-Crate Architecture
+
+- **Good**: Independent scaling, microservice deployment option
+- **Bad**: Multi-crate coordination overhead, not needed for current scale
+
+### Option 3: Monolithic Service
+
+- **Good**: Simplest possible structure
+- **Bad**: Hard to test proxy orchestration independently, no clear boundaries
 
 ## Alternatives Considered
 

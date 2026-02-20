@@ -1,5 +1,7 @@
 # ADR: Concurrency Control
 
+**ID**: `cpt-cf-oagw-adr-concurrency-control`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -27,6 +29,12 @@ Both are needed: rate limiting prevents long-term quota violations, concurrency 
 - Graceful degradation when limits reached
 - Observable metrics (current in-flight, limit utilization)
 - Works with streaming requests (counted until completion)
+
+## Considered Options
+
+1. **Semaphore-Based Local Limiting** (Recommended): In-memory atomic semaphores with RAII permits
+2. **Distributed Limiting via Redis**: Centralized counters for global accuracy
+3. **No Concurrency Control**: Rely on upstream backpressure and connection pool limits
 
 ## Concurrency Limiting Scope
 
@@ -393,7 +401,7 @@ If not specified:
 - Redis-based global counters
 - Cross-node synchronization
 
-## Decision
+## Decision Outcome
 
 **Accepted**: Implement concurrency control with local-only limiting (Phase 1-2).
 
@@ -407,7 +415,7 @@ If not specified:
 
 **Deferred**: Distributed coordination (Phase 3) until demonstrated need.
 
-## Consequences
+### Consequences
 
 **Positive**:
 
@@ -427,6 +435,31 @@ If not specified:
 - Provide sensible defaults (no limit unless specified)
 - Use `strategy: "queue"` for smoother degradation (see ADR: Backpressure)
 - Monitor metrics to tune limits appropriately
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests for semaphore acquire/release correctness and RAII permit behavior
+- Integration tests for reject behavior when limits are reached
+- Load tests sustaining max_concurrent requests without permit leaks
+
+## Pros and Cons of the Options
+
+### Semaphore-Based Local Limiting
+
+- **Good**: Low overhead (<100ns), RAII guarantees, simple to implement, no external dependencies
+- **Bad**: Local-only limiting is approximate across nodes, potential false rejections during spikes
+
+### Distributed Limiting via Redis
+
+- **Good**: Accurate global limiting across all nodes
+- **Bad**: Increased latency (~1-5ms), Redis dependency, complexity
+
+### No Concurrency Control
+
+- **Good**: Simplest approach, no overhead
+- **Bad**: Risk of resource exhaustion, no tenant isolation, no protection for upstreams
 
 ## References
 

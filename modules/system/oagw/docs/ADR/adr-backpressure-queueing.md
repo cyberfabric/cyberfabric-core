@@ -1,5 +1,7 @@
 # ADR: Backpressure and Queueing
 
+**ID**: `cpt-cf-oagw-adr-backpressure-queueing`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -23,6 +25,12 @@ OAGW needs backpressure mechanisms to gracefully handle overload and signal clie
 - Work with both rate limiting and concurrency limiting
 - Observable queue behavior (depth, wait time, rejections)
 - Configurable strategies per upstream/route
+
+## Considered Options
+
+1. **Reject** (Default): Immediately return error when capacity exceeded
+2. **Queue**: Enqueue requests until capacity available or timeout
+3. **Degrade**: Apply degraded routing or fallback behavior
 
 ## Backpressure Strategies
 
@@ -596,7 +604,7 @@ If not specified:
 - Fallback upstream routing
 - Cached response fallback
 
-## Decision
+## Decision Outcome
 
 **Accepted**: Implement backpressure with `reject` and `queue` strategies (Phase 1-2).
 
@@ -610,7 +618,7 @@ If not specified:
 
 **Deferred**: Priority queueing and degradation (Phase 3-4) until demonstrated need.
 
-## Consequences
+### Consequences
 
 **Positive**:
 
@@ -632,6 +640,31 @@ If not specified:
 - Queue timeout < typical client timeout (e.g., 5s queue vs 30s client)
 - Monitor queue metrics to detect issues
 - Default to `reject` strategy (opt-in to queueing)
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Load tests validating queue strategy absorbs traffic spikes without excessive rejections
+- Integration tests verifying memory limits are respected under sustained load
+- Correctness tests for Retry-After header values
+
+## Pros and Cons of the Options
+
+### Reject Strategy
+
+- **Good**: No memory overhead, predictable latency, simple to implement
+- **Bad**: Poor UX during spikes, clients must implement retry logic
+
+### Queue Strategy
+
+- **Good**: Absorbs traffic spikes, better UX, automatic retry handling
+- **Bad**: Memory overhead, increased latency, risk of timeout cascade
+
+### Degrade Strategy
+
+- **Good**: Maintains availability, graceful degradation
+- **Bad**: Complex configuration, requires fallback infrastructure
 
 ## References
 

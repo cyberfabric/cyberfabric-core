@@ -1,5 +1,7 @@
 # ADR: Error Source Distinction
 
+**ID**: `cpt-cf-oagw-adr-error-source-distinction`
+
 - **Status**: Accepted
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -152,6 +154,45 @@ OAGW uses specific status codes for gateway-originated errors:
 Option 2 (envelope) rejected: breaks HTTP semantics, problematic for non-JSON/streaming, adds unwrap complexity.
 
 Option 3 (status codes) rejected: custom 5xx codes violate HTTP spec, collision risk with upstream errors.
+
+### Consequences
+
+**Positive**:
+
+- Simple implementation and consumption
+- Works with any content type (JSON, binary, streaming)
+- Non-invasive — upstream responses passed through unchanged
+- Industry standard pattern (Kong, Apigee)
+
+**Negative**:
+
+- Headers can be stripped by intermediaries (rare in practice)
+- Clients must explicitly check header
+
+### Confirmation
+
+Confirmation will be achieved through integration tests validating:
+
+- `X-OAGW-Error-Source: gateway` header present on all OAGW-generated errors
+- `X-OAGW-Error-Source: upstream` header present on all upstream pass-through errors
+- Header preserved across all supported protocols (HTTP, gRPC, SSE)
+
+## Pros and Cons of the Options
+
+### Option 1: Response Header Indicator
+
+- **Good**: Simple, non-invasive, works with any content type, industry standard
+- **Bad**: Headers can be stripped by intermediaries, clients must check header explicitly
+
+### Option 2: Wrapped Error Envelope
+
+- **Good**: Unambiguous structured distinction, extensible metadata
+- **Bad**: Breaks HTTP status code semantics, problematic for non-JSON/streaming responses
+
+### Option 3: Distinct Status Code Ranges
+
+- **Good**: Immediate distinction from status code alone
+- **Bad**: Custom codes violate HTTP spec, collision risk with upstream codes
 
 ## Links
 

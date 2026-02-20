@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OAGW Transform Plugin",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "gts-identifier",
+      "examples": [
+        "gts.x.core.oagw.transform_plugin.v1~x.core.oagw.logging.v1",
+        "gts.x.core.oagw.transform_plugin.v1~acme.billing.oagw.redact_pii.v1"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "format": "gts-identifier",
+      "enum": [
+        "gts.x.core.oagw.plugin_type.v1~x.core.oagw.builtin.v1",
+        "gts.x.core.oagw.plugin_type.v1~x.core.oagw.starlark.v1"
+      ]
+    },
+    "phase": {
+      "type": "array",
+      "items": {
+        "enum": [ "on_request", "on_response", "on_error" ]
+      },
+      "minItems": 1
+    },
+    "config_schema": {
+      "type": "object",
+      "description": "JSON Schema validated when plugin is attached to upstream/route."
+    },
+    "source_ref": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^/api/oagw/v1/plugins/.+/source$",
+      "description": "Derived from plugin id. Starlark source fetched via GET {source_ref}."
+    }
+  },
+  "required": [ "id", "type", "phase", "config_schema" ]
+}

@@ -1,5 +1,7 @@
 # ADR: Resource Identification and Discovery
 
+**ID**: `cpt-cf-oagw-adr-resource-identification`
+
 - **Status**: Proposed
 - **Date**: 2026-01-28
 - **Deciders**: TBD
@@ -33,9 +35,16 @@ alias. When subsub-tenant resolves alias `my-service`, system finds 3 upstreams 
 - Tenant isolation for configurations while sharing base definitions
 - Human-readable proxy URLs via aliases or hostnames
 
+## Considered Options
+
+1. **UUID + Alias + Tags + Tenant Bindings** (Recommended): Three-layer approach with shared definitions and per-tenant bindings
+2. **UUID Only**: System-generated UUIDs with no human-readable identifiers
+3. **Name-Based IDs**: Human-assigned names as primary identifiers
+4. **Hash-Based Deduplication**: Content-addressable IDs derived from upstream configuration
+
 ## Decision Outcome
 
-**Chosen approach: UUID + Alias + Tags + Tenant Bindings**
+**Chosen**: Option 1 — UUID + Alias + Tags + Tenant Bindings
 
 Separate concerns into three layers:
 
@@ -494,6 +503,52 @@ path=/api/v1/users
 status=200
 latency_ms=234
 ```
+
+### Consequences
+
+**Positive**:
+
+- Human-readable proxy URLs via aliases
+- Automatic deduplication of equivalent upstreams
+- Tenant isolation with shared base definitions
+- Log correlation via binding IDs and upstream IDs
+- Discoverable resources via tags and alias search
+
+**Negative**:
+
+- Alias shadowing across tenant hierarchy adds complexity
+- Compatibility validation needed for multi-endpoint pools
+- Alias uniqueness constraint within tenant scope
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Integration tests for alias resolution across tenant hierarchy (shadowing, enforcement)
+- Tests for automatic alias generation (hostname, common suffix, IP-based)
+- Compatibility validation tests for multi-endpoint alias pools
+
+## Pros and Cons of the Options
+
+### UUID + Alias + Tags + Tenant Bindings
+
+- **Good**: Human-readable routing, automatic deduplication, tenant isolation, flexible discovery
+- **Bad**: Alias shadowing complexity, compatibility validation overhead
+
+### UUID Only
+
+- **Good**: Simple, no naming conflicts
+- **Bad**: Not human-readable, poor developer experience for proxy URLs
+
+### Name-Based IDs
+
+- **Good**: Human-readable
+- **Bad**: Naming conflicts across tenants, no automatic deduplication
+
+### Hash-Based Deduplication
+
+- **Good**: Automatic deduplication, deterministic
+- **Bad**: Brittle (config changes break references), not human-readable
 
 ## Links
 

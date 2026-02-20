@@ -1,5 +1,7 @@
 # ADR: Circuit Breaker
 
+**ID**: `cpt-cf-oagw-adr-circuit-breaker`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Deciders**: TBD
@@ -30,6 +32,13 @@ Circuit breaker should be **core functionality** (not a plugin) because:
 - **Per-upstream isolation**: One upstream's failure doesn't affect others
 - **Observability**: Clear metrics and state visibility
 - **Graceful degradation**: Fallback strategies when circuit opens
+
+## Considered Options
+
+1. **Core Circuit Breaker with Redis State** (Recommended): Built-in circuit breaker with distributed state via Redis
+2. **Circuit Breaker as Plugin**: Implement as optional plugin
+3. **No Circuit Breaker (Client Responsibility)**: Let clients handle circuit breaking
+4. **Health Check Based Only**: Proactive health checks instead of reactive circuit breaking
 
 ## Circuit Breaker State Machine
 
@@ -356,7 +365,18 @@ Circuit breaker configuration follows same inheritance rules as rate limits:
 4. **Manual override**: Admin API to manually open/close circuits for maintenance
 5. **Warm-up period**: After deployment, circuit starts in CLOSED with reduced sensitivity
 
-## Consequences
+## Decision Outcome
+
+**Chosen**: Option 1 — Core circuit breaker with Redis-based distributed state.
+
+**Rationale**:
+
+1. Circuit breaker requires distributed state coordination across OAGW nodes
+2. Needs atomic transitions and tight integration with error handling and routing
+3. Redis-based shared state provides strong consistency with <1ms latency
+4. Combined with optional active health checks for faster recovery detection
+
+### Consequences
 
 ### Positive
 
@@ -378,6 +398,36 @@ Circuit breaker configuration follows same inheritance rules as rate limits:
 - Circuit breaker state is shared globally per upstream (not per-route)
 - Manual intervention needed to override automatic behavior
 - Requires careful tuning of thresholds per upstream
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests for state machine transitions (CLOSED → OPEN → HALF-OPEN → CLOSED)
+- Integration tests verifying distributed state coordination via Redis
+- Chaos tests confirming circuit opens on upstream failure and recovers automatically
+
+## Pros and Cons of the Options
+
+### Core Circuit Breaker with Redis State
+
+- **Good**: Fast failure detection, automatic recovery, strong consistency across nodes
+- **Bad**: Adds complexity to request path, Redis dependency
+
+### Circuit Breaker as Plugin
+
+- **Good**: Optional, decoupled from core
+- **Bad**: Plugins cannot access distributed state efficiently, no tight integration with routing
+
+### No Circuit Breaker (Client Responsibility)
+
+- **Good**: Simple OAGW, no state management
+- **Bad**: Clients may not implement proper circuit breaking, OAGW better positioned to detect upstream health
+
+### Health Check Based Only
+
+- **Good**: Proactive detection, no reactive overhead
+- **Bad**: Slower failure detection, doesn't prevent requests to known-bad upstreams
 
 ## Alternatives Considered
 

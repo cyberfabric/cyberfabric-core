@@ -1,5 +1,7 @@
 # ADR: Rust ABI Client Library for Internal Modules
 
+**ID**: `cpt-cf-oagw-adr-rust-abi-client-library`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Updated**: 2026-02-09
@@ -272,7 +274,57 @@ let response = client.execute("openai", request).await?;
 
 - Slightly more boilerplate in enum dispatch methods
 
-**Decision**: Use hybrid approach with deployment abstraction (Option 3).
+## Decision Outcome
+
+**Chosen**: Option 3 — Hybrid approach with deployment abstraction. Single `OagwClient` type that internally dispatches to `SharedProcessClient` or `RemoteProxyClient` based on configuration.
+
+**Rationale**:
+
+1. **Deployment-agnostic**: Application code never changes regardless of deployment mode
+2. **Zero-cost abstraction**: Enum dispatch optimized away by compiler
+3. **Configuration-driven**: Mode selected from config, not code
+4. **Type-safe**: Single concrete type, no trait objects
+
+### Consequences
+
+**Positive**:
+
+- Internal modules use a single, ergonomic API for all deployment modes
+- SDK compatibility via multiple integration patterns (drop-in, proxy, wrapper)
+- Streaming support (SSE, WebSocket) built into core API
+- Testable with mock implementations
+
+**Negative**:
+
+- Hard dependency on reqwest for RemoteProxyClient
+- Async-only primary API (blocking wrapper needed for sync contexts)
+- External plugins require Rust SDK modifications
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests for both SharedProcessClient and RemoteProxyClient paths
+- Integration tests for SSE streaming and WebSocket connections through OAGW
+- Compatibility tests with async and blocking (sync) usage patterns
+- SDK integration tests with OpenAI wrapper (Pattern 4)
+
+## Pros and Cons of the Options
+
+### Option 1: Trait-Based Abstraction with Dynamic Dispatch
+
+- **Good**: Clean separation, easy to test with mocks, pluggable backends
+- **Bad**: Dynamic dispatch overhead (negligible), slightly more complex
+
+### Option 2: Concrete Types with Feature Flags
+
+- **Good**: Zero-cost abstraction, simpler implementation
+- **Bad**: Cannot use both modes in same binary, harder to test
+
+### Option 3: Hybrid Approach with Deployment Abstraction
+
+- **Good**: Deployment-agnostic, zero-cost enum dispatch, type-safe, configuration-driven
+- **Bad**: Slightly more boilerplate in enum dispatch methods
 
 ## SDK Integration Patterns
 

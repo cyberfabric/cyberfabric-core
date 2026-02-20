@@ -1,5 +1,7 @@
 # ADR: Rate Limiting
 
+**ID**: `cpt-cf-oagw-adr-rate-limiting`
+
 - **Status**: Accepted
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -371,6 +373,52 @@ X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1706626800
 Retry-After: 30
 ```
+
+### Consequences
+
+**Positive**:
+
+- Clear separation of sustained rate vs burst capacity
+- Hierarchical budget prevents children from exceeding parent allocation
+- Hybrid sync balances accuracy vs performance
+- Standard response headers for client integration
+
+**Negative**:
+
+- Redis dependency for distributed accuracy
+- Complexity in budget allocation validation
+- Sync interval introduces accuracy trade-off
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Unit tests for token bucket algorithm correctness
+- Integration tests for hierarchical budget enforcement
+- Load tests comparing local-only vs distributed sync accuracy
+- Response header compliance with draft-ietf-httpapi-ratelimit-headers
+
+## Pros and Cons of the Options
+
+### Token Bucket Algorithm
+
+- **Good**: Industry standard, allows bursts, simple, memory efficient
+- **Bad**: Burst at window boundary possible
+
+### Sliding Window Algorithm
+
+- **Good**: No boundary burst, accurate enforcement
+- **Bad**: Slightly more compute overhead
+
+### Local-Only Sync
+
+- **Good**: No external dependency, simple, fast
+- **Bad**: Inaccurate if traffic not evenly distributed
+
+### Hybrid Local + Periodic Sync
+
+- **Good**: Balances accuracy and performance, graceful Redis fallback
+- **Bad**: Sync interval introduces trade-off, burst can exceed limit across nodes
 
 ## Schema Changes
 

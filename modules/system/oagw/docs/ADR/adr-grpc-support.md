@@ -1,5 +1,7 @@
 # ADR: gRPC Support
 
+**ID**: `cpt-cf-oagw-adr-grpc-support`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -218,6 +220,46 @@ Options 1 and 2 rejected:
 
 - Option 1: Multiple ports add operational complexity, poor cloud integration
 - Option 2: Hijacking adds unnecessary complexity for same outcome as Option 3
+
+### Consequences
+
+**Positive**:
+
+- Single ingress point for all traffic (HTTP and gRPC)
+- Simple and reliable protocol detection via content-type header
+- Cloud-native deployment (works with Kubernetes, cloud LBs)
+- Full streaming support for all gRPC patterns
+
+**Negative**:
+
+- All OAGW nodes must support HTTP/2
+- Slightly more complex than HTTP/1.1-only
+
+### Confirmation
+
+Confirmation will be achieved through prototype validation:
+
+- gRPC health check (`grpc.health.v1.Health/Check`) works end-to-end through OAGW
+- HTTP/1.1 REST requests coexist on the same port without interference
+- Bidirectional streaming works without timeouts
+- Rate limiting applies to gRPC requests
+
+## Pros and Cons of the Options
+
+### Option 1: Separate Port
+
+- **Good**: Simple implementation, no protocol detection, clear separation
+- **Bad**: Extra port management, incompatible with many cloud environments, clients must know which port
+
+### Option 2: Connection Hijacking
+
+- **Good**: Single port, works with cloud LBs, transparent to clients
+- **Bad**: Complex protocol detection, small overhead, edge cases with misdetection
+
+### Option 3: HTTP/2 with gRPC Multiplexing
+
+- **Good**: Single port, native HTTP/2, simple content-type detection, standard approach
+- **Bad**: Requires HTTP/2 support on all nodes
 
 ## Implementation Notes
 

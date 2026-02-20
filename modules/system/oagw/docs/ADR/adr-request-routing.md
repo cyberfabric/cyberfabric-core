@@ -1,5 +1,7 @@
 # ADR: Request Routing
 
+**ID**: `cpt-cf-oagw-adr-request-routing`
+
 - **Status**: Accepted
 - **Date**: 2026-02-09
 - **Deciders**: OAGW Team
@@ -13,9 +15,21 @@ With three components (API Handler, Data Plane, Control Plane), we need to defin
 
 **Key Question**: Which component handles which operations?
 
-## Decision
+## Decision Drivers
 
-**Path-Based Routing**: API Handler routes requests based on URL path.
+- Clear separation between configuration management and request execution
+- Minimal latency for management operations (direct path to DP)
+- CP focused on proxy orchestration logic
+- Simple, deterministic routing rules based on URL path
+
+## Considered Options
+
+1. **Path-Based Routing** (Recommended): API Handler routes to CP or DP based on URL path
+2. **CP Handles Everything**: All requests go to CP, which calls DP as needed
+
+## Decision Outcome
+
+**Chosen**: Option 1 — Path-Based Routing: API Handler routes requests based on URL path.
 
 ### Routing Rules
 
@@ -50,7 +64,7 @@ Client
 → Response
 ```
 
-## Rationale
+### Rationale
 
 **Why DP handles management operations**:
 
@@ -66,7 +80,7 @@ Client
 - CP executes plugins (auth, guard, transform)
 - CP makes HTTP calls to external services
 
-## Consequences
+### Consequences
 
 ### Positive
 
@@ -79,6 +93,26 @@ Client
 
 - CP depends on DP for every proxy request (cache misses)
 - Mitigated by CP L1 cache for hot configs
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Integration tests verifying management operations route to DP directly
+- Integration tests verifying proxy operations route through CP with proper orchestration
+- Latency benchmarks comparing direct DP path vs CP-mediated path
+
+## Pros and Cons of the Options
+
+### Option 1: Path-Based Routing
+
+- **Good**: Clear separation (DP = data, CP = execution), shorter path for management, CP focused on proxy
+- **Bad**: CP depends on DP for every proxy request (mitigated by cache)
+
+### Option 2: CP Handles Everything
+
+- **Good**: Single entry point, simpler routing
+- **Bad**: Management operations don't need CP orchestration, adds unnecessary latency
 
 ## Alternatives Considered
 

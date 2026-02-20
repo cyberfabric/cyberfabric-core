@@ -1,5 +1,7 @@
 # ADR: Cross-Origin Resource Sharing (CORS)
 
+**ID**: `cpt-cf-oagw-adr-cors`
+
 - **Status**: Proposed
 - **Date**: 2026-02-03
 - **Deciders**: OAGW Team
@@ -147,6 +149,46 @@ Options 1 and 2 rejected:
 
 - Option 1: Adds latency, fails if upstream unavailable
 - Option 2: Plugin ordering issues, more complex configuration
+
+### Consequences
+
+**Positive**:
+
+- Browser-based clients can use OAGW
+- Fast preflight handling (no upstream round-trip)
+- Secure by default (disabled unless configured)
+- Standards-compliant implementation
+
+**Negative**:
+
+- Adds built-in logic to OAGW core
+- Requires CORS configuration for each upstream/route
+
+### Confirmation
+
+Confirmation will be achieved through integration tests validating:
+
+- Preflight OPTIONS requests handled locally without upstream round-trip
+- Origin enforcement rejects unauthorized origins
+- CORS works correctly when upstream is unavailable
+- `Vary: Origin` header always present to prevent cache poisoning
+
+## Pros and Cons of the Options
+
+### Option 1: Proxy CORS to Upstream
+
+- **Good**: Simple, no OAGW logic, upstream controls policy
+- **Bad**: Added latency, fails if upstream unavailable, no OAGW-level origin restrictions
+
+### Option 2: CORS Guard Plugin
+
+- **Good**: Flexible per-upstream configuration, local preflight, works when upstream down
+- **Bad**: Requires explicit configuration, plugin ordering issues
+
+### Option 3: Built-in CORS Handler
+
+- **Good**: First-class feature, fast preflight, clear config model, standards-compliant
+- **Bad**: Adds built-in logic to core, not extensible via plugins
 
 ## Configuration Schema
 

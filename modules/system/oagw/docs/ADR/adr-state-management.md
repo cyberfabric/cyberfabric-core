@@ -1,10 +1,12 @@
 # ADR: State Management
 
+**ID**: `cpt-cf-oagw-adr-state-management`
+
 - **Status**: Accepted
 - **Date**: 2026-02-09
 - **Deciders**: OAGW Team
 
-## Context
+## Context and Problem Statement
 
 With Data Plane (CP) calling Control Plane (DP) for config resolution, we need to decide how state is managed:
 
@@ -12,9 +14,23 @@ With Data Plane (CP) calling Control Plane (DP) for config resolution, we need t
 - Where should rate limiters live?
 - How do we balance performance vs consistency?
 
-## Decision
+## Decision Drivers
 
-**CP has its own L1 cache** for hot configs + **rate limiters** owned by CP.
+- Minimize latency for proxy request hot path
+- Reduce inter-service calls between CP and DP
+- Simple rate limiting for MVP (per-instance acceptable)
+- Balance performance vs strict consistency
+- Configurable cache size with negligible memory overhead
+
+## Considered Options
+
+1. **CP with L1 Cache + CP-owned Rate Limiters** (Recommended): CP caches hot configs and owns rate limiters
+2. **CP Stateless**: CP makes DP call for every request, no caching
+3. **DP Owns Rate Limiters**: CP calls DP to check rate limits
+
+## Decision Outcome
+
+**Chosen**: Option 1 — CP has its own L1 cache for hot configs + **rate limiters** owned by CP.
 
 ### CP State
 
@@ -97,7 +113,7 @@ On config write (e.g., `PUT /upstreams/{id}`):
 - CP has full request context (tenant, upstream, route)
 - Avoids extra DP call for rate limit check
 
-## Rationale
+### Rationale
 
 **Why CP has L1 cache**:
 
@@ -118,7 +134,7 @@ On config write (e.g., `PUT /upstreams/{id}`):
 - DP can optimize cache invalidation during writes
 - CP L1 is just optimization layer
 
-## Consequences
+### Consequences
 
 ### Positive
 
@@ -139,6 +155,31 @@ On config write (e.g., `PUT /upstreams/{id}`):
 
 **Risk**: Per-instance rate limiting less accurate than distributed.
 **Mitigation**: Acceptable for MVP. Future: Add Redis-backed distributed rate limiter as CP extension.
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Benchmarks demonstrating <1μs L1 cache access for hot configs
+- Integration tests validating cache invalidation on config writes
+- Load tests confirming per-instance rate limiting accuracy
+
+## Pros and Cons of the Options
+
+### Option 1: CP with L1 Cache + CP-owned Rate Limiters
+
+- **Good**: Fast path for hot configs, reduced DP calls, simple rate limiting
+- **Bad**: Cache can temporarily diverge from DP, per-instance rate limiting not globally accurate
+
+### Option 2: CP Stateless
+
+- **Good**: Always consistent, no cache invalidation complexity
+- **Bad**: Too many DP calls, adds latency for hot configs
+
+### Option 3: DP Owns Rate Limiters
+
+- **Good**: Centralized rate limit state
+- **Bad**: Extra DP call per request, not worth overhead for MVP
 
 ## Alternatives Considered
 

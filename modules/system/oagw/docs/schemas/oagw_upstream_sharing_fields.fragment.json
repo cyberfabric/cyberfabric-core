@@ -1,0 +1,40 @@
+{
+  "auth": {
+    "type": "object",
+    "properties": {
+      "type": { "type": "string", "format": "gts-identifier" },
+      "sharing": {
+        "type": "string",
+        "enum": [ "private", "inherit", "enforce" ],
+        "default": "private"
+      },
+      "config": { "type": "object" }
+    }
+  },
+  "rate_limit": {
+    "type": "object",
+    "properties": {
+      "sharing": {
+        "type": "string",
+        "enum": [ "private", "inherit", "enforce" ],
+        "default": "private"
+      },
+      "rate": { "type": "integer" },
+      "window": { "type": "string" }
+    }
+  },
+  "plugins": {
+    "type": "object",
+    "properties": {
+      "sharing": {
+        "type": "string",
+        "enum": [ "private", "inherit", "enforce" ],
+        "default": "private"
+      },
+      "items": {
+        "type": "array",
+        "items": { "type": "string", "format": "gts-identifier" }
+      }
+    }
+  }
+}

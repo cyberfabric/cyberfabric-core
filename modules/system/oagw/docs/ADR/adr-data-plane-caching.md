@@ -1,10 +1,12 @@
 # ADR: Control Plane Caching Strategy
 
+**ID**: `cpt-cf-oagw-adr-data-plane-caching`
+
 - **Status**: Accepted
 - **Date**: 2026-02-09
 - **Deciders**: OAGW Team
 
-## Context
+## Context and Problem Statement
 
 Control Plane handles config resolution for Data Plane during proxy requests. Configuration data (upstreams, routes, plugins) is read-heavy and changes infrequently. We need a
 caching strategy that:
@@ -14,9 +16,24 @@ caching strategy that:
 - Supports both single-exec and microservice modes
 - Handles cache invalidation on config writes
 
-## Decision
+## Decision Drivers
 
-**Multi-layer caching**: L1 (in-memory) + optional L2 (Redis) + Database
+- Minimize database load for read-heavy configuration data
+- Provide fast lookups (<1ms for hot configs)
+- Support both single-exec and microservice deployment modes
+- Handle cache invalidation on config writes
+- Avoid unnecessary Redis dependency in single-exec mode
+
+## Considered Options
+
+1. **L1 Only (In-Memory)**: Per-instance LRU cache, no shared state
+2. **L2 Only (Redis)**: Shared Redis cache, no local cache
+3. **Multi-layer L1 + L2** (Recommended): In-memory L1 + optional Redis L2 + Database
+4. **Write-Through Cache**: Proactive cache population on writes
+
+## Decision Outcome
+
+**Chosen**: Option 3 — Multi-layer caching: L1 (in-memory) + optional L2 (Redis) + Database
 
 ### Cache Layers
 
@@ -99,14 +116,14 @@ On config write (e.g., `PUT /upstreams/{id}`):
 - L2 shared across DP instances
 - Reduces DB load from multiple instances
 
-## Rationale
+### Rationale
 
 - **L1 for speed**: In-memory access is fastest (~1μs)
 - **L2 for sharing**: Redis shares cache across instances in microservice mode
 - **Optional L2**: Single-exec mode doesn't need Redis (simpler deployment)
 - **Lazy population**: Caches populated on read (no proactive warming)
 
-## Consequences
+### Consequences
 
 ### Positive
 
@@ -125,6 +142,36 @@ On config write (e.g., `PUT /upstreams/{id}`):
 
 **Risk**: Redis unavailability causes L2 miss, increased DB load.
 **Mitigation**: L1 cache still active (10k entries), DB connection pool limits concurrent queries.
+
+### Confirmation
+
+Confirmation will be achieved through:
+
+- Benchmarks demonstrating <1μs L1 access and <2ms L2 access
+- Integration tests for cache invalidation correctness across layers
+- Load tests in both single-exec and microservice deployment modes
+
+## Pros and Cons of the Options
+
+### Option 1: L1 Only
+
+- **Good**: Simple, no external dependencies, fastest access
+- **Bad**: In microservice mode, each instance hits DB independently (high load)
+
+### Option 2: L2 Only (Redis)
+
+- **Good**: Shared across instances
+- **Bad**: Slower than L1 (serialization overhead), unnecessary for single-exec mode
+
+### Option 3: Multi-layer L1 + L2
+
+- **Good**: Fast L1 for hot paths, shared L2 for microservice mode, optional L2 for simplicity
+- **Bad**: Cache invalidation complexity across layers
+
+### Option 4: Write-Through Cache
+
+- **Good**: Cache always warm
+- **Bad**: Complicates writes, doesn't help read-heavy workload
 
 ## Alternatives Considered
 
