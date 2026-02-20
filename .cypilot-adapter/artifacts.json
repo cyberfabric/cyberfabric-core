@@ -97,6 +97,10 @@
     {
       "reason": "Ignore module 'file-parser' (not SDLC-documented yet: missing required PRD/DESIGN).",
       "patterns": ["modules/file-parser/*"]
+    },
+    {
+      "reason": "Ignore module 'llm-gateway' (not SDLC-documented yet: missing required PRD/DESIGN).",
+      "patterns": ["modules/llm-gateway/*"]
     }
   ],
   "systems": [
@@ -106,6 +110,48 @@
       "kit": "cf-sdlc",
       "artifacts": [],
       "artifacts_dir": "docs",
+      "children": [
+        {
+          "name": "unified-error-system",
+          "slug": "ues",
+          "kit": "cf-sdlc",
+          "artifacts": [
+            {
+              "path": "docs/unified-error-system/PRD.md",
+              "kind": "PRD",
+              "traceability": "FULL"
+            },
+            {
+              "path": "docs/unified-error-system/DESIGN.md",
+              "kind": "DESIGN",
+              "traceability": "FULL"
+            },
+            {
+              "path": "docs/unified-error-system/ADR/0001-cpt-cf-ues-adr-gts-identifiers.md",
+              "kind": "ADR",
+              "traceability": "FULL"
+            },
+            {
+              "path": "docs/unified-error-system/ADR/0002-cpt-cf-ues-adr-rfc9457.md",
+              "kind": "ADR",
+              "traceability": "FULL"
+            },
+            {
+              "path": "docs/unified-error-system/ADR/0003-cpt-cf-ues-adr-gts-error-macro.md",
+              "kind": "ADR",
+              "traceability": "FULL"
+            },
+            {
+              "path": "docs/unified-error-system/ADR/0004-cpt-cf-ues-adr-security-first.md",
+              "kind": "ADR",
+              "traceability": "FULL"
+            }
+          ],
+          "codebase": [
+            { "name": "Library", "path": "libs/modkit-errors/src", "extensions": [".rs"] }
+          ]
+        }
+      ],
       "codebase": [
         { "name": "Apps", "path": "apps", "extensions": [".rs"] },
         { "name": "Libraries", "path": "libs", "extensions": [".rs"] },

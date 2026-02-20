@@ -1,3 +1,4 @@
+// @cpt-component:cpt-cf-ues-component-modkit-errors:p1
 //! Core error types for the modkit framework
 //!
 //! This crate provides pure data types for error handling, with no dependencies

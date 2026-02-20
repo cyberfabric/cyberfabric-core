@@ -6,6 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "utoipa")]
 use utoipa::ToSchema;
 
+// @cpt-constraint:cpt-cf-ues-constraint-rfc9457:p1
 /// Content type for Problem Details as per RFC 9457.
 pub const APPLICATION_PROBLEM_JSON: &str = "application/problem+json";
 
@@ -27,6 +28,7 @@ where
     StatusCode::from_u16(code).map_err(serde::de::Error::custom)
 }
 
+// @cpt-interface:cpt-cf-ues-interface-problem:p1
 /// RFC 9457 Problem Details for HTTP APIs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(ToSchema))]

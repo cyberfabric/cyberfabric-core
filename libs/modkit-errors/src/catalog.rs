@@ -3,6 +3,7 @@
 use crate::problem::Problem;
 use http::StatusCode;
 
+// @cpt-fr:cpt-cf-ues-fr-system-errors:p1
 /// Static error definition from catalog
 #[derive(Debug, Clone, Copy)]
 pub struct ErrDef {
