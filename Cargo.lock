@@ -3457,6 +3457,7 @@ dependencies = [
  "cf-file-parser",
  "cf-grpc-hub",
  "cf-modkit",
+ "cf-modkit-db",
  "cf-module-orchestrator",
  "cf-nodes-registry",
  "cf-oagw",

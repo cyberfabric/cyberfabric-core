@@ -17,6 +17,12 @@ name = "simple_user_settings"
 [lints]
 workspace = true
 
+[features]
+# Database driver selection - choose one at build time
+db-sqlite = ["sea-orm/sqlx-sqlite", "sea-orm-migration/sqlx-sqlite"]
+db-pg = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres"]
+db-mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+
 [dependencies]
 simple-user-settings-sdk = { package = "cf-simple-user-settings-sdk", version = "0.1.0", path = "../simple-user-settings-sdk" }
 
@@ -34,7 +40,6 @@ utoipa = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 uuid = { workspace = true }
 sea-orm = { workspace = true, features = [
-    "sqlx-sqlite",
     "runtime-tokio-rustls",
     "macros",
     "with-time",

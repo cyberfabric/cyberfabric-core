@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS settings (
             sea_orm::DatabaseBackend::MySql => {
                 r"
 CREATE TABLE IF NOT EXISTS settings (
-    tenant_id VARCHAR(36) NOT NULL,
-    user_id VARCHAR(36) NOT NULL,
+    tenant_id BINARY(16) NOT NULL,
+    user_id BINARY(16) NOT NULL,
     theme VARCHAR(255),
     language VARCHAR(255),
     PRIMARY KEY (tenant_id, user_id)
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS settings (
             sea_orm::DatabaseBackend::Sqlite => {
                 r"
 CREATE TABLE IF NOT EXISTS settings (
-    tenant_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
+    tenant_id BLOB NOT NULL,
+    user_id BLOB NOT NULL,
     theme TEXT,
     language TEXT,
     PRIMARY KEY (tenant_id, user_id)

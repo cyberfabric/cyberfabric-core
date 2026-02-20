@@ -77,8 +77,8 @@ async def test_register_single_type_entity(base_url, auth_headers):
         assert "entity" in results[0]
 
         entity = results[0]["entity"]
-        assert entity["gtsId"] == gts_id
-        assert entity["isSchema"] is True
+        assert entity["gts_id"] == gts_id
+        assert entity["is_schema"] is True
         assert "id" in entity
         assert "content" in entity
 
@@ -159,7 +159,7 @@ async def test_register_batch_entities(base_url, auth_headers):
         for result in results:
             assert result["status"] == "ok"
             assert "entity" in result
-            assert result["entity"]["isSchema"] is True
+            assert result["entity"]["is_schema"] is True
 
 
 @pytest.mark.asyncio
@@ -220,8 +220,8 @@ async def test_register_type_with_instance(base_url, auth_headers):
         assert summary["failed"] == 0
 
         results = data["results"]
-        assert results[0]["entity"]["isSchema"] is True
-        assert results[1]["entity"]["isSchema"] is False
+        assert results[0]["entity"]["is_schema"] is True
+        assert results[1]["entity"]["is_schema"] is False
 
 
 @pytest.mark.asyncio

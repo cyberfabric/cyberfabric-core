@@ -58,7 +58,7 @@ impl Module for FileParserModule {
 
         info!("Registered {} parser backends", parsers.len());
 
-        // allowed_local_base_dir is mandatory — fail fast if missing.
+        // allowed_local_base_dir is mandatory - fail fast if missing.
         let raw_base = cfg.allowed_local_base_dir.ok_or_else(|| {
             anyhow::anyhow!(
                 "file-parser: 'allowed_local_base_dir' is required but not set. \

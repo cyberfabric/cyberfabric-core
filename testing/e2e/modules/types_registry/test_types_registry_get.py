@@ -83,8 +83,8 @@ async def test_get_entity_by_id(base_url, auth_headers):
 
         entity = response.json()
 
-        assert entity["gtsId"] == gts_id
-        assert entity["isSchema"] is True
+        assert entity["gts_id"] == gts_id
+        assert entity["is_schema"] is True
         assert "id" in entity
         assert "content" in entity
         assert entity["description"] == "Document type for get test"
@@ -238,8 +238,8 @@ async def test_get_instance_entity(base_url, auth_headers):
 
         entity = response.json()
 
-        assert entity["gtsId"] == instance_id
-        assert entity["isSchema"] is False
+        assert entity["gts_id"] == instance_id
+        assert entity["is_schema"] is False
 
         content = entity["content"]
         assert content.get("itemName") == "Test Item"
@@ -293,7 +293,7 @@ async def test_get_entity_with_special_characters_in_id(base_url, auth_headers):
         )
 
         entity = response.json()
-        assert entity["gtsId"] == gts_id
+        assert entity["gts_id"] == gts_id
 
 
 @pytest.mark.asyncio
@@ -519,14 +519,14 @@ async def test_get_entity_returns_segments(base_url, auth_headers):
         assert "vendor" in first_segment, "Segment should have vendor"
         assert "package" in first_segment, "Segment should have package"
         assert "namespace" in first_segment, "Segment should have namespace"
-        assert "typeName" in first_segment, "Segment should have typeName"
-        assert "verMajor" in first_segment, "Segment should have verMajor"
+        assert "type_name" in first_segment, "Segment should have type_name"
+        assert "ver_major" in first_segment, "Segment should have ver_major"
 
         # Verify segment values match the GTS ID
         assert first_segment["vendor"] == "e2etest"
         assert first_segment["package"] == "pkg"
         assert first_segment["namespace"] == "ns"
-        assert first_segment["verMajor"] == 1
+        assert first_segment["ver_major"] == 1
 
 
 @pytest.mark.asyncio
@@ -587,7 +587,7 @@ async def test_get_instance_with_multiple_segments(base_url, auth_headers):
 
         entity = response.json()
 
-        assert entity["isSchema"] is False
+        assert entity["is_schema"] is False
         assert "segments" in entity
         segments = entity["segments"]
 
@@ -605,7 +605,7 @@ async def test_get_instance_with_multiple_segments(base_url, auth_headers):
         assert segments[1]["vendor"] == "e2etest"
         assert segments[1]["package"] == "pkg"
         assert segments[1]["namespace"] == "instances"
-        assert segments[1]["typeName"] == "inst1"
+        assert segments[1]["type_name"] == "inst1"
 
 
 @pytest.mark.asyncio

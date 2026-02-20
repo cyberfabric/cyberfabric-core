@@ -1,4 +1,4 @@
-# HyperSpot Server Configuration
+# HyperSpot Server Configuration - E2E MySQL/MariaDB
 #
 # Database Architecture Overview:
 # ===============================
@@ -11,7 +11,7 @@
 #
 # Key principles:
 # - Each module gets its own database connection (no sharing)
-# - SQLite modules automatically get their own database file
+# - MySQL/MariaDB modules use separate databases (settings_db, users_info_db)
 # - Configuration follows a clear precedence hierarchy
 # - Environment variables are expanded (${VAR_NAME})
 # - All paths are resolved relative to server.home_dir
@@ -37,27 +37,20 @@ server:
 # - Server DSN base (lowest priority)
 #
 database:
-  # Global database servers - reusable connection templates
-  # These define shared settings that multiple modules can inherit
+  # Global server template with shared pool and connection settings
+  # Modules can reference this server and override only credentials via DSN
   servers:
-    # SQLite server template for user data modules
-    # Note: No DSN or file specified here - modules specify their own database files
-    # This prevents accidental sharing of SQLite databases between modules
-    sqlite_users:
-      engine: "sqlite"
-      # SQLite PRAGMA parameters applied to all connections using this server
-      params:
-        WAL: "true"              # Enable Write-Ahead Logging for better concurrency
-        synchronous: "NORMAL"    # Balance between safety and performance
-        busy_timeout: "5000"     # Wait 5 seconds for locked database
-      # Connection pool settings shared by all modules using this server
+    mariadb_base:
+      # Shared connection pool configuration
       pool:
-        max_conns: 5             # Maximum 5 concurrent connections
-        acquire_timeout: "30s"   # Timeout when acquiring connection from pool
-
-  # Global database options
-  # auto_provision: true       # (default) Create directories automatically for SQLite files
-  # auto_provision: false      # Fail if directories don't exist
+        max_conns: 10              # Default pool size for all modules
+        acquire_timeout: "30s"     # Default timeout for acquiring connections
+        min_conns: 2               # Minimum connections to maintain
+        idle_timeout: "10m"        # Close idle connections after 10 minutes
+      
+      # Default host/port (can be overridden by module DSN)
+      host: "mariadb"
+      port: 3306
 
 # Logging configuration (global section)
 logging:
@@ -89,7 +82,7 @@ logging:
     max_size_mb: 50
 
 
-# Per-module configurations using new structure
+# Per-module configurations using MySQL/MariaDB
 modules:
   api-gateway:
     # No database needed for api-gateway
@@ -147,31 +140,39 @@ modules:
     config:
       vendor: "Fabrikam"
       priority: 20
+      # Tenant tree configuration (example: company with 2 divisions, each with departments)
       tenants:
-        # Root
+        # Root tenant (company level)
         - id: "00000000000000000000000000000001"
           parent_id: null
           status: ACTIVE
           is_accessible_by_parent: true
-        # Level 1
+
+        # Division 1: Engineering
         - id: "00000000000000000000000000000002"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
+
+        # Division 2: Sales
         - id: "00000000000000000000000000000005"
           parent_id: "00000000000000000000000000000001"
           status: ACTIVE
           is_accessible_by_parent: true
-        # Level 2 under 000...02
+
+        # Department under Engineering: Frontend (soft-deleted, not accessible)
         - id: "00000000000000000000000000000003"
           parent_id: "00000000000000000000000000000002"
           status: SOFT_DELETED
           is_accessible_by_parent: false
+
+        # Department under Engineering: Backend
         - id: "00000000000000000000000000000004"
           parent_id: "00000000000000000000000000000002"
           status: ACTIVE
           is_accessible_by_parent: true
-        # Level 2 under 000...05
+
+        # Department under Sales: Enterprise
         - id: "00000000000000000000000000000006"
           parent_id: "00000000000000000000000000000005"
           status: ACTIVE
@@ -186,50 +187,48 @@ modules:
       listen_addr: "uds:///tmp/hyperspot-grpc-e2e"
 
   users-info:
-    # Module-specific database configuration
+    # Module-specific database configuration using DSN
+    # Inherits pool settings from mariadb_base server template
     database:
-      # Reference to global server template defined above
-      server: "sqlite_users"               # Inherits params and pool settings from sqlite_users
-
-      # Module-specific database file (required for SQLite modules)
-      file: "users_info.db"                # Creates: ~/.hyperspot/users_info/users_info.db
-
-      # Module can override server settings:
-      # params:
-      #   synchronous: "FULL"              # Would override server's "NORMAL" setting
-      #   custom_pragma: "value"           # Would add new PRAGMA setting
+      server: "mariadb_base"      # Inherits pool and params from global template
+      
+      # Module-specific DSN overrides user, password, and database name
+      dsn: "mysql://users_info_user:${USERS_INFO_DB_PASSWORD}@mariadb:3306/users_info_db"
+      
+      # Optional: Override specific pool settings for this module
       # pool:
-      #   max_conns: 10                    # Would override server's max_conns: 5
-
-      # Alternative ways to specify database location:
-      # path: "/absolute/path/to/db.sqlite" # Use absolute path instead of file
-      # dsn: "sqlite://custom.db?WAL=false" # Complete DSN override (ignores server)
-
-      # For other database types (PostgreSQL, MySQL):
-      # host: "localhost"                  # Override server host
-      # port: 5432                         # Override server port
-      # user: "app_user"                   # Override server user
-      # password: "${DB_PASSWORD}"         # Environment variable expansion
-      # dbname: "users_db"                 # Override server database name
-
+      #   max_conns: 15            # Would override the global 10 connections
+      
+      # Alternative: Use fields instead of DSN to override only credentials
+      # user: "users_info_user"
+      # password: "${USERS_INFO_DB_PASSWORD}"
+      # dbname: "users_info_db"
+    
     # Module-specific application configuration
     config:
       default_page_size: 5
       max_page_size: 100
 
   simple-user-settings:
-    # Module-specific database configuration
+    # Module-specific database configuration using DSN
+    # Inherits pool settings from mariadb_base server template
     database:
-      server: "sqlite_users"
-      file: "settings.db"
+      server: "mariadb_base"      # Inherits pool and params from global template
+      
+      # Module-specific DSN overrides user, password, and database name
+      dsn: "mysql://settings_user:${SETTINGS_DB_PASSWORD}@mariadb:3306/settings_db"
+      
+      # Optional: Override specific pool settings for this module
+      # pool:
+      #   max_conns: 5             # Would override the global 10 connections
+      
+      # Alternative: Use fields instead of DSN to override only credentials
+      # user: "settings_user"
+      # password: "${SETTINGS_DB_PASSWORD}"
+      # dbname: "settings_db"
+    
     config:
       max_field_length: 100
-
-  oagw:
-    config:
-      proxy_timeout_secs: 2
-      credentials:
-        "cred://openai-key": "sk-test-e2e-fake-key"  # Test-only fake key, not a real credential
 
   # File parser module configuration (no database needed)
   file-parser:
@@ -275,65 +274,3 @@ tracing:
   # Log correlation (future feature)
   logs_correlation:
     inject_trace_ids_into_logs: true
-
-# Example configurations for different database scenarios:
-#
-# Example 1: PostgreSQL server with multiple modules
-# ==================================================
-# database:
-#   servers:
-#     main_postgres:
-#       host: "localhost"
-#       port: 5432
-#       user: "hyperspot"
-#       password: "${POSTGRES_PASSWORD}"  # From environment variable
-#       params:
-#         sslmode: "require"
-#         application_name: "hyperspot"
-#       pool:
-#         max_conns: 20
-#         acquire_timeout: "30s"
-# modules:
-#   users_module:
-#     database:
-#       server: "main_postgres"
-#       dbname: "users_db"              # Each module gets its own database
-#   orders_module:
-#     database:
-#       server: "main_postgres"
-#       dbname: "orders_db"             # Separate database for orders
-#       pool:
-#         max_conns: 10                 # Module-specific pool override
-#
-# Example 2: Mixed database types
-# ===============================
-# database:
-#   servers:
-#     postgres_main:
-#       dsn: "postgres://user:${PG_PASS}@localhost:5432/main"
-#     redis_cache:
-#       dsn: "redis://localhost:6379/0"
-# modules:
-#   user_service:
-#     database:
-#       server: "postgres_main"
-#       dbname: "users"
-#   cache_service:
-#     database:
-#       server: "redis_cache"
-#
-# Example 3: Complete DSN override
-# ================================
-# modules:
-#   analytics:
-#     database:
-#       dsn: "postgres://analytics:${ANALYTICS_PASSWORD}@analytics-db:5432/metrics?sslmode=require"
-#       # When DSN is specified, server reference is ignored
-#
-# Example 4: No database module
-# =============================
-# modules:
-#   static_files:
-#     # No database section - module won't get database access
-#     config:
-#       static_dir: "/var/www/static"

@@ -313,35 +313,45 @@ def cmd_e2e(args):
 
         # Build image
         step("Building Docker image for E2E tests")
+        profile_suffix = "" if not args.profile or args.profile == "default" else f"-{args.profile}"
         build_cmd = [
             "docker",
             "build",
             "-f",
             "testing/docker/hyperspot.Dockerfile",
             "-t",
-            "hyperspot-api:e2e",
+            f"hyperspot-api{profile_suffix}:e2e",
         ]
 
-        # Add build args for cargo features if specified
-        if args.features:
-            build_cmd.extend(["--build-arg", f"CARGO_FEATURES={args.features}"])
+        # Add build args for cargo arguments if specified
+        if args.cargo_build_args:
+            build_cmd.extend(["--build-arg", f"CARGO_BUILD_ARGS={args.cargo_build_args}"])
 
         build_cmd.append(".")
         run_cmd(build_cmd)
 
         # Start environment
         step("Starting E2E docker-compose environment")
-        run_cmd(
-            [
-                "docker",
-                "compose",
-                "-f",
-                "testing/docker/docker-compose.yml",
-                "up",
-                "--force-recreate",
-                "-d",
-            ]
-        )
+        compose_cmd = [
+            "docker",
+            "compose",
+            "-f",
+            "testing/docker/docker-compose.yml",
+        ]
+        
+        # Add profile if specified, otherwise use 'default'
+        if args.profile:
+            if args.profile not in ['default', 'postgres', 'mariadb']:
+                print(f"ERROR: Invalid profile '{args.profile}'. Must be 'default', 'postgres' or 'mariadb'")
+                sys.exit(1)
+            compose_cmd.extend(["--profile", args.profile])
+            print(f"Using profile: {args.profile}")
+        else:
+            compose_cmd.extend(["--profile", "default"])
+            print("Using profile: default (no database)")
+
+        compose_cmd.extend(["up", "-d", "--force-recreate"])
+        run_cmd(compose_cmd)
         docker_env_started = True
 
         # Wait for healthz
@@ -358,14 +368,22 @@ def cmd_e2e(args):
             logs_dir = os.path.join(PROJECT_ROOT, "logs")
             os.makedirs(logs_dir, exist_ok=True)
 
+            cargo_args = [
+                "--bin",
+                "hyperspot-server",
+                "--features",
+                "users-info-example,static-authn,static-authz",
+            ]
+
+            # Build first (blocking) so the health-check timeout is not
+            # consumed by compilation time.
+            run_cmd(["cargo", "build"] + cargo_args)
+
             # Start server in background with logs redirected to files
             server_cmd = [
                 "cargo",
                 "run",
-                "--bin",
-                "hyperspot-server",
-                "--features",
-                "users-info-example,tenant-resolver-example",
+                *cargo_args,
                 "--",
                 "--config",
                 "config/e2e-local.yaml",
@@ -385,6 +403,7 @@ def cmd_e2e(args):
                 # Set RUST_LOG to enable debug logging for types_registry module
                 server_env = os.environ.copy()
                 server_env["RUST_LOG"] = "types_registry=debug,info"
+                print(f"> {' '.join(server_cmd)}")
                 server_process = subprocess.Popen(
                     server_cmd,
                     stdout=out_file,
@@ -413,6 +432,8 @@ def cmd_e2e(args):
     # Set E2E_DOCKER_MODE flag for the tests to know which mode they're in
     if args.docker:
         env["E2E_DOCKER_MODE"] = "1"
+        # Mock upstream runs on the host, container need to reach it via host.docker.internal for oagw tests
+        env.setdefault("E2E_MOCK_UPSTREAM_URL", "http://host.docker.internal:19876")
 
     pytest_cmd = [PYTHON, "-m", "pytest", "testing/e2e", "-vv"]
     if args.pytest_args:
@@ -428,16 +449,19 @@ def cmd_e2e(args):
 
     if args.docker and docker_env_started:
         step("Stopping E2E docker-compose environment")
-        run_cmd_allow_fail(
-            [
-                "docker",
-                "compose",
-                "-f",
-                "testing/docker/docker-compose.yml",
-                "down",
-                "-v",
-            ]
-        )
+        # Use same profile logic as startup: default to "default" if not specified
+        profile = args.profile if args.profile else "default"
+        down_cmd = [
+            "docker",
+            "compose",
+            "-f",
+            "testing/docker/docker-compose.yml",
+            "--profile",
+            profile,
+            "down",
+            "-v",
+        ]
+        run_cmd_allow_fail(down_cmd)
 
     # Stop server if we started it
     if server_process is not None:
@@ -774,9 +798,14 @@ def build_parser():
         help="Run tests in Docker environment instead of local server",
     )
     p_e2e.add_argument(
-        "--features",
-        default="users-info-example",
-        help="Cargo features to enable for Docker build (default: users-info-example)",
+        "--cargo-build-args",
+        help="Additional cargo build arguments for Docker build (e.g., '--features=feat1,feat2' or '--all-features')",
+    )
+    p_e2e.add_argument(
+        "--profile",
+        type=str,
+        choices=['default', 'postgres', 'mariadb'],
+        help="Docker Compose profile to use (default, postgres or mariadb)",
     )
     p_e2e.add_argument(
         "pytest_args",

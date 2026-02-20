@@ -87,9 +87,9 @@ async def test_list_entities_basic(base_url, auth_headers):
 @pytest.mark.asyncio
 async def test_list_entities_filter_by_is_schema_true(base_url, auth_headers):
     """
-    Test GET /types-registry/v1/entities?isSchema=true
+    Test GET /types-registry/v1/entities?is_schema=true
 
-    Verifies filtering entities by isSchema=true (types only).
+    Verifies filtering entities by is_schema=true (types only).
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
         await register_test_entities(client, base_url, auth_headers)
@@ -97,7 +97,7 @@ async def test_list_entities_filter_by_is_schema_true(base_url, auth_headers):
         response = await client.get(
             f"{base_url}/types-registry/v1/entities",
             headers=auth_headers,
-            params={"isSchema": "true"}
+            params={"is_schema": "true"}
         )
 
         if response.status_code in (401, 403) and not auth_headers:
@@ -114,17 +114,17 @@ async def test_list_entities_filter_by_is_schema_true(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity["isSchema"] is True, (
-                f"Expected isSchema=True, got '{entity.get('isSchema')}' for {entity['gtsId']}"
+            assert entity["is_schema"] is True, (
+                f"Expected is_schema=True, got '{entity.get('is_schema')}' for {entity['gts_id']}"
             )
 
 
 @pytest.mark.asyncio
 async def test_list_entities_filter_by_is_schema_false(base_url, auth_headers):
     """
-    Test GET /types-registry/v1/entities?isSchema=false
+    Test GET /types-registry/v1/entities?is_schema=false
 
-    Verifies filtering entities by isSchema=false (instances only).
+    Verifies filtering entities by is_schema=false (instances only).
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
         await register_test_entities(client, base_url, auth_headers)
@@ -132,7 +132,7 @@ async def test_list_entities_filter_by_is_schema_false(base_url, auth_headers):
         response = await client.get(
             f"{base_url}/types-registry/v1/entities",
             headers=auth_headers,
-            params={"isSchema": "false"}
+            params={"is_schema": "false"}
         )
 
         if response.status_code in (401, 403) and not auth_headers:
@@ -149,8 +149,8 @@ async def test_list_entities_filter_by_is_schema_false(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity["isSchema"] is False, (
-                f"Expected isSchema=False, got '{entity.get('isSchema')}' for {entity['gtsId']}"
+            assert entity["is_schema"] is False, (
+                f"Expected is_schema=False, got '{entity.get('is_schema')}' for {entity['gts_id']}"
             )
 
 
@@ -184,8 +184,8 @@ async def test_list_entities_filter_by_vendor(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity.get("vendor") == "e2e" or "e2e" in entity["gtsId"], (
-                f"Entity should have vendor 'e2e': {entity['gtsId']}"
+            assert entity.get("vendor") == "e2e" or "e2e" in entity["gts_id"], (
+                f"Entity should have vendor 'e2e': {entity['gts_id']}"
             )
 
 
@@ -219,8 +219,8 @@ async def test_list_entities_filter_by_package(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity.get("package") == "list" or ".list." in entity["gtsId"], (
-                f"Entity should have package 'list': {entity['gtsId']}"
+            assert entity.get("package") == "list" or ".list." in entity["gts_id"], (
+                f"Entity should have package 'list': {entity['gts_id']}"
             )
 
 
@@ -254,8 +254,8 @@ async def test_list_entities_filter_by_namespace(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity.get("namespace") == "acme" or ".acme." in entity["gtsId"], (
-                f"Entity should have namespace 'acme': {entity['gtsId']}"
+            assert entity.get("namespace") == "acme" or ".acme." in entity["gts_id"], (
+                f"Entity should have namespace 'acme': {entity['gts_id']}"
             )
 
 
@@ -289,8 +289,8 @@ async def test_list_entities_filter_by_pattern(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity["gtsId"].startswith("gts.e2e.list.acme."), (
-                f"Entity should match pattern 'gts.e2e.list.acme.*': {entity['gtsId']}"
+            assert entity["gts_id"].startswith("gts.e2e.list.acme."), (
+                f"Entity should match pattern 'gts.e2e.list.acme.*': {entity['gts_id']}"
             )
 
 
@@ -308,7 +308,7 @@ async def test_list_entities_combined_filters(base_url, auth_headers):
             f"{base_url}/types-registry/v1/entities",
             headers=auth_headers,
             params={
-                "isSchema": "true",
+                "is_schema": "true",
                 "vendor": "e2e"
             }
         )
@@ -327,7 +327,7 @@ async def test_list_entities_combined_filters(base_url, auth_headers):
         entities = data["entities"]
 
         for entity in entities:
-            assert entity["isSchema"] is True, f"Expected isSchema=True: {entity}"
+            assert entity["is_schema"] is True, f"Expected is_schema=True: {entity}"
 
 
 @pytest.mark.asyncio
@@ -437,11 +437,11 @@ async def test_list_entities_response_structure(base_url, auth_headers):
             entity = data["entities"][0]
 
             assert "id" in entity, "Entity should have 'id' field"
-            assert "gtsId" in entity, "Entity should have 'gtsId' field"
-            assert "isSchema" in entity, "Entity should have 'isSchema' field"
+            assert "gts_id" in entity, "Entity should have 'gts_id' field"
+            assert "is_schema" in entity, "Entity should have 'is_schema' field"
             assert "content" in entity, "Entity should have 'content' field"
 
             assert isinstance(entity["id"], str), "'id' should be a string (UUID)"
-            assert isinstance(entity["gtsId"], str), "'gtsId' should be a string"
-            assert isinstance(entity["isSchema"], bool), "'isSchema' should be a boolean"
+            assert isinstance(entity["gts_id"], str), "'gts_id' should be a string"
+            assert isinstance(entity["is_schema"], bool), "'is_schema' should be a boolean"
             assert isinstance(entity["content"], dict), "'content' should be an object"
