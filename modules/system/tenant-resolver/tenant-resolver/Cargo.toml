@@ -1,6 +1,6 @@
 [package]
 name = "cf-tenant-resolver"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -18,8 +18,8 @@ workspace = true
 
 [dependencies]
 # Local dependencies
-tenant-resolver-sdk = { package = "cf-tenant-resolver-sdk", version = "0.1.4", path = "../tenant-resolver-sdk" }
-types-registry-sdk = { package = "cf-types-registry-sdk", version = "0.1.3", path = "../../types-registry/types-registry-sdk" }
+tenant-resolver-sdk = { package = "cf-tenant-resolver-sdk", version = "0.1.5", path = "../tenant-resolver-sdk" }
+types-registry-sdk = { package = "cf-types-registry-sdk", version = "0.1.4", path = "../../types-registry/types-registry-sdk" }
 
 # ModKit dependencies
 modkit = { workspace = true }

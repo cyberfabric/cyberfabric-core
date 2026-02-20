@@ -9,6 +9,96 @@ release-plz updates this file in the Release PR.
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/cyberfabric/cyberfabric-core/compare/cf-static-tr-plugin-v0.1.2...cf-static-tr-plugin-v0.1.3) - 2026-02-20
+
+### Other
+
+- migrate modules from ArcSwapOption to OnceLock (by @aviator5) - #660
+
+### Contributors
+
+* @aviator5
+
+## [0.1.1](https://github.com/cyberfabric/cyberfabric-core/compare/cf-static-authz-plugin-v0.1.0...cf-static-authz-plugin-v0.1.1) - 2026-02-20
+
+### Other
+
+- Merge pull request #660 from aviator5/module-oncelock-refactoring (by @MikeFalcon77) - #660
+- migrate modules from ArcSwapOption to OnceLock (by @aviator5) - #660
+
+### Contributors
+
+* @MikeFalcon77
+* @aviator5
+
+## [0.1.1](https://github.com/cyberfabric/cyberfabric-core/compare/cf-static-authn-plugin-v0.1.0...cf-static-authn-plugin-v0.1.1) - 2026-02-20
+
+### Other
+
+- Merge pull request #660 from aviator5/module-oncelock-refactoring (by @MikeFalcon77) - #660
+- migrate modules from ArcSwapOption to OnceLock (by @aviator5) - #660
+
+### Contributors
+
+* @MikeFalcon77
+* @aviator5
+
+## [0.1.3](https://github.com/cyberfabric/cyberfabric-core/compare/cf-single-tenant-tr-plugin-v0.1.2...cf-single-tenant-tr-plugin-v0.1.3) - 2026-02-20
+
+### Other
+
+- migrate modules from ArcSwapOption to OnceLock (by @aviator5) - #660
+
+### Contributors
+
+* @aviator5
+
+## [0.2.13](https://github.com/cyberfabric/cyberfabric-core/compare/cf-oagw-v0.2.12...cf-oagw-v0.2.13) - 2026-02-20
+
+### Other
+
+- OAGW SDK Extension (by @striped-zebra-dev) - #679
+- OAGW Unskip Failing Tests (by @striped-zebra-dev) - #675
+- OAGW Skip Failing Tests (by @striped-zebra-dev) - #673
+- OAGW Implementation (by @striped-zebra-dev) - #624
+- OAGW Implementation (by @striped-zebra-dev) - #624
+
+### Contributors
+
+* @striped-zebra-dev
+
+## [0.2.13](https://github.com/cyberfabric/cyberfabric-core/compare/cf-modkit-v0.2.12...cf-modkit-v0.2.13) - 2026-02-20
+
+### Fixed
+
+- upgrade gts to 0.8.0 and align schemars to 1.2 (by @Artifizer) - #687
+- fix merge conflicts (by @Bechma) - #670
+- fix nitpicks from the rabbit (by @Bechma) - #670
+
+### Other
+
+- Merge pull request #540 from KvizadSaderah/feature/500-list-modules-api (by @Artifizer) - #540
+- Merge branch 'main' into fix-oop-example (by @Bechma) - #670
+- - fix oop example (by @Bechma) - #670
+
+### Contributors
+
+* @Artifizer
+* @Bechma
+
+## [0.2.13](https://github.com/cyberfabric/cyberfabric-core/compare/cf-oagw-sdk-v0.2.12...cf-oagw-sdk-v0.2.13) - 2026-02-20
+
+### Other
+
+- OAGW SDK Extension (by @striped-zebra-dev) - #679
+- OAGW Implementation (by @striped-zebra-dev) - #624
+- OAGW Implementation (by @striped-zebra-dev) - #624
+- OAGW Design Changes #190 (by @striped-zebra-dev) - #527
+
+### Contributors
+
+* @striped-zebra-dev
+
 ## [0.2.12](https://github.com/cyberfabric/cyberfabric-core/compare/types-sdk-v0.2.11...types-sdk-v0.2.12) - 2026-02-18
 
 ### Other
