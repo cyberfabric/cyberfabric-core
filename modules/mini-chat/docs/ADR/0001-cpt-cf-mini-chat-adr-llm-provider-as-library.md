@@ -8,7 +8,7 @@ date: 2026-02-12
 
 ## Context and Problem Statement
 
-The `llm_provider` component builds OpenAI API requests, parses SSE streams, and maps errors. Should it be deployed as a standalone microservice (with its own network endpoint) or embedded as a library crate directly consumed by `chat_service`?
+The `llm_provider` component builds OpenAI API requests, parses SSE streams, and maps errors. Should it be deployed as a standalone microservice (with its own network endpoint) or embedded as a library crate directly consumed by `mini_chat_service`?
 
 ## Decision Drivers
 
@@ -19,7 +19,7 @@ The `llm_provider` component builds OpenAI API requests, parses SSE streams, and
 
 ## Considered Options
 
-* Library crate linked into `chat_service`
+* Library crate linked into `mini_chat_service`
 * Standalone gRPC/HTTP service with its own process
 
 ## Decision Outcome
@@ -30,41 +30,41 @@ Chosen option: "Library crate", because `llm_provider` has no independent lifecy
 
 * Good, because cancellation is simpler - `CancellationToken` propagates in-process without crossing a network boundary, enabling hard cancel within a single `tokio::select!`
 * Good, because one fewer service to deploy, monitor, and scale
-* Good, because no additional network-facing authentication surface - `llm_provider` inherits the `SecurityContext` from `chat_service` in-process
-* Good, because streaming latency is lower - no serialization/deserialization or network overhead between `chat_service` and `llm_provider`
-* Bad, because `llm_provider` updates require redeploying `chat_service` (acceptable given they are tightly coupled)
-* Bad, because a bug in SSE parsing or provider protocol mapping can impact the entire `chat_service` process (blast radius is larger than an isolated service)
+* Good, because no additional network-facing authentication surface - `llm_provider` inherits the `SecurityContext` from `mini_chat_service` in-process
+* Good, because streaming latency is lower - no serialization/deserialization or network overhead between `mini_chat_service` and `llm_provider`
+* Bad, because `llm_provider` updates require redeploying `mini_chat_service` (acceptable given they are tightly coupled)
+* Bad, because a bug in SSE parsing or provider protocol mapping can impact the entire `mini_chat_service` process (blast radius is larger than an isolated service)
 * Bad, because if a second consumer needs LLM access, the library must be extracted into a shared crate (not a service, unless criteria below are met)
 
 ### Confirmation
 
-* Code review: `llm_provider` is a Rust crate with `chat_service` as its only dependent
+* Code review: `llm_provider` is a Rust crate with `mini_chat_service` as its only dependent
 * No `Dockerfile`, no `main.rs`, no health endpoint in the `llm_provider` crate
-* Cancellation integration test: verify `CancellationToken` propagates from `chat_service` to `llm_provider`'s HTTP client abort
+* Cancellation integration test: verify `CancellationToken` propagates from `mini_chat_service` to `llm_provider`'s HTTP client abort
 
 ## Pros and Cons of the Options
 
-### Library crate linked into `chat_service`
+### Library crate linked into `mini_chat_service`
 
-`llm_provider` is a Rust library crate. `chat_service` calls it via direct function invocation. No network boundary.
+`llm_provider` is a Rust library crate. `mini_chat_service` calls it via direct function invocation. No network boundary.
 
 * Good, because zero network overhead on the streaming hot path
 * Good, because `CancellationToken` propagates in-process (no RPC cancel semantics needed)
 * Good, because no independent deployment artifact or scaling policy
-* Good, because no additional network-facing security surface - no ports, no auth, no TLS between services (the security surface remains inside the `chat_service` process)
-* Neutral, because tightly couples `llm_provider` release cycle to `chat_service`
+* Good, because no additional network-facing security surface - no ports, no auth, no TLS between services (the security surface remains inside the `mini_chat_service` process)
+* Neutral, because tightly couples `llm_provider` release cycle to `mini_chat_service`
 * Bad, because cannot scale `llm_provider` independently (irrelevant - it is stateless and CPU-bound only during request parsing)
 
 ### Standalone gRPC/HTTP service
 
-`llm_provider` runs as its own process with a gRPC or HTTP API. `chat_service` calls it over the network.
+`llm_provider` runs as its own process with a gRPC or HTTP API. `mini_chat_service` calls it over the network.
 
 * Good, because can be deployed and scaled independently
 * Good, because could serve multiple consumers without shared-crate coupling
 * Bad, because adds a network hop to every streaming token (latency + failure mode)
 * Bad, because cancellation requires gRPC cancellation semantics or a custom abort protocol
 * Bad, because requires its own deployment manifest, health checks, monitoring, and TLS
-* Bad, because `llm_provider` holds no state and has no security boundary separate from `chat_service` - the service boundary adds cost without benefit
+* Bad, because `llm_provider` holds no state and has no security boundary separate from `mini_chat_service` - the service boundary adds cost without benefit
 
 ## Criteria for Future Extraction to a Service
 
@@ -73,7 +73,7 @@ Re-evaluate this decision if any of the following become true:
 * Multiple products (not just mini-chat) need the same LLM provider abstraction
 * Consumers are written in different languages (shared Rust crate is insufficient)
 * Policy enforcement (rate limiting, content filtering) must happen in the provider layer independently of consumers
-* `llm_provider` needs its own secret management or credential scope distinct from `chat_service`
+* `llm_provider` needs its own secret management or credential scope distinct from `mini_chat_service`
 
 ## Traceability
 

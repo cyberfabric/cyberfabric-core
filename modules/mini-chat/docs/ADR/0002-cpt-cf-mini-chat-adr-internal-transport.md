@@ -8,7 +8,7 @@ date: 2026-02-12
 
 ## Context and Problem Statement
 
-`llm_provider` (a library crate inside `chat_service`) communicates with the platform's Outbound API Gateway (OAGW) to reach OpenAI. Streaming responses (SSE tokens) flow back through this path. What transport protocol should be used for this internal link: HTTP with SSE (matching the external OpenAI protocol) or gRPC with server-side streaming?
+`llm_provider` (a library crate inside `mini_chat_service`) communicates with the platform's Outbound API Gateway (OAGW) to reach OpenAI. Streaming responses (SSE tokens) flow back through this path. What transport protocol should be used for this internal link: HTTP with SSE (matching the external OpenAI protocol) or gRPC with server-side streaming?
 
 ## Decision Drivers
 

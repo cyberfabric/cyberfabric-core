@@ -35,6 +35,8 @@ Current gaps: no native chat experience within the platform; no way to query upl
 | Token Budget | The maximum number of input/output tokens allowed per request |
 | Temporary Chat | A chat marked for automatic deletion after 24 hours |
 | OAGW | Outbound API Gateway - platform service that handles external API calls and credential injection |
+| Multimodal Input | Responses API input that includes both text and image references (file IDs) in the content array |
+| Image Attachment | An image file (PNG, JPEG, WebP) uploaded to a chat via the provider Files API, included in LLM requests as multimodal input; not indexed in vector stores and not eligible for file_search |
 
 ## 2. Actors
 
@@ -67,7 +69,7 @@ No module-specific environment constraints beyond platform defaults.
 
 ## 4. Scope
 
-This PRD uses **P0/P1/P2** to describe phased scope. The `p1`/`p2` tags on requirement checkboxes are internal priority markers and do not define release phase.
+This PRD uses **P1/P2** to describe phased scope. The `p1`/`p2` tags on requirement checkboxes are internal priority markers and do not define release phase.
 
 ### 4.1 In Scope
 
@@ -85,24 +87,26 @@ This PRD uses **P0/P1/P2** to describe phased scope. The `p1`/`p2` tags on requi
 - Emit audit events to platform `audit_service` (append-only semantics owned by `audit_service`)
 - Retry, edit, and delete for the last turn only (tail-only mutation)
 - Streaming cancellation when client disconnects
+- Image upload and image-aware chat (PNG/JPEG/WebP) via multimodal Responses API, stored via provider Files API
+- Images are supported as attachments; they are not searchable via file_search and not indexed in vector stores
 - Cleanup of external resources (provider files, vector store entries) on chat deletion
 
 ### 4.2 Out of Scope
 
 - Projects or shared/collaborative chats
 - Full-text search across chat history
-- Non-OpenAI-compatible provider support (e.g., Anthropic, Google) - OpenAI and Azure OpenAI are supported at P0 via a shared API surface
+- Non-OpenAI-compatible provider support (e.g., Anthropic, Google) - OpenAI and Azure OpenAI are supported at P1 via a shared API surface
 - Complex retrieval policies beyond simple limits
-- Per-workspace vector stores — P0 uses a single shared vector store per tenant (all users and chats in a tenant share one provider vector store). Per-workspace isolation is deferred.
-- Image or non-document file support
+- Per-workspace vector stores — P1 uses a single shared vector store per tenant (all users and chats in a tenant share one provider vector store). Per-workspace isolation is deferred.
+- Non-image, non-document file support (e.g., audio, video, executables)
 - Custom audit storage (audit events are emitted to platform `audit_service`)
 - Chat export or migration
 - Full conversation history editing (editing or deleting arbitrary historical messages)
 - Thread versioning / branching (multi-branch conversations, history forks)
 - Multi-branch recovery or resume-from-middle editing
-- Web search tool support (P1+; schema provisions exist in `quota_usage.web_search_calls`)
+- Web search tool support (P2+; schema provisions exist in `quota_usage.web_search_calls`)
 - URL content extraction
-- Admin configuration UI for AI policies, model selection, or provider settings (P0 uses deployment configuration; see DESIGN.md Section 2.2 constraints and emergency flags)
+- Admin configuration UI for AI policies, model selection, or provider settings (P1 uses deployment configuration; see DESIGN.md Section 2.2 constraints and emergency flags)
 - Multiple quota/budget periods beyond daily and monthly (e.g. 4h, 12h rolling windows)
 - Module-specific multi-lingual support (LLM handles languages natively; no module-level i18n)
 - Per-feature dynamic feature flags beyond the `ai_chat` license gate and emergency kill switches (DESIGN.md lines 166-168)
@@ -113,7 +117,7 @@ This PRD uses **P0/P1/P2** to describe phased scope. The `p1`/`p2` tags on requi
 
 - [ ] `p2` - **ID**: `cpt-cf-mini-chat-fr-group-chats`
 
-Group chats and chat sharing (projects) are deferred to P2+ and are out of scope for P0/P1.
+Group chats and chat sharing (projects) are deferred to P2+ and are out of scope for P1.
 
 ## 5. Functional Requirements
 
@@ -134,7 +138,9 @@ The system MUST allow authenticated users to create, list, retrieve, and delete 
 
 The system MUST deliver AI responses as a real-time SSE stream. The user sends a message and immediately begins receiving `delta` events as they are generated. The stream terminates with exactly one terminal `done` or `error` event. The terminal `done` event contains the message ID and token usage. The terminal `error` event contains an error `code` and `message` only.
 
-The request body MAY include a client-generated `request_id` used as an idempotency key. If a `chat_turns` record with `state=running` exists for the same `(chat_id, request_id)`, the system MUST reject with `409 Conflict`. If a completed generation exists for the same `(chat_id, request_id)`, the system MUST replay the completed assistant response rather than starting a new provider request.
+**Error model (Option A)**: If request validation, authorization, or quota preflight fails before any streaming begins, the system MUST return a normal JSON error response with the appropriate HTTP status and MUST NOT open an SSE stream. If a failure occurs after streaming has started, the system MUST terminate the stream with a terminal `event: error`.
+
+The request body MAY include a client-generated `request_id` used as an idempotency key and MAY include `attachment_ids` for image-bearing turns. If a `chat_turns` record with `state=running` exists for the same `(chat_id, request_id)`, the system MUST reject with `409 Conflict`. If a completed generation exists for the same `(chat_id, request_id)`, the system MUST replay the completed assistant response rather than starting a new provider request.
 
 **Rationale**: Streaming provides perceived low latency and matches user expectations from consumer AI chat products.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
@@ -165,9 +171,30 @@ When a stream is cancelled or disconnects before a terminal completion, the syst
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-file-upload`
 
-The system MUST allow users to upload document files (not images) to a chat. Uploaded files are processed and indexed for search. Attachment access MUST be limited to the owning user within their tenant. The system MUST return an attachment identifier and processing status.
+The system MUST allow users to upload document files to a chat. Uploaded documents are processed and indexed for search. Attachment access MUST be limited to the owning user within their tenant. The system MUST return an attachment identifier and processing status.
 
 **Rationale**: Users need to ground AI conversations in their own documents (contracts, policies, reports).
+**Actors**: `cpt-cf-mini-chat-actor-chat-user`
+
+#### Image Upload
+
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-image-upload`
+
+The system MUST allow users to upload image files (PNG, JPEG/JPG, WebP) to a chat as image attachments. Image attachments are stored via the provider Files API and referenced in Responses API calls as multimodal input. Image attachments are NOT indexed in vector stores and do NOT participate in file_search tool calls. The system MUST return an attachment identifier and processing status.
+
+**Image upload rules**:
+
+- Supported image types: `image/png`, `image/jpeg`, `image/webp`.
+- Maximum file size per image: configurable per deployment (default: 16 MiB; PM target: 25 MiB). Uses the same `uploaded_file_max_size_kb` config as documents unless overridden by `uploaded_image_max_size_kb`.
+- Maximum image inputs per message: configurable (default: 4).
+- Maximum image inputs per user per day: configurable (default: 50).
+- Images are uploaded to the provider via Files API. Upload fields (including `purpose`) are controlled by a static per-provider mapping shipped with deployment configuration and applied by OAGW (documents: `assistants`; images: OpenAI `vision` when required by the configured endpoint/model, Azure OpenAI `assistants`).
+- Images are included in the Responses API request input as multimodal content items (file ID references), allowing the assistant to reason about image content for that chat turn.
+- Images are NOT summarized on upload (no background summary task for images at P1).
+- Attachment access remains owner-only and tenant-isolated (same access rules as document attachments).
+- If the effective model does not support image input, the system MUST reject with `unsupported_media` error (HTTP 415).
+
+**Rationale**: Users need to share visual content (screenshots, diagrams, photos) with the AI assistant and ask questions about what they see.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
 
 #### Document Question Answering (File Search)
@@ -186,6 +213,8 @@ The system MUST support answering questions about uploaded documents by retrievi
 The system MUST generate a brief summary of each uploaded document at upload time. The summary is stored and used in the conversation context to give the AI general awareness of attached documents without requiring a search call.
 
 Document summary generation MUST run as a background/system task (`requester_type=system`) and MUST NOT be charged to an arbitrary end user.
+
+Background/system tasks MUST NOT create `chat_turns` records. `chat_turns` idempotency and replay semantics apply only to user-initiated streaming turns.
 
 **Rationale**: Improves AI response quality when the user asks general questions about attached documents.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
@@ -210,26 +239,27 @@ The system MUST allow users to mark a chat as temporary. Temporary chats MUST be
 **Rationale**: Users need disposable conversations for quick questions without cluttering their chat list.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`, `cpt-cf-mini-chat-actor-cleanup-scheduler`
 
-#### Message Actions (P0 Scope)
+#### Message Actions (P1 Scope)
 
-- [ ] `p0` - **ID**: `cpt-cf-mini-chat-fr-turn-mutations`
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-turn-mutations`
 
-P0 supports retry, edit, and delete for the **last turn only**. Full message history editing is deferred to P1/P2.
+P1 supports retry, edit, and delete for the **last turn only**. Full message history editing is deferred to P2.
 
-**Supported actions (P0)**:
+**Supported actions (P1)**:
 
-- **Retry last turn**: Re-submit the last user message to generate a new assistant response. The previous turn is soft-deleted and a new turn is created with a fresh assistant response.
-- **Edit last user turn**: Replace the content of the last user message and regenerate the assistant response. The previous turn is soft-deleted and a new turn is created with the updated content.
+- **Retry last turn**: Re-submit the last user message (including any `attachment_ids` for image-bearing turns) to generate a new assistant response. The previous turn is soft-deleted and a new turn is created with a fresh assistant response.
+- **Edit last user turn**: Replace the content of the last user message and regenerate the assistant response, preserving any `attachment_ids` for image-bearing turns. The previous turn is soft-deleted and a new turn is created with the updated content.
 - **Delete last turn**: Remove the most recent turn (user message + assistant response) from the active conversation. The turn is soft-deleted.
 
 **Functional constraints**:
 
 - Only the most recent turn may be retried, edited, or deleted.
+- The server MUST determine the most recent turn deterministically as the non-deleted turn with the greatest `(started_at, id)`.
 - The target turn MUST be in a terminal state (`completed`, `failed`, or `cancelled`) before retry, edit, or delete is allowed. A running turn must complete or be cancelled (via client disconnect) first.
 - The target turn MUST belong to the requesting user.
 - Conversations remain strictly linear. These operations do not create branches.
 
-**Explicitly out of scope (P0)**:
+**Explicitly out of scope (P1)**:
 
 - Editing or deleting arbitrary historical messages
 - Thread branching or history forks
@@ -245,9 +275,18 @@ P0 supports retry, edit, and delete for the **last turn only**. Full message his
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-quota-enforcement`
 
-The system MUST enforce per-user usage limits on a daily and monthly basis. Tracked metrics: input tokens, output tokens, file search calls, premium model calls. When a user exceeds their premium model quota, the system MUST auto-downgrade to a base model. When all quotas are exhausted, the system MUST reject requests with a clear error.
+The system MUST enforce per-user usage limits on a daily and monthly basis. Tracked metrics: input tokens, output tokens, file search calls, premium model calls, image inputs, image upload bytes. When a user exceeds their premium model quota, the system MUST auto-downgrade to a base model. When all quotas are exhausted, the system MUST reject requests with a clear error.
 
 Quota counting MUST use two phases: Preflight (reserve) before the provider call, and commit actual usage after completion.
+
+If quota preflight rejects a send-message request, the system MUST return a normal JSON error response with the appropriate HTTP status (typically `quota_exceeded` 429) and MUST NOT open an SSE stream.
+
+**Image-specific quota limits** (configurable per deployment):
+
+- Maximum image inputs per message: default 4.
+- Maximum image inputs per user per day: default 50.
+- Optional: maximum total image bytes per message (default: uncapped; operator may configure).
+- Token accounting: `usage.input_tokens` / `usage.output_tokens` from the provider already includes image token costs as the provider defines them. The system enforces these via the same preflight/commit mechanism. Additionally, the system MUST track and enforce explicit image counters (`image_inputs` per day, `image_upload_bytes` per day/month, counted on upload) independent of token quotas to prevent abuse via large or frequent image uploads.
 
 **Rationale**: Prevents runaway costs from individual users and ensures fair resource distribution across a tenant.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
@@ -276,7 +315,7 @@ The system MUST verify that the user's tenant has the `ai_chat` feature enabled 
 
 The system MUST emit structured audit events to the platform's `audit_service` for completed chat turns and policy decisions (one structured event per completed turn). Each event MUST include: tenant, user, chat reference, event type, model used, token counts, latency metrics, and policy decisions (quota checks, license gate results). Mini Chat does not store audit data locally.
 
-Before emitting events, `chat_service` MUST redact obvious secret patterns from any included content. P0 redaction rules MUST include at least:
+Before emitting events, `mini_chat_service` MUST redact obvious secret patterns from any included content. P1 redaction rules MUST include at least:
 
 - Replace any `Authorization: Bearer <...>` header value with `Authorization: Bearer [REDACTED]`
 - Replace any `api_key`, `x-api-key`, `client_secret`, `access_token`, `refresh_token` values with `[REDACTED]` when they appear in `key=value` or JSON string field form
@@ -292,7 +331,7 @@ Audit events MUST NOT include raw attachment file bytes. Audit events MAY includ
 Audit payload retention and deletion semantics are owned by platform `audit_service`.
 
 - `audit_service` is the system of record for audit TTL and deletion semantics.
-- For P0, `audit_service` MUST retain Mini Chat audit payloads for at least 90 days by default (configurable).
+- For P1, `audit_service` MUST retain Mini Chat audit payloads for at least 90 days by default (configurable).
 - Mini Chat MUST NOT attempt to delete or mutate audit records after emission.
 
 **Rationale**: Compliance and security incident response require a record of AI usage with policy decisions. Audit storage and append-only semantics are the platform `audit_service` responsibility. Cost analytics and billing attribution are driven by internal usage records and Prometheus metrics (see `cpt-cf-mini-chat-fr-cost-metrics`), not by audit events.
@@ -381,19 +420,19 @@ Temporary chats MUST be deleted within 25 hours of creation. Target: deleted cha
 **Rationale**: Regulatory and customer contractual requirements for data lifecycle management.
 **Architecture Allocation**: See DESIGN.md section 4 (Cleanup on Chat Deletion)
 
-### 6.2 Observability and Supportability (P0)
+### 6.2 Observability and Supportability (P1)
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-nfr-observability-supportability`
 
 Mini Chat MUST provide an explicit operational contract to support on-call, SRE, and cost governance. This includes:
 
-#### Required support signals (P0)
+#### Required support signals (P1)
 
-- Every chat turn MUST have a stable `request_id` (client idempotency key) and a persisted turn state (`running|completed|failed|cancelled`) that is exposed via the Turn Status API as (`running|done|error|cancelled`).
+- Every chat turn MUST have a stable `request_id` (client idempotency key) and a persisted internal turn state (`running|completed|failed|cancelled`) that is exposed via the Turn Status API as (`running|done|error|cancelled`).
 - Every completed provider request MUST be correlated via `provider_response_id` and MUST be persisted and searchable by operators.
 - Support tooling MUST be able to determine turn state using server-side state (not inferred from client retry behavior).
 
-#### Prometheus metrics contract (P0)
+#### Prometheus metrics contract (P1)
 
 The service MUST expose Prometheus metrics with the following series names (types and label sets as specified in DESIGN.md):
 
@@ -423,6 +462,8 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 ##### Quota and cost control
 
 - `mini_chat_quota_preflight_total{decision,model}`
+- `mini_chat_quota_preflight_v2_total{kind,decision,model}`
+- `mini_chat_quota_preflight_v2_total` exists to add `{kind}` without changing the label set of `mini_chat_quota_preflight_total`.
 - `mini_chat_quota_reserve_total{period}`
 - `mini_chat_quota_commit_total{period}`
 - `mini_chat_quota_overshoot_total{period}`
@@ -460,13 +501,24 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 
 ##### Upload and attachments
 
-- `mini_chat_attachment_upload_total{result}`
+- `mini_chat_attachment_upload_total{kind,result}` (`kind`: `document|image`)
 - `mini_chat_attachment_index_total{result}`
 - `mini_chat_attachment_summary_total{result}`
 - `mini_chat_attachments_pending{instance}`
 - `mini_chat_attachments_failed{instance}`
-- `mini_chat_attachment_upload_bytes`
+- `mini_chat_attachment_upload_bytes{kind}` (`kind`: `document|image`)
 - `mini_chat_attachment_index_latency_ms`
+
+##### Image usage (per-turn)
+
+- `mini_chat_image_inputs_per_turn` (histogram; number of images in a single Responses API call)
+- `mini_chat_image_turns_total{model}` (counter; turns that included >=1 image)
+- `mini_chat_media_rejected_total{reason}` (counter; `reason`: `too_many_images|image_bytes_exceeded|unsupported_media`)
+
+##### Image quota enforcement
+
+- `mini_chat_quota_preflight_v2_total{kind,decision,model}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`) - see Quota and cost control section above
+- `mini_chat_quota_image_commit_total{period}` (counter; `period`: `daily|monthly`)
 
 ##### Cleanup and drift
 
@@ -488,14 +540,14 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 - `mini_chat_db_query_latency_ms{query}`
 - `mini_chat_db_errors_total{query,code}`
 
-#### SLOs / thresholds (P0)
+#### SLOs / thresholds (P1)
 
 - `mini_chat_ttft_overhead_ms` p99 < 50 ms
 - `mini_chat_time_to_abort_ms` p99 < 200 ms
 - Temporary chat soft-delete within 25 hours
 - Provider cleanup target completion within 1 hour under normal conditions (eventual with retry)
 
-### 6.3 UX Recovery Contract (P0)
+### 6.3 UX Recovery Contract (P1)
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-ux-recovery`
 
@@ -523,14 +575,14 @@ The UI experience MUST be resilient to SSE disconnects and idempotency conflicts
 
 #### Chat REST API
 
-- [ ] `p1` - **ID**: `cpt-cf-mini-chat-interface-rest-api`
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-interface-public-api`
 
 **Type**: REST API
 **Stability**: stable
 **Description**: Public HTTP API for chat management, message streaming, and file upload. All endpoints require authentication and tenant license verification.
 **Breaking Change Policy**: Versioned via URL prefix (`/v1/`). Breaking changes require new version.
 
-#### Turn Status (read-only) API (P0 optional, recommended)
+#### Turn Status (read-only) API (P1 optional, recommended)
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-interface-turn-status`
 
@@ -545,6 +597,15 @@ Support and UX recovery flows SHOULD be able to query authoritative turn state b
 - `state`: `running|done|error|cancelled`
 - `updated_at`
 
+**Internal-to-API state mapping**:
+
+| Internal State (`chat_turns.state`) | Turn Status API | SSE Terminal Event |
+|-------------------------------------|-----------------|-------------------|
+| `running` | `running` | _(not terminal)_ |
+| `completed` | `done` | `done` |
+| `failed` | `error` | `error` |
+| `cancelled` | `cancelled` | _(none; stream already disconnected)_ |
+
 ### 7.2 External Integration Contracts
 
 #### SSE Streaming Contract
@@ -556,6 +617,25 @@ Support and UX recovery flows SHOULD be able to query authoritative turn state b
 **Compatibility**: Event types (`delta`, `tool`, `citations`, `done`, `error`, `ping`) and their payload schemas are stable within a major API version.
 
 **Ordering**: `ping* (delta|tool|citations)* (done|error)`.
+
+**Error model (Option A)**: If the request fails validation, authorization, or quota preflight before streaming begins, the server MUST return a normal JSON error response with the appropriate HTTP status and MUST NOT open an SSE stream. If the stream has started, the server MUST report failure via a terminal `event: error`.
+
+**Error Codes**:
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `feature_not_licensed` | 403 | Tenant lacks `ai_chat` feature |
+| `insufficient_permissions` | 403 | Subject lacks permission for the requested action (AuthZ Resolver denied) |
+| `chat_not_found` | 404 | Chat does not exist or not accessible under current authorization constraints |
+| `quota_exceeded` | 429 | User exceeded daily/monthly usage limit |
+| `rate_limited` | 429 | Too many requests in time window |
+| `file_too_large` | 413 | Uploaded file exceeds size limit |
+| `unsupported_file_type` | 415 | File type not supported for upload |
+| `too_many_images` | 400 | Request includes more than the configured maximum images for a single turn |
+| `image_bytes_exceeded` | 413 | Request includes images whose total configured per-turn byte limit is exceeded |
+| `unsupported_media` | 415 | Request includes image input but the effective model does not support multimodal input |
+| `provider_error` | 502 | LLM provider returned an error |
+| `provider_timeout` | 504 | LLM provider request timed out |
 
 Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata; clients MUST NOT send them back to any API.
 
@@ -585,7 +665,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - Audit events emitted to platform `audit_service`
 
 **Alternative Flows**:
-- **Quota exceeded**: System rejects request with `quota_exceeded` error; no LLM call made
+- **Quota exceeded**: System rejects request with `quota_exceeded` error (HTTP 429 JSON error response); no LLM call made and no SSE stream is opened
 - **Client disconnects**: System cancels in-flight LLM request; partial response may be persisted. Delivery is indeterminate; the UI SHOULD first query `GET /v1/chats/{chat_id}/turns/{request_id}` to determine whether the turn completed. If the user resends, resend MUST use a new `request_id`.
 
 #### UC-006: Reconnect After Network Loss (Turn Status Check)
@@ -646,16 +726,50 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 2. System stores the file with the external provider
 3. System indexes the file in the tenant's document search index
 4. System enqueues a brief summary generation of the document (background, `requester_type=system`)
-5. System returns attachment ID and `ready` status
+5. System returns attachment ID and a processing status (`ready` on success)
 
 **Postconditions**:
 - Document is searchable in subsequent chat messages
 - Document summary available for context assembly
 
 **Alternative Flows**:
-- **Unsupported file type**: System rejects with `unsupported_file_type` error
-- **File too large**: System rejects with `file_too_large` error
+- **Unsupported file type**: System rejects with `unsupported_file_type` error (HTTP 415)
+- **File too large**: System rejects with `file_too_large` error (HTTP 413)
 - **Processing failure**: Attachment status set to `failed`; user informed
+
+#### UC-010: Upload Image and Ask About It
+
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-usecase-upload-image`
+
+**Actor**: `cpt-cf-mini-chat-actor-chat-user`
+
+**Preconditions**:
+- User is authenticated and tenant has `ai_chat` license
+- Chat exists and belongs to the user
+- File is a supported image type (PNG, JPEG, WebP) and within size limits
+- Effective model supports image input
+
+**Main Flow**:
+1. User uploads an image file to a chat
+2. System stores the image with the external provider via Files API
+3. System does NOT add the image to any vector store
+4. System returns attachment ID and a processing status (`ready` on success)
+5. User sends a message with the image explicitly attached to that turn via `attachment_ids` (message `content` remains plain text)
+6. System includes the image as a multimodal input (file ID reference) in the Responses API call
+7. System streams AI response that describes or reasons about the image content
+
+**Postconditions**:
+- Image attachment persisted with `attachment_kind=image`
+- AI response references image content
+- Image usage counters updated in quota_usage
+
+**Alternative Flows**:
+- **Unsupported image type**: System rejects with `unsupported_file_type` error (HTTP 415)
+- **Image too large**: System rejects with `file_too_large` error (HTTP 413)
+- **Model does not support images**: System rejects with `unsupported_media` error (HTTP 415)
+- **Per-message image limit exceeded**: System rejects with `too_many_images` error (HTTP 400)
+- **Per-message image bytes limit exceeded**: System rejects with `image_bytes_exceeded` error (HTTP 413)
+- **Daily image quota exceeded**: System rejects with `quota_exceeded` error (HTTP 429)
 
 #### UC-004: Delete Chat
 
@@ -696,7 +810,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 
 #### UC-007: Retry Last Turn
 
-- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-retry-turn`
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-usecase-retry-turn`
 
 **Actor**: `cpt-cf-mini-chat-actor-chat-user`
 
@@ -721,7 +835,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 
 #### UC-008: Edit Last User Turn
 
-- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-edit-turn`
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-usecase-edit-turn`
 
 **Actor**: `cpt-cf-mini-chat-actor-chat-user`
 
@@ -748,7 +862,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 
 #### UC-009: Delete Last Turn
 
-- [ ] `p0` - **ID**: `cpt-cf-mini-chat-usecase-delete-turn`
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-usecase-delete-turn`
 
 **Actor**: `cpt-cf-mini-chat-actor-chat-user`
 
@@ -783,6 +897,11 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - [ ] Every completed chat turn emits a structured audit event to platform `audit_service` (one event per completed turn) including usage metrics
 - [ ] Long conversations (50+ turns) remain functional via thread summary compression
 - [ ] User can retry, edit, or delete the last turn; operations on non-latest turns are rejected with `409 Conflict`
+- [ ] User can upload an image attachment (PNG/JPEG/WebP) and ask "what is in this image" and receive a relevant answer
+- [ ] Image attachments do not appear in file_search citations
+- [ ] Quota limits for images are enforced: per-message image input limit and per-day image input limit reject requests that exceed configured caps
+- [ ] Audit events for turns with image input do not include raw image bytes; only attachment metadata (attachment_id, content_type, size_bytes, filename) is included
+- [ ] Submitting an image to a model that does not support multimodal input returns `unsupported_media` error (HTTP 415)
 
 ## 10. Dependencies
 
@@ -792,7 +911,8 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 | Platform AuthN | User authentication, tenant resolution | `p1` |
 | Outbound API Gateway (OAGW) | External API egress, credential injection | `p1` |
 | OpenAI-compatible Responses API (OpenAI / Azure OpenAI) | LLM chat completion (streaming and non-streaming) | `p1` |
-| OpenAI-compatible Files API (OpenAI / Azure OpenAI) | Document upload and storage | `p1` |
+| OpenAI-compatible Files API (OpenAI / Azure OpenAI) | Document and image upload and storage | `p1` |
+| Responses API multimodal input (OpenAI / Azure OpenAI) | Image-aware chat via file ID references in request content | `p1` |
 | OpenAI-compatible Vector Stores / File Search (OpenAI / Azure OpenAI) | Document indexing and retrieval | `p1` |
 | PostgreSQL | Primary data storage | `p1` |
 | Platform license_manager | Tenant feature flag resolution (`ai_chat`) | `p1` |
@@ -800,13 +920,13 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 
 ## 11. Assumptions
 
-- OpenAI-compatible Responses API, Files API, and File Search remain stable and available (OpenAI or Azure OpenAI)
+- OpenAI-compatible Responses API (including multimodal input), Files API, and File Search remain stable and available (OpenAI or Azure OpenAI)
 - OAGW supports streaming SSE relay and credential injection for OpenAI and Azure OpenAI endpoints
 - OAGW owns Azure OpenAI endpoint details including required `api-version` parameters and path variants
 - Platform AuthN provides `user_id` and `tenant_id` in the security context for every request
 - Platform `license_manager` can resolve the `ai_chat` feature flag synchronously
 - Platform `audit_service` is available to receive audit events
-- One provider vector store per tenant is sufficient for P0 document volumes
+- One provider vector store per tenant is sufficient for P1 document volumes
 - Thread summary quality is adequate for maintaining conversational coherence over long chats
 
 ## 12. Risks
@@ -819,22 +939,27 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 | Thread summary loses critical context | Degraded conversation quality over long chats | Include explicit instructions to preserve decisions, facts, names, document refs; allow users to start new chats |
 | Vector store data consistency on deletion | Orphaned files at provider | Idempotent cleanup with retry; reconciliation job for detecting orphans |
 | Large document volumes per tenant exceeding vector store limits | Search quality degrades; upload failures | Monitor per-tenant file counts; enforce upload limits; plan per-workspace stores (P2) |
+| Image spam / abuse driving excessive provider costs | Unexpected cost spikes from high-volume or large image uploads | Per-message image input cap (default: 4); per-user daily image input cap (default: 50); configurable byte limits; image-specific quota counters and metrics |
+| Provider model does not support multimodal input | Image-bearing requests fail | `mini_chat_service` checks model capability before outbound call; rejects with `unsupported_media` (HTTP 415) if effective model lacks image support; operator configures which models support images |
 
 ## 13. Open Questions
 
-- What document file types are supported in P0 beyond `pdf`, `docx`, and plain text?
+- What document file types are supported in P1 beyond `pdf`, `docx`, and plain text?
 - What is the exact UX when `state=running` is returned from Turn Status API (poll cadence, max wait, and banner text)?
 - Thread summary trigger thresholds are defined in DESIGN.md (msg count > 20 OR tokens > budget OR every 15 user turns)
 - Is the system prompt configurable per tenant, or fixed platform-wide?
 
-### 13.1 P0 Defaults (configurable)
+### 13.1 P1 Defaults (configurable)
 
-These defaults are used for P0 planning and MUST be configurable per tenant/operator:
+These defaults are used for P1 planning and MUST be configurable per tenant/operator:
 
 - Default chat model: `gpt-5.2`
 - Auto-downgrade/base model: `gpt-5-mini`
 - Default quota targets (tokens): daily `50_000`, monthly `1_000_000`
-- Upload size limit: 16 MiB (deployment config example: `uploaded_file_max_size_kb: 16384`)
+- Upload size limit: 16 MiB (deployment config example: `uploaded_file_max_size_kb: 16384`); PM target: 25 MiB (configurable)
+- Image upload size limit: same as above unless overridden (deployment config example: `uploaded_image_max_size_kb: 16384`)
+- Max image inputs per message: 4 (deployment config example: `max_images_per_message: 4`)
+- Max image inputs per user per day: 50 (deployment config example: `max_images_per_user_daily: 50`)
 - Temporary chat retention window: 24 hours (deployment config example: `temporary_chat_retention_hours: 24`)
 
 ## 14. Traceability
