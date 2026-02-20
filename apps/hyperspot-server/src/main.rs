@@ -5,7 +5,8 @@ use clap::{Parser, Subcommand};
 use mimalloc::MiMalloc;
 use modkit::bootstrap::{
     AppConfig, dump_effective_modules_config_json, dump_effective_modules_config_yaml,
-    host::init_logging_unified, list_module_names, run_migrate, run_server,
+    host::{build_console_layer, init_logging_unified},
+    list_module_names, run_migrate, run_server,
 };
 
 use std::path::PathBuf;
@@ -91,8 +92,11 @@ async fn main() -> Result<()> {
     #[cfg(not(feature = "otel"))]
     let otel_layer = None;
 
-    // Initialize logging + otel in one Registry
-    init_logging_unified(&config.logging, &config.server.home_dir, otel_layer);
+    // Build tokio-console layer before logging (when feature is enabled)
+    let console_layer = build_console_layer(config.tokio_console.as_ref());
+
+    // Initialize logging + otel + tokio-console in one Registry
+    init_logging_unified(&config.logging, &config.server.home_dir, otel_layer, console_layer);
 
     // One-time connectivity probe
     #[cfg(feature = "otel")]

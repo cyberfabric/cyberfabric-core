@@ -470,8 +470,12 @@ pub async fn run_oop_with_options(opts: OopRunOptions) -> Result<()> {
     #[cfg(not(feature = "otel"))]
     let otel_layer = None;
 
+    // Build tokio-console layer for OoP module (when feature is enabled)
+    let console_layer =
+        super::host::observability::build_console_layer(config.tokio_console.as_ref());
+
     // Initialize logging with MERGED config (master base + local override)
-    init_logging_unified(&merged_logging, &config.server.home_dir, otel_layer);
+    init_logging_unified(&merged_logging, &config.server.home_dir, otel_layer, console_layer);
 
     // Now we can log - report what we received from master
     if let Some(ref rc) = rendered_config {

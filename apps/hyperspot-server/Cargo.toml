@@ -18,6 +18,7 @@ static-tenants = ["dep:static-tr-plugin"]
 static-authn = ["dep:static-authn-plugin"]
 static-authz = ["dep:static-authz-plugin"]
 otel = ["modkit/otel"]
+tokio-console = ["modkit/tokio-console"]
 
 [dependencies]
 mimalloc = { version = "0.1" }
