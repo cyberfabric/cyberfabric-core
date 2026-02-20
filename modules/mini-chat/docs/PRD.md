@@ -30,13 +30,15 @@ Current gaps: no native chat experience within the platform; no way to query upl
 | Message | A single turn within a chat (user input or assistant response) |
 | Attachment | A document file uploaded to a chat for question answering |
 | Thread Summary | A compressed representation of older messages, used to keep long conversations within token limits |
-| Vector Store | A provider-hosted index of document embeddings (OpenAI or Azure OpenAI), scoped per tenant, used for document search |
+| Vector Store | A provider-hosted index of document embeddings (OpenAI or Azure OpenAI), scoped per user, used for document search |
 | File Search | An LLM tool call that retrieves relevant excerpts from uploaded documents |
 | Token Budget | The maximum number of input/output tokens allowed per request |
-| Temporary Chat | A chat marked for automatic deletion after 24 hours |
+| Temporary Chat | A chat marked for automatic deletion after 24 hours (P2) |
 | OAGW | Outbound API Gateway - platform service that handles external API calls and credential injection |
 | Multimodal Input | Responses API input that includes both text and image references (file IDs) in the content array |
 | Image Attachment | An image file (PNG, JPEG, WebP) uploaded to a chat via the provider Files API, included in LLM requests as multimodal input; not indexed in vector stores and not eligible for file_search |
+| Model Catalog | Deployment-configured list of available LLM models with tier labels and capability flags |
+| Model Tier | One of three cost/capability levels: premium, balanced, or cost-efficient. Determines downgrade cascade order |
 
 ## 2. Actors
 
@@ -61,7 +63,7 @@ Current gaps: no native chat experience within the platform; no way to query upl
 
 **ID**: `cpt-cf-mini-chat-actor-cleanup-scheduler`
 
-**Role**: Scheduled process that deletes expired temporary chats and purges associated external resources (files, vector store entries) after the retention period.
+**Role**: Scheduled process that purges soft-deleted chats and associated external resources (files, vector store entries) after the retention period. Temporary chat auto-deletion is deferred to P2.
 
 ## 3. Operational Concept & Environment
 
@@ -79,8 +81,9 @@ This PRD uses **P1/P2** to describe phased scope. The `p1`/`p2` tags on requirem
 - Document upload and document-aware question answering via file search
 - Document summary on upload
 - Thread summary compression for long conversations
-- Temporary chats with 24h auto-deletion
-- Per-user usage quotas (daily, monthly) with auto-downgrade to base model
+- Per-user token-based rate limits for premium models across multiple periods (4-hourly, daily, monthly) tracked in real-time; standard models (balanced, cost-efficient) have unlimited token usage; three-tier downgrade cascade (premium → balanced → cost-efficient)
+- Model selection per chat at creation time (locked for conversation lifetime)
+- Binary like/dislike reactions on assistant messages (persisted, API-accessible)
 - File search call limits per message and per user/day
 - Token budget enforcement and context truncation
 - License feature gate (`ai_chat`)
@@ -93,11 +96,13 @@ This PRD uses **P1/P2** to describe phased scope. The `p1`/`p2` tags on requirem
 
 ### 4.2 Out of Scope
 
+- Temporary chats with 24h auto-deletion (schema column `is_temporary` reserved; feature deferred to P2)
+- Mid-conversation model switching by the user (model is locked at chat creation; only system-driven quota downgrade is allowed mid-chat)
 - Projects or shared/collaborative chats
 - Full-text search across chat history
 - Non-OpenAI-compatible provider support (e.g., Anthropic, Google) - OpenAI and Azure OpenAI are supported at P1 via a shared API surface
 - Complex retrieval policies beyond simple limits
-- Per-workspace vector stores — P1 uses a single shared vector store per tenant (all users and chats in a tenant share one provider vector store). Per-workspace isolation is deferred.
+- Per-workspace vector stores — P1 uses a single vector store per user (retrieval logically scoped to the current chat's attachments). Per-workspace isolation is deferred.
 - Non-image, non-document file support (e.g., audio, video, executables)
 - Custom audit storage (audit events are emitted to platform `audit_service`)
 - Chat export or migration
@@ -107,7 +112,7 @@ This PRD uses **P1/P2** to describe phased scope. The `p1`/`p2` tags on requirem
 - Web search tool support (P2+; schema provisions exist in `quota_usage.web_search_calls`)
 - URL content extraction
 - Admin configuration UI for AI policies, model selection, or provider settings (P1 uses deployment configuration; see DESIGN.md Section 2.2 constraints and emergency flags)
-- Multiple quota/budget periods beyond daily and monthly (e.g. 4h, 12h rolling windows)
+- Additional rolling-window quota periods beyond the P1 set (e.g. 12h rolling windows)
 - Module-specific multi-lingual support (LLM handles languages natively; no module-level i18n)
 - Per-feature dynamic feature flags beyond the `ai_chat` license gate and emergency kill switches (DESIGN.md lines 166-168)
 
@@ -127,9 +132,20 @@ Group chats and chat sharing (projects) are deferred to P2+ and are out of scope
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-chat-crud`
 
-The system MUST allow authenticated users to create, list, retrieve, and delete chats. Each chat belongs to exactly one user within one tenant. Chat content (messages, attachments, summaries, citations) MUST be accessible only to the owning user within their tenant. Listing returns chats for the current user ordered by most recent activity. Retrieval returns chat metadata and the most recent messages. Deletion soft-deletes the chat and triggers cleanup of associated external resources.
+The system MUST allow authenticated users to create, list, retrieve, and delete chats. Each chat belongs to exactly one user within one tenant. At creation, the user MAY specify a model from the model catalog; if omitted, the catalog default is used. The selected model is locked for the chat lifetime (see `cpt-cf-mini-chat-constraint-model-locked-per-chat`). Chat content (messages, attachments, summaries, citations) MUST be accessible only to the owning user within their tenant. Listing returns chats for the current user ordered by most recent activity. Retrieval returns chat metadata (including selected model) and the most recent messages. Deletion soft-deletes the chat and triggers cleanup of associated external resources.
 
 **Rationale**: Users need to manage their conversations - create new ones, resume existing ones, and remove ones they no longer need.
+**Actors**: `cpt-cf-mini-chat-actor-chat-user`
+
+#### Model Selection Per Chat
+
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-model-selection`
+
+The system MUST allow users to select a model from the model catalog when creating a new chat. If no model is specified, the system MUST use the catalog default (first entry). The selected model MUST be locked for the lifetime of the chat — the user MUST NOT be able to change the model within an existing chat. All user-initiated messages in a chat use the same model.
+
+Quota-driven automatic downgrade within the three-tier cascade IS permitted mid-conversation as a system decision (not user-initiated model switching). The effective model used for each turn is recorded on the assistant message.
+
+**Rationale**: Users benefit from choosing the appropriate model for their use case (premium for complex tasks, cost-efficient for simple questions), while model locking per chat ensures consistent conversation context.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
 
 #### Streamed Chat Responses
@@ -230,9 +246,9 @@ The system MUST compress older conversation history into a summary when the conv
 **Rationale**: Long conversations would exceed LLM context limits and increase costs without compression.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
 
-#### Temporary Chats
+#### Temporary Chats (P2)
 
-- [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-temporary-chat`
+- [ ] `p2` - **ID**: `cpt-cf-mini-chat-fr-temporary-chat`
 
 The system MUST allow users to mark a chat as temporary. Temporary chats MUST be automatically deleted (including all associated external resources) after 24 hours.
 
@@ -269,13 +285,24 @@ P1 supports retry, edit, and delete for the **last turn only**. Full message his
 **Rationale**: Users commonly need to correct a typo, rephrase a question, or retry after a poor response. Restricting mutations to the last turn keeps the conversation model simple and linear while covering the most frequent use cases.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
 
+#### Message Reactions (Like/Dislike)
+
+- [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-message-reactions`
+
+The system MUST allow users to add a binary like or dislike reaction to assistant messages within their own chats. Each user may have at most one reaction per assistant message. Users MUST be able to change their reaction (from like to dislike or vice versa) and remove their reaction entirely.
+
+Reactions are persisted in backend storage (`message_reactions` table) and accessible via API. Reactions on user messages or system messages MUST NOT be allowed.
+
+**Rationale**: Binary feedback on assistant responses enables quality tracking and provides signal for future model/prompt improvements.
+**Actors**: `cpt-cf-mini-chat-actor-chat-user`
+
 ### 5.4 Cost Control & Governance
 
 #### Per-User Usage Quotas
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-quota-enforcement`
 
-The system MUST enforce per-user usage limits on a daily and monthly basis. Tracked metrics: input tokens, output tokens, file search calls, premium model calls, image inputs, image upload bytes. When a user exceeds their premium model quota, the system MUST auto-downgrade to a base model. When all quotas are exhausted, the system MUST reject requests with a clear error.
+The system MUST enforce per-user token-based rate limits for premium models across multiple time periods (4-hourly, daily, monthly). Rate limits apply per user and track premium model usage in real-time. Standard models (balanced and cost-efficient tiers) have unlimited token usage — users always have access to standard models. Tracked metrics: input tokens, output tokens, file search calls, per-tier model calls (premium, balanced, cost-efficient), image inputs, image upload bytes. When a user exceeds the premium-tier quota in any period, the system MUST auto-downgrade to the next available standard tier (balanced → cost-efficient).
 
 Quota counting MUST use two phases: Preflight (reserve) before the provider call, and commit actual usage after completion.
 
@@ -315,7 +342,7 @@ The system MUST verify that the user's tenant has the `ai_chat` feature enabled 
 
 The system MUST emit structured audit events to the platform's `audit_service` for completed chat turns and policy decisions (one structured event per completed turn). Each event MUST include: tenant, user, chat reference, event type, model used, token counts, latency metrics, and policy decisions (quota checks, license gate results). Mini Chat does not store audit data locally.
 
-Before emitting events, `mini_chat_service` MUST redact obvious secret patterns from any included content. P1 redaction rules MUST include at least:
+Before emitting events, the mini-chat module MUST redact obvious secret patterns from any included content. P1 redaction rules MUST include at least:
 
 - Replace any `Authorization: Bearer <...>` header value with `Authorization: Bearer [REDACTED]`
 - Replace any `api_key`, `x-api-key`, `client_secret`, `access_token`, `refresh_token` values with `[REDACTED]` when they appear in `key=value` or JSON string field form
@@ -352,12 +379,7 @@ The system MUST log the following metrics for every LLM request: model, input to
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-fr-chat-deletion-cleanup`
 
-When a chat is deleted, the system MUST mark attachments for asynchronous cleanup and return without blocking on external provider operations. A cleanup worker MUST perform idempotent retries to remove files from the tenant's vector store and then delete the provider file. Local data MUST be soft-deleted or anonymized per the retention policy and hard-purged by a periodic cleanup job after a configurable grace period.
-
-For temporary chats, “deleted within 25 hours” means:
-
-- The chat is soft-deleted and no longer appears in chat list or history APIs within 25 hours of creation.
-- Provider cleanup (vector store removal + provider file deletion) has a target completion time of 1 hour under normal conditions and is eventual with retry/backoff.
+When a chat is deleted, the system MUST mark attachments for asynchronous cleanup and return without blocking on external provider operations. A cleanup worker MUST perform idempotent retries to remove files from the user's vector store and then delete the provider file. Local data MUST be soft-deleted or anonymized per the retention policy and hard-purged by a periodic cleanup job after a configurable grace period.
 
 **Rationale**: Prevents orphaned external resources and ensures data governance compliance on deletion.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`, `cpt-cf-mini-chat-actor-cleanup-scheduler`
@@ -394,7 +416,7 @@ Authorization MUST follow the platform PDP/PEP model, including query-level cons
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-nfr-cost-control`
 
-Per-user LLM costs MUST be bounded by configurable daily and monthly quotas. File search costs MUST be bounded by per-message and per-day call limits. The system MUST track actual costs with tenant aggregation and per-user attribution for quota enforcement. Administrator visibility is limited to aggregated usage and operational metrics.
+Per-user LLM costs MUST be bounded by configurable token-based rate limits for premium models across multiple periods (4-hourly, daily, monthly), tracked in real-time. Standard models (balanced, cost-efficient) have unlimited token usage. File search costs MUST be bounded by per-message and per-day call limits. The system MUST track actual costs with tenant aggregation and per-user attribution for quota enforcement. Administrator visibility is limited to aggregated usage and operational metrics.
 
 **Threshold**: No user exceeds configured quota; estimated cost available for 100% of requests
 **Rationale**: Unbounded LLM usage can generate unexpected costs; tenants need cost predictability.
@@ -414,9 +436,9 @@ The system MUST minimize platform overhead beyond provider latency. Define `mini
 
 - [ ] `p1` - **ID**: `cpt-cf-mini-chat-nfr-data-retention`
 
-Temporary chats MUST be deleted within 25 hours of creation. Target: deleted chat resources (files, vector store entries) at the external provider removed within 1 hour under normal conditions; eventually consistent with retry/backoff on provider errors.
+Deleted chat resources (files, vector store entries) at the external provider MUST be removed within 1 hour under normal conditions; eventually consistent with retry/backoff on provider errors. Temporary chat auto-deletion SLA (25h) is deferred to P2.
 
-**Threshold**: 100% of temporary chats cleaned up within SLA; target external resource cleanup within 1 hour under normal conditions, with retry/backoff on provider errors
+**Threshold**: Target external resource cleanup within 1 hour under normal conditions, with retry/backoff on provider errors
 **Rationale**: Regulatory and customer contractual requirements for data lifecycle management.
 **Architecture Allocation**: See DESIGN.md section 4 (Cleanup on Chat Deletion)
 
@@ -518,7 +540,7 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 ##### Image quota enforcement
 
 - `mini_chat_quota_preflight_v2_total{kind,decision,model}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`) - see Quota and cost control section above
-- `mini_chat_quota_image_commit_total{period}` (counter; `period`: `daily|monthly`)
+- `mini_chat_quota_image_commit_total{period}` (counter; `period`: `4h|daily|monthly`)
 
 ##### Cleanup and drift
 
@@ -535,7 +557,7 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 - `mini_chat_audit_redaction_hits_total{pattern}`
 - `mini_chat_audit_emit_latency_ms`
 
-##### DB health (chat_store)
+##### DB health (infra/storage)
 
 - `mini_chat_db_query_latency_ms{query}`
 - `mini_chat_db_errors_total{query,code}`
@@ -544,7 +566,6 @@ Prometheus labels MUST NOT include high-cardinality identifiers such as `tenant_
 
 - `mini_chat_ttft_overhead_ms` p99 < 50 ms
 - `mini_chat_time_to_abort_ms` p99 < 200 ms
-- Temporary chat soft-delete within 25 hours
 - Provider cleanup target completion within 1 hour under normal conditions (eventual with retry)
 
 ### 6.3 UX Recovery Contract (P1)
@@ -579,7 +600,7 @@ The UI experience MUST be resilient to SSE disconnects and idempotency conflicts
 
 **Type**: REST API
 **Stability**: stable
-**Description**: Public HTTP API for chat management, message streaming, and file upload. All endpoints require authentication and tenant license verification.
+**Description**: Public HTTP API for chat management, message streaming, file upload, and message reactions. All endpoints require authentication and tenant license verification.
 **Breaking Change Policy**: Versioned via URL prefix (`/v1/`). Breaking changes require new version.
 
 #### Turn Status (read-only) API (P1 optional, recommended)
@@ -627,7 +648,7 @@ Support and UX recovery flows SHOULD be able to query authoritative turn state b
 | `feature_not_licensed` | 403 | Tenant lacks `ai_chat` feature |
 | `insufficient_permissions` | 403 | Subject lacks permission for the requested action (AuthZ Resolver denied) |
 | `chat_not_found` | 404 | Chat does not exist or not accessible under current authorization constraints |
-| `quota_exceeded` | 429 | User exceeded daily/monthly usage limit |
+| `quota_exceeded` | 429 | User exceeded premium-tier token rate limit (4-hourly, daily, or monthly); auto-downgraded to standard tier. Returned only when emergency flags force rejection or all models are disabled. |
 | `rate_limited` | 429 | Too many requests in time window |
 | `file_too_large` | 413 | Uploaded file exceeds size limit |
 | `unsupported_file_type` | 415 | File type not supported for upload |
@@ -784,7 +805,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 1. User requests chat deletion
 2. System soft-deletes the chat
 3. System marks attachments for cleanup and returns
-4. Cleanup worker removes file from tenant vector store and deletes the provider file (idempotent retries)
+4. Cleanup worker removes file from user's vector store and deletes the provider file (idempotent retries)
 5. System emits audit events
 
 **Postconditions**:
@@ -792,9 +813,9 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - External resources cleaned up
 - Audit events emitted to platform `audit_service`
 
-#### UC-005: Temporary Chat Auto-Deletion
+#### UC-005: Temporary Chat Auto-Deletion (P2)
 
-- [ ] `p1` - **ID**: `cpt-cf-mini-chat-usecase-temporary-chat-cleanup`
+- [ ] `p2` - **ID**: `cpt-cf-mini-chat-usecase-temporary-chat-cleanup`
 
 **Actor**: `cpt-cf-mini-chat-actor-cleanup-scheduler`
 
@@ -891,8 +912,9 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - [ ] Cancellation propagation meets design thresholds: `mini_chat_time_to_abort_ms` p99 < 200 ms and `mini_chat_tokens_after_cancel` p99 < 50 tokens
 - [ ] User can upload a document and ask questions that are answered using document content
 - [ ] Users from different tenants cannot access each other's chats, documents, or search results
-- [ ] User exceeding daily quota receives a clear error message and is auto-downgraded to a base model
-- [ ] Temporary chats are automatically deleted within 25 hours
+- [ ] User exceeding premium-tier quota (in any period: 4-hourly, daily, or monthly) is auto-downgraded to the standard tier (balanced → cost-efficient); standard models have unlimited token usage and are always available; user is never fully blocked from chatting due to token quotas
+- [ ] User can select a model from the catalog when creating a chat; the model is locked for the chat lifetime; all turns use the selected model (except system-driven quota downgrades)
+- [ ] User can like or dislike an assistant message; reaction is persisted and retrievable via API; changing reaction replaces the previous one; removing reaction deletes it
 - [ ] Deleted chat resources are removed from the external provider (target: within 1 hour under normal conditions; eventual with retry/backoff)
 - [ ] Every completed chat turn emits a structured audit event to platform `audit_service` (one event per completed turn) including usage metrics
 - [ ] Long conversations (50+ turns) remain functional via thread summary compression
@@ -926,7 +948,7 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 - Platform AuthN provides `user_id` and `tenant_id` in the security context for every request
 - Platform `license_manager` can resolve the `ai_chat` feature flag synchronously
 - Platform `audit_service` is available to receive audit events
-- One provider vector store per tenant is sufficient for P1 document volumes
+- One provider vector store per user is sufficient for P1 document volumes
 - Thread summary quality is adequate for maintaining conversational coherence over long chats
 
 ## 12. Risks
@@ -938,9 +960,9 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 | Cost overruns from unexpected usage patterns | Budget exceeded at tenant level | Per-user quotas; file search call limits; token budgets; cost monitoring and alerts |
 | Thread summary loses critical context | Degraded conversation quality over long chats | Include explicit instructions to preserve decisions, facts, names, document refs; allow users to start new chats |
 | Vector store data consistency on deletion | Orphaned files at provider | Idempotent cleanup with retry; reconciliation job for detecting orphans |
-| Large document volumes per tenant exceeding vector store limits | Search quality degrades; upload failures | Monitor per-tenant file counts; enforce upload limits; plan per-workspace stores (P2) |
+| Large document volumes per user exceeding vector store limits | Search quality degrades; upload failures | Monitor per-user file counts; enforce upload limits; plan per-workspace stores (P2) |
 | Image spam / abuse driving excessive provider costs | Unexpected cost spikes from high-volume or large image uploads | Per-message image input cap (default: 4); per-user daily image input cap (default: 50); configurable byte limits; image-specific quota counters and metrics |
-| Provider model does not support multimodal input | Image-bearing requests fail | `mini_chat_service` checks model capability before outbound call; rejects with `unsupported_media` (HTTP 415) if effective model lacks image support; operator configures which models support images |
+| Provider model does not support multimodal input | Image-bearing requests fail | The domain service checks model capability before outbound call; rejects with `unsupported_media` (HTTP 415) if effective model lacks image support; operator configures which models support images |
 
 ## 13. Open Questions
 
@@ -953,14 +975,18 @@ Provider identifiers (e.g., `file_id` in `citations`) are display-only metadata;
 
 These defaults are used for P1 planning and MUST be configurable per tenant/operator:
 
-- Default chat model: `gpt-5.2`
-- Auto-downgrade/base model: `gpt-5-mini`
-- Default quota targets (tokens): daily `50_000`, monthly `1_000_000`
+- Model catalog (ordered by tier):
+  - Premium tier: `gpt-5.2` (default for new chats)
+  - Balanced tier: `gpt-5-mini`
+  - Cost-efficient tier: `gpt-5-nano`
+- Downgrade cascade: premium → balanced → cost-efficient (no rejection; standard models always available)
+- Default premium-tier token rate limits: 4-hourly `15_000`, daily `50_000`, monthly `1_000_000`
+- Standard-tier (balanced, cost-efficient) token usage: unlimited
 - Upload size limit: 16 MiB (deployment config example: `uploaded_file_max_size_kb: 16384`); PM target: 25 MiB (configurable)
 - Image upload size limit: same as above unless overridden (deployment config example: `uploaded_image_max_size_kb: 16384`)
 - Max image inputs per message: 4 (deployment config example: `max_images_per_message: 4`)
 - Max image inputs per user per day: 50 (deployment config example: `max_images_per_user_daily: 50`)
-- Temporary chat retention window: 24 hours (deployment config example: `temporary_chat_retention_hours: 24`)
+- Temporary chat retention window: 24 hours (P2; deployment config example: `temporary_chat_retention_hours: 24`)
 
 ## 14. Traceability
 

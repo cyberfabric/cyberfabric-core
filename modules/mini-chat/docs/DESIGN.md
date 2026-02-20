@@ -4,9 +4,9 @@
 
 ### 1.1 Architectural Vision
 
-Mini Chat provides a multi-tenant AI chat experience with SSE streaming, conversation history, and document-aware question answering. Users interact through a REST/SSE API backed by the Responses API with File Search (OpenAI or Azure OpenAI - see [Provider API Mapping](#provider-api-mapping)). The system maintains strict tenant isolation via per-tenant vector stores and enforces cost control through token budgets, usage quotas, and file search limits. Authorization decisions are delegated to the platform's AuthZ Resolver (PDP), which returns query-level constraints compiled to SQL by `mini_chat_service` acting as the Policy Enforcement Point (PEP).
+Mini Chat provides a multi-tenant AI chat experience with SSE streaming, conversation history, and document-aware question answering. Users interact through a REST/SSE API backed by the Responses API with File Search (OpenAI or Azure OpenAI - see [Provider API Mapping](#provider-api-mapping)). The system maintains strict tenant isolation via per-user vector stores (with retrieval scoped to the current chat's attachments) and enforces cost control through token budgets, usage quotas, and file search limits. Authorization decisions are delegated to the platform's AuthZ Resolver (PDP), which returns query-level constraints compiled to `AccessScope` objects by the mini-chat module acting as the Policy Enforcement Point (PEP).
 
-The architecture is modular: `mini_chat_service` orchestrates all request processing - context assembly, LLM invocation, streaming relay, and persistence. It owns the full request lifecycle from receiving a user message to persisting the assistant response and usage metrics. External LLM calls route exclusively through the platform's Outbound API Gateway (OAGW), which handles credential injection and egress control. Mini Chat calls the LLM provider directly via OAGW rather than through `cf-llm-gateway`, because it relies on provider-specific features (Responses API, Files API, File Search with vector stores) that the generic gateway does not abstract. Both OpenAI and Azure OpenAI expose a compatible Responses API surface; OAGW routes to the configured provider and injects the appropriate credentials (API key header for OpenAI, `api-key` header or Entra ID bearer token for Azure OpenAI).
+Mini Chat is implemented as a ModKit module (`mini-chat`) following the DDD-light pattern. The module's domain service layer orchestrates all request processing - context assembly, LLM invocation, streaming relay, and persistence. It owns the full request lifecycle from receiving a user message to persisting the assistant response and usage metrics. External LLM calls route exclusively through the platform's Outbound API Gateway (OAGW), which handles credential injection and egress control. Mini Chat calls the LLM provider directly via OAGW rather than through `cf-llm-gateway`, because it relies on provider-specific features (Responses API, Files API, File Search with vector stores) that the generic gateway does not abstract. Both OpenAI and Azure OpenAI expose a compatible Responses API surface; OAGW routes to the configured provider and injects the appropriate credentials (API key header for OpenAI, `api-key` header or Entra ID bearer token for Azure OpenAI).
 
 Mini Chat supports multimodal Responses API input (text + image) using the provider Files API for image storage. Images are uploaded as attachments, referenced by file ID in the Responses API content array, and are not indexed in vector stores.
 
@@ -18,15 +18,15 @@ Long conversations are managed via thread summaries - a Level 1 compression stra
 
 | Requirement | Design Response |
 |-------------|-----------------|
-| `cpt-cf-mini-chat-fr-chat-streaming` | SSE streaming via `mini_chat_service` -> OAGW -> Responses API (OpenAI: `POST /v1/responses`; Azure OpenAI: `POST /openai/v1/responses`) |
-| `cpt-cf-mini-chat-fr-conversation-history` | `chat_store` (Postgres) persists all messages; recent messages loaded per request |
-| `cpt-cf-mini-chat-fr-file-upload` | Upload via OAGW -> Files API (OpenAI: `POST /v1/files`; Azure OpenAI: `POST /openai/files`); metadata in `chat_store`; file added to tenant vector store. P1 uses `purpose="assistants"` for both providers (OpenAI also supports `purpose="user_data"`, but we use `assistants` to keep parity and because the files are used with Vector Stores / File Search). |
-| `cpt-cf-mini-chat-fr-image-upload` | Image upload via OAGW -> Files API; metadata in `chat_store`; NOT added to vector store. Images referenced as multimodal input (file ID) in Responses API calls. Model capability checked before outbound call; `unsupported_media` error if model lacks image support. |
-| `cpt-cf-mini-chat-fr-file-search` | File Search tool call scoped to tenant vector store (identical `file_search` tool on both OpenAI and Azure OpenAI Responses API) |
+| `cpt-cf-mini-chat-fr-chat-streaming` | SSE streaming via the mini-chat module's domain service -> OAGW -> Responses API (OpenAI: `POST /v1/responses`; Azure OpenAI: `POST /openai/v1/responses`) |
+| `cpt-cf-mini-chat-fr-conversation-history` | Postgres (infra/storage) persists all messages; recent messages loaded per request |
+| `cpt-cf-mini-chat-fr-file-upload` | Upload via OAGW -> Files API (OpenAI: `POST /v1/files`; Azure OpenAI: `POST /openai/files`); metadata persisted via infra/storage repositories; file added to user's vector store. P1 uses `purpose="assistants"` for both providers (OpenAI also supports `purpose="user_data"`, but we use `assistants` to keep parity and because the files are used with Vector Stores / File Search). |
+| `cpt-cf-mini-chat-fr-image-upload` | Image upload via OAGW -> Files API; metadata persisted via infra/storage repositories; NOT added to vector store. Images referenced as multimodal input (file ID) in Responses API calls. Model capability checked before outbound call; `unsupported_media` error if model lacks image support. |
+| `cpt-cf-mini-chat-fr-file-search` | File Search tool call scoped to the user's vector store, filtered to current chat's attachments (identical `file_search` tool on both OpenAI and Azure OpenAI Responses API) |
 | `cpt-cf-mini-chat-fr-doc-summary` | See **File Upload** sequence ("Generate doc summary" background variant) and `attachments.doc_summary` schema field |
 | `cpt-cf-mini-chat-fr-thread-summary` | Periodic LLM-driven summarization of old messages; summary replaces history in context |
 | `cpt-cf-mini-chat-fr-chat-crud` | REST endpoints for create/list/get/delete chats |
-| `cpt-cf-mini-chat-fr-temporary-chat` | Toggle temporary flag; scheduled cleanup after 24h |
+| `cpt-cf-mini-chat-fr-temporary-chat` | Toggle temporary flag; scheduled cleanup after 24h (P2) |
 | `cpt-cf-mini-chat-fr-chat-deletion-cleanup` | See **Cleanup on Chat Deletion** |
 | `cpt-cf-mini-chat-fr-streaming-cancellation` | See **Streaming Cancellation** sequence and quota bounded best-effort debit rules in `quota_service` |
 | `cpt-cf-mini-chat-fr-quota-enforcement` | See `quota_service` component and `quota_usage` table |
@@ -35,18 +35,20 @@ Long conversations are managed via thread summaries - a Level 1 compression stra
 | `cpt-cf-mini-chat-fr-audit` | Emit audit events to platform `audit_service` for completed chat turns and policy decisions (one structured event per completed turn) |
 | `cpt-cf-mini-chat-fr-ux-recovery` | See **Streaming Contract** (Idempotency + reconnect rule) and **Turn Status API** |
 | `cpt-cf-mini-chat-fr-turn-mutations` | Retry / edit / delete last turn via Turn Mutation API; see **Turn Mutation Rules (P1)** and turn mutation endpoints |
+| `cpt-cf-mini-chat-fr-model-selection` | User selects model per chat at creation; model locked for conversation lifetime; see constraint `cpt-cf-mini-chat-constraint-model-locked-per-chat` and Model Catalog Configuration |
+| `cpt-cf-mini-chat-fr-message-reactions` | Binary like/dislike on assistant messages; see `message_reactions` table |
 | `cpt-cf-mini-chat-fr-group-chats` | Deferred to P2+ — see `cpt-cf-mini-chat-adr-group-chat-usage-attribution` |
 
 #### NFR Allocation
 
 | NFR ID | NFR Summary | Allocated To | Design Response | Verification Approach |
 |--------|-------------|--------------|-----------------|----------------------|
-| `cpt-cf-mini-chat-nfr-tenant-isolation` | Tenant data must never leak across tenants | `mini_chat_service`, `chat_store` | Per-tenant vector store; all queries scoped by `tenant_id`; no user-supplied `file_id` or `vector_store_id` in API | Integration tests with multi-tenant scenarios |
-| `cpt-cf-mini-chat-nfr-authz-alignment` | Authorization must follow platform PDP/PEP model | `mini_chat_service` (PEP) | AuthZ Resolver evaluates every data-access operation; constraints compiled to SQL WHERE clauses; fail-closed on PDP errors | Integration tests with mock PDP; fail-closed verification tests |
-| `cpt-cf-mini-chat-nfr-cost-control` | Predictable and bounded LLM costs | `quota_service`, `mini_chat_service` | Per-user daily/monthly limits; auto-downgrade to base model; file search call limits; token budget per request | Usage metrics dashboard; budget alert tests |
-| `cpt-cf-mini-chat-nfr-streaming-latency` | Low time-to-first-token for chat responses | `mini_chat_service`, OAGW | Direct SSE relay without buffering; cancellation propagation on disconnect | TTFT benchmarks under load; **Disconnect test**: open SSE -> receive 1-2 tokens -> disconnect -> assert provider request closed within 200 ms and active-generation counter decrements; **TTFT delta test**: measure `t_first_token_ui - t_first_byte_from_provider` -> assert platform overhead < 50 ms p99 |
-| `cpt-cf-mini-chat-nfr-data-retention` | Temporary chats cleaned up; deleted chats purged from provider | `chat_store`, `mini_chat_service` | Scheduled cleanup job; cascade delete to provider files and vector store entries (OpenAI Files API / Azure OpenAI Files API) | Retention policy compliance tests |
-| `cpt-cf-mini-chat-nfr-observability-supportability` | Operational visibility for on-call, SRE, and cost governance | `mini_chat_service`, `quota_service` | `mini_chat_*` Prometheus metrics on all critical paths; stable `request_id` tracing per turn; structured audit events; turn state API (`GET /turns/{request_id}`) | Metric series presence tests; request_id propagation tests; alert rule validation |
+| `cpt-cf-mini-chat-nfr-tenant-isolation` | Tenant data must never leak across tenants | mini-chat module (domain + infra layers) | Per-user vector store; all queries scoped via `AccessScope` (owner_col + tenant_col); no user-supplied `file_id` or `vector_store_id` in API | Integration tests with multi-tenant scenarios |
+| `cpt-cf-mini-chat-nfr-authz-alignment` | Authorization must follow platform PDP/PEP model | mini-chat module (PEP via PolicyEnforcer) | AuthZ Resolver evaluates every data-access operation; constraints compiled to `AccessScope` objects applied via secure ORM; fail-closed on PDP errors | Integration tests with mock PDP; fail-closed verification tests |
+| `cpt-cf-mini-chat-nfr-cost-control` | Predictable and bounded LLM costs | mini-chat module (domain service + quota_service) | Token-based rate limits for premium models across multiple periods (4-hourly, daily, monthly) tracked in real-time; standard models (balanced, cost-efficient) unlimited; three-tier downgrade cascade (premium → balanced → cost-efficient); file search call limits; token budget per request | Usage metrics dashboard; budget alert tests |
+| `cpt-cf-mini-chat-nfr-streaming-latency` | Low time-to-first-token for chat responses | mini-chat module (domain service), OAGW | Direct SSE relay without buffering; cancellation propagation on disconnect | TTFT benchmarks under load; **Disconnect test**: open SSE -> receive 1-2 tokens -> disconnect -> assert provider request closed within 200 ms and active-generation counter decrements; **TTFT delta test**: measure `t_first_token_ui - t_first_byte_from_provider` -> assert platform overhead < 50 ms p99 |
+| `cpt-cf-mini-chat-nfr-data-retention` | Deleted chats purged from provider; temporary chat cleanup (P2) | mini-chat module (domain + infra layers) | Scheduled cleanup job; cascade delete to provider files and vector store entries (OpenAI Files API / Azure OpenAI Files API) | Retention policy compliance tests |
+| `cpt-cf-mini-chat-nfr-observability-supportability` | Operational visibility for on-call, SRE, and cost governance | mini-chat module (domain service + quota_service) | `mini_chat_*` Prometheus metrics on all critical paths; stable `request_id` tracing per turn; structured audit events; turn state API (`GET /turns/{request_id}`) | Metric series presence tests; request_id propagation tests; alert rule validation |
 
 ### 1.3 Architecture Layers
 
@@ -55,32 +57,38 @@ Long conversations are managed via thread summaries - a Level 1 compression stra
 │  Presentation (api_gateway - platform)                │
 │  REST + SSE endpoints, AuthN middleware               │
 ├───────────────────────────────────────────────────────┤
-│  Application (mini_chat_service - PEP)                     │
-│  Orchestration, authz evaluation, context planning,   │
-│  streaming                                            │
-│  ┌───────────┐  ┌─────────────────────┐               │
-│  │ quota_svc │  │ authz_resolver (PDP)│               │
-│  └───────────┘  └─────────────────────┘               │
-├───────────────────────────────────────────────────────┤
-│  Domain                                               │
-│  Chat, Message, Attachment, ThreadSummary,            │
-│  ContextPlan, QuotaPolicy                             │
-├───────────────────────────────────────────────────────┤
-│  Infrastructure                                       │
-│  ┌─────────────┐  ┌───────────────────────────┐       │
-│  │ chat_store  │  │ llm_provider (lib)        │       │
-│  │ (Postgres)  │  │ -> OAGW -> OpenAI /       │       │
-│  │             │  │          Azure OpenAI     │       │
-│  └─────────────┘  └───────────────────────────┘       │
+│  mini-chat module  [#[modkit::module]]                │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ API Layer (api/rest/)                           │  │
+│  │ Handlers, routes, DTOs, error→Problem mapping   │  │
+│  ├─────────────────────────────────────────────────┤  │
+│  │ Domain Layer (domain/)                          │  │
+│  │ Service (orchestration, PEP, context planning,  │  │
+│  │   streaming), repository traits (ports)         │  │
+│  │ ┌───────────┐  ┌──────────────────────────┐     │  │
+│  │ │ quota_svc │  │ authz (PolicyEnforcer)   │     │  │
+│  │ └───────────┘  └──────────────────────────┘     │  │
+│  ├─────────────────────────────────────────────────┤  │
+│  │ Infrastructure Layer (infra/)                   │  │
+│  │ ┌──────────────────┐  ┌──────────────────────┐  │  │
+│  │ │ storage/         │  │ llm/ (llm_provider)  │  │  │
+│  │ │ SeaORM entities  │  │ -> OAGW -> OpenAI /  │  │  │
+│  │ │ (Scopable)       │  │    Azure OpenAI      │  │  │
+│  │ │ ORM repositories │  │                      │  │  │
+│  │ │ migrations       │  │                      │  │  │
+│  │ └──────────────────┘  └──────────────────────┘  │  │
+│  └─────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────┘
 ```
+
+**Naming note**: "the domain service" in this document refers to the module's domain service layer (business logic and PEP orchestration). "infra/storage" refers to the persistence layer (SeaORM entities with `#[derive(Scopable)]` + ORM repository implementations).
 
 | Layer | Responsibility | Technology |
 |-------|---------------|------------|
 | Presentation | Public REST/SSE API, authentication, routing | Axum (platform api_gateway) |
-| Application | Request orchestration, authorization evaluation (PEP), context assembly, streaming relay, quota checks | Rust (mini_chat_service crate) |
-| Domain | Business entities and rules | Rust structs |
-| Infrastructure | Persistence, external LLM communication | Postgres (sqlx), HTTP client (reqwest) via OAGW |
+| API | REST handlers, SSE adapters, routes, DTOs, error→Problem mapping (RFC 9457) | Axum handlers, utoipa |
+| Domain | Business rules, orchestration, PEP (PolicyEnforcer), context assembly, streaming relay, quota checks; repository traits (ports) | Rust, `authz_resolver_sdk` |
+| Infrastructure | Persistence (SeaORM entities with `#[derive(Scopable)]`, ORM repositories, migrations), LLM communication | SeaORM (Postgres), HTTP client (reqwest) via OAGW |
 
 ## 2. Principles & Constraints
 
@@ -90,7 +98,7 @@ Long conversations are managed via thread summaries - a Level 1 compression stra
 
 **ID**: `cpt-cf-mini-chat-principle-tenant-scoped`
 
-Every data access is scoped by constraints issued by the AuthZ Resolver (PDP). At P1, chat content is owner-only: the PDP returns `eq` predicates on `owner_tenant_id` and `user_id` that `mini_chat_service` (PEP) compiles to SQL WHERE clauses. This replaces application-level tenant/user scoping with a formalized constraint model aligned with the platform's [Authorization Design](../../../docs/arch/authorization/DESIGN.md). Vector stores, file uploads, and quota checks all require tenant context. No API accepts raw `vector_store_id` or `file_id` from the client.
+Every data access is scoped by constraints issued by the AuthZ Resolver (PDP). At P1, chat content is owner-only: the PDP returns `eq` predicates on `owner_tenant_id` and `user_id` that the domain service (PEP, via PolicyEnforcer) compiles to `AccessScope` and applies as SQL WHERE clauses through Secure ORM (`#[derive(Scopable)]`). This replaces application-level tenant/user scoping with a formalized constraint model aligned with the platform's [Authorization Design](../../../docs/arch/authorization/DESIGN.md). Vector stores, file uploads, and quota checks all require tenant context. No API accepts raw `vector_store_id` or `file_id` from the client.
 
 #### Owner-Only Chat Content
 
@@ -108,7 +116,7 @@ The system favors compressed summaries over unbounded message history. Old messa
 
 **ID**: `cpt-cf-mini-chat-principle-streaming-first`
 
-All LLM responses are streamed. The primary delivery path is SSE from LLM provider (OpenAI / Azure OpenAI) -> OAGW -> mini_chat_service -> api_gateway -> UI. Non-streaming responses are not supported for chat completion. Both providers use an identical SSE event format for the Responses API.
+All LLM responses are streamed. The primary delivery path is SSE from LLM provider (OpenAI / Azure OpenAI) → OAGW → mini-chat module → api_gateway → UI. Non-streaming responses are not supported for chat completion. Both providers use an identical SSE event format for the Responses API.
 
 #### Linear Conversation Model
 
@@ -138,7 +146,7 @@ P1 targets the OpenAI-compatible API surface - either **OpenAI** or **Azure Open
 
 **ID**: `cpt-cf-mini-chat-constraint-model-image-capability`
 
-If the effective model (after any quota-driven downgrade) does not support image input, `mini_chat_service` MUST reject the request with `event: error` code `unsupported_media` (HTTP 415). The system MUST NOT silently drop image attachments or auto-upgrade to a different model. The operator configures which models support image input via deployment configuration (e.g., `image_capable_models: ["gpt-5.2", "gpt-5-mini"]`). This policy aligns with the "quota before outbound" constraint: the capability check occurs during preflight, before any provider call.
+If the effective model (after any quota-driven downgrade) does not support image input, the domain service MUST reject the request with `event: error` code `unsupported_media` (HTTP 415). The system MUST NOT silently drop image attachments or auto-upgrade to a different model. Image capability is determined by the `image_capable` flag on the model's entry in the model catalog (see Model Catalog Configuration). This policy aligns with the "quota before outbound" constraint: the capability check occurs during preflight, before any provider call.
 
 #### No Credential Storage
 
@@ -162,30 +170,40 @@ Access requires the `ai_chat` feature on the tenant license, enforced by the pla
 
 **ID**: `cpt-cf-mini-chat-constraint-no-buffering`
 
-No layer in the streaming pipeline may collect the full LLM response before relaying it. Every component - `llm_provider`, `mini_chat_service`, `api_gateway` - must read one SSE event and immediately forward it to the next layer. Middleware must not buffer response bodies. `.collect()` on the token stream is prohibited in the hot path.
+No layer in the streaming pipeline may collect the full LLM response before relaying it. Every component — `llm_provider`, the domain service, `api_gateway` — must read one SSE event and immediately forward it to the next layer. Middleware must not buffer response bodies. `.collect()` on the token stream is prohibited in the hot path.
 
 #### Bounded Channels
 
 **ID**: `cpt-cf-mini-chat-constraint-bounded-channels`
 
-Internal mpsc channels between `llm_provider` -> `mini_chat_service` -> SSE writer must use bounded buffers (16–64 messages). This provides backpressure: if the consumer is slow, the producer blocks rather than accumulating unbounded memory. Channel capacity is configurable per deployment.
+Internal mpsc channels between `llm_provider` → domain service → SSE writer must use bounded buffers (16–64 messages). This provides backpressure: if the consumer is slow, the producer blocks rather than accumulating unbounded memory. Channel capacity is configurable per deployment.
+
+#### Model Locked Per Chat
+
+**ID**: `cpt-cf-mini-chat-constraint-model-locked-per-chat`
+
+Once a chat is created with a model (user-selected or catalog default), that model is locked for the lifetime of the conversation. The user MUST NOT be able to change the model within an existing chat. All messages in a chat use the same model.
+
+**Exception**: quota-driven automatic downgrade within the three-tier cascade IS permitted mid-conversation. This is a system-level decision enforced by `quota_service`, not a user-initiated model switch. The downgraded model is recorded on the assistant message (`messages.model`), not on the chat itself. The chat's `model` column reflects the user's original selection; the effective model per turn may differ due to quota downgrade.
+
+If a user wants a different model, they create a new chat.
 
 #### Quota Before Outbound
 
 **ID**: `cpt-cf-mini-chat-constraint-quota-before-outbound`
 
-All product-level quota decisions (block, downgrade, limit) MUST be made in `mini_chat_service` before any request reaches OAGW. OAGW never makes user-level or tenant-level quota decisions - it is transport + credential broker only. Only `mini_chat_service` has the business context needed for quota decisions: tenant, user, license tier, premium/standard status, downgrade rules, file_search call limits. OAGW sees an opaque HTTP request with no business semantics.
+All product-level quota decisions (block, downgrade, limit) MUST be made in the domain service before any request reaches OAGW. OAGW never makes user-level or tenant-level quota decisions — it is transport + credential broker only. Only the domain service has the business context needed for quota decisions: tenant, user, license tier, model tier, three-tier downgrade cascade, file_search call limits. OAGW sees an opaque HTTP request with no business semantics.
 
-Model selection and lifecycle rules (P1) are configuration-owned and applied at the `mini_chat_service` boundary:
+Model selection and lifecycle rules (P1) are defined in the model catalog (deployment configuration) and applied at the module boundary:
 
-- Model defaults, upgrade policy, and downgrade thresholds MUST be defined in deployment configuration (P1) and are expected to be owned by a platform Settings Service / License Manager layer as the long-term system of record.
-- `mini_chat_service` / `quota_service` is the enforcement point: it MUST deterministically choose the effective model before the outbound call (allow / downgrade / reject) and MUST surface the chosen model via metrics (`{model}` label) and audit.
+- The model catalog, downgrade cascade, and per-tier thresholds MUST be defined in deployment configuration (P1) and are expected to be owned by a platform Settings Service / License Manager layer as the long-term system of record.
+- The domain service / `quota_service` is the enforcement point: it MUST deterministically choose the effective model before the outbound call using the three-tier downgrade cascade (premium → balanced → cost-efficient). Premium-tier token usage is rate-limited across 4-hourly, daily, and monthly periods; standard models (balanced, cost-efficient) have unlimited token usage. When any premium-tier period quota is exhausted, the system downgrades to the next available tier. Users always retain access to at least the cost-efficient tier. The chosen model MUST be surfaced via metrics (`{model}` and `{tier}` labels) and audit.
 
 Global emergency flags / kill switches (P1): operators MUST have a way to immediately reduce cost and risk at runtime via configuration-owned flags.
 
-- `disable_premium_models` - if enabled, premium models MUST NOT be used; requests that would have used premium MUST be downgraded to base.
-- `force_base_model` - if enabled, all requests MUST use the base model regardless of quota tier.
-- `disable_file_search` - if enabled, `file_search` tool calls MUST be skipped; responses proceed without retrieval.
+- `disable_premium_tier` — if enabled, premium-tier models MUST NOT be used; requests that would have used premium MUST begin the downgrade cascade from the balanced tier.
+- `force_cost_efficient_tier` — if enabled, all requests MUST use the cost-efficient tier model regardless of quota state or user selection.
+- `disable_file_search` — if enabled, `file_search` tool calls MUST be skipped; responses proceed without retrieval.
 
 Ownership: these flags are owned and operated by platform configuration (P1: deployment config). Long-term, they are expected to be owned by Settings Service / License Manager with privileged operator access.
 
@@ -201,21 +219,23 @@ Hard caps: token budgets (`max_input_tokens`, `max_output_tokens`) MUST remain c
 
 | Entity | Description |
 |--------|-------------|
-| Chat | A conversation belonging to a user within a tenant. Has title, temporary flag, creation/update timestamps. |
+| Chat | A conversation belonging to a user within a tenant. Has title, model (locked at creation from catalog), creation/update timestamps. Temporary flag reserved for P2. |
 | Message | A single turn in a chat (role: user/assistant/system). Stores content, token estimate, compression status. |
-| Attachment | File uploaded to a chat (document or image). References provider `file_id` (OpenAI or Azure OpenAI). Documents are linked to tenant vector store; images are not. Has processing status and `attachment_kind` (`document|image`). |
+| Attachment | File uploaded to a chat (document or image). References provider `file_id` (OpenAI or Azure OpenAI). Documents are linked to the user's vector store; images are not. Has processing status and `attachment_kind` (`document|image`). |
 | ThreadSummary | Compressed representation of older messages in a chat. Replaces old history in the context window. |
-| TenantVectorStore | Mapping from `tenant_id` to provider `vector_store_id` (OpenAI or Azure OpenAI Vector Stores API). One vector store per tenant. |
+| UserVectorStore | Mapping from `(tenant_id, user_id)` to provider `vector_store_id` (OpenAI or Azure OpenAI Vector Stores API). One vector store per user. Retrieval is logically scoped to the current chat's attachments (see File Search Retrieval Scope). |
 | AuditEvent | Structured event emitted to platform `audit_service`: prompt, response, user/tenant, timestamps, policy decisions, usage. Not stored locally. |
-| QuotaUsage | Per-user usage counters for rate limiting and budget enforcement. Tracks daily/monthly periods. |
+| QuotaUsage | Per-user usage counters for rate limiting and budget enforcement. Tracks 4-hourly, daily, and monthly periods. Premium-tier token usage is rate-limited; standard models (balanced, cost-efficient) are unlimited. |
+| MessageReaction | A binary like or dislike reaction on an assistant message. One reaction per user per message. Stored for analytics and feedback collection. |
 | ContextPlan | Transient object assembled per request: system prompt, summary, doc summaries, recent messages, user message, retrieval excerpts. |
 
 **Relationships**:
 - Chat -> Message: 1..\*
 - Chat -> Attachment: 0..\*
 - Chat -> ThreadSummary: 0..1
-- Attachment -> TenantVectorStore: belongs to (via tenant_id)
+- Attachment -> UserVectorStore: belongs to (via user_id)
 - Message -> AuditEvent: 1..1 (each turn emits an audit event to platform `audit_service`)
+- Message -> MessageReaction: 0..1 (per user)
 
 ### 3.2 Component Model
 
@@ -226,11 +246,11 @@ graph TB
     AuthN["authn (platform)"]
     LM["license_manager (platform)"]
     AuthZ["authz_resolver (platform, PDP)"]
-    CS["mini_chat_service (PEP)"]
+    CS["mini-chat module (PEP)"]
     QS["quota_service"]
     AS["audit_service (platform)"]
-    DB["chat_store (Postgres)"]
-    LP["llm_provider (lib)"]
+    DB["Postgres (infra/storage)"]
+    LP["llm_provider (infra/llm)"]
     OAGW["outbound_gateway (platform)"]
     OAI["LLM Provider (OpenAI / Azure OpenAI)"]
 
@@ -251,25 +271,25 @@ graph TB
 
 **ID**: `cpt-cf-mini-chat-component-chat-service`
 
-- **mini_chat_service** - Core orchestrator and Policy Enforcement Point (PEP). Receives user messages, evaluates authorization via AuthZ Resolver, builds context plan, invokes LLM via `llm_provider`, relays streaming tokens, persists messages and usage, triggers thread summary updates.
+- **mini-chat module** — A ModKit module (`#[modkit::module(name = "mini-chat", deps = ["authz-resolver"], capabilities = [db, rest])]`). The domain service layer is the core orchestrator and Policy Enforcement Point (PEP): receives user messages, evaluates authorization via AuthZ Resolver (PolicyEnforcer → AccessScope), builds context plan, invokes LLM via `llm_provider`, relays streaming tokens, persists messages and usage via infra/storage repositories, triggers thread summary updates.
 
 **ID**: `cpt-cf-mini-chat-component-chat-store`
 
-- **chat_store** - Postgres persistence layer. Source of truth for chats, messages, attachments, thread summaries, tenant vector store mappings, and quota usage.
+- **infra/storage** — SeaORM persistence layer with `#[derive(Scopable)]` entities, ORM repositories, and migrations. All queries are scoped via `AccessScope` (compiled from PolicyEnforcer decisions). Source of truth for chats, messages, attachments, thread summaries, user vector store mappings, and quota usage.
 
 **ID**: `cpt-cf-mini-chat-component-llm-provider`
 
-- **llm_provider** - Library (not a standalone service) used by `mini_chat_service`. Builds requests for the Responses API (OpenAI or Azure OpenAI - both expose a compatible surface), parses SSE streams, maps errors. Propagates tenant/user metadata via `user` and `metadata` fields on every request (see section 4: Provider Request Metadata). Handles both streaming chat and non-streaming calls (summary generation, doc summary). The library is provider-agnostic at the API contract level; OAGW handles endpoint routing and credential injection per configured provider.
+- **llm_provider** — Library residing in `infra/llm/` within the module (not a standalone service). Builds requests for the Responses API (OpenAI or Azure OpenAI — both expose a compatible surface), parses SSE streams, maps errors. Propagates tenant/user metadata via `user` and `metadata` fields on every request (see section 4: Provider Request Metadata). Handles both streaming chat and non-streaming calls (summary generation, doc summary). The library is provider-agnostic at the API contract level; OAGW handles endpoint routing and credential injection per configured provider.
 
 **ID**: `cpt-cf-mini-chat-component-quota-service`
 
-- **quota_service** - Enforces per-user usage limits by period (daily, monthly). Supports auto-downgrade to base model when premium quota is exhausted. Tracks file search call counts and image usage counters (image_inputs, image_upload_bytes) separately. Uses **two-phase quota counting**:
-  - **Phase 1 - Preflight (reserve) estimate** (on request start, before any streaming begins and before outbound call): estimate token cost from `ContextPlan` size + `max_output_tokens` and reserve it for quota enforcement. Decision: allow at current model / downgrade model / reject with `quota_exceeded`.
-    - Reserve MUST prevent parallel requests from overspending remaining quota.
-    - Reserve SHOULD be keyed by `(tenant_id, user_id, period_type, period_start)` and reconciled on terminal outcome.
+- **quota_service** — Enforces per-user token-based rate limits for premium models across multiple periods (4-hourly, daily, monthly), tracked in real-time. Standard models (balanced and cost-efficient tiers) have unlimited token usage and are always available. When a premium-tier quota is exhausted in any period, the system downgrades to balanced tier (always available). Tracks per-tier call counts, file search call counts, and image usage counters (image_inputs, image_upload_bytes) separately. Uses **two-phase quota counting**:
+  - **Phase 1 - Preflight (reserve) estimate** (on request start, before any streaming begins and before outbound call): estimate token cost from `ContextPlan` size + `max_output_tokens` and reserve it for quota enforcement. Decision: allow at requested tier / downgrade to standard tier.
+    - Reserve MUST prevent parallel requests from overspending remaining premium-tier quota.
+    - Reserve SHOULD be keyed by `(tenant_id, user_id, period_type, period_start)` and reconciled on terminal outcome. For premium-tier requests, reserves MUST be checked across all three period types (`4h`, `daily`, `monthly`); if any period is exhausted, the tier is considered exhausted.
   - **Phase 2 - Commit actual** (on `event: done`): reconcile the reserve to actual usage (`response.usage.input_tokens` + `response.usage.output_tokens`) and commit actual to `quota_usage`. If actual exceeds estimate (overshoot), the completed response is never retroactively cancelled, but guardrails apply:
     - Commit MUST be atomic per `(tenant_id, user_id, period_type, period_start)` (avoid race conditions under parallel streams)
-    - If the remaining quota is below a configured negative threshold, preflight MUST reject new requests with `quota_exceeded`
+    - If the remaining premium-tier quota is below a configured negative threshold, preflight MUST downgrade new premium requests to standard tier
     - `max_output_tokens` and an explicit input budget MUST bound the maximum cost per request
   - **Streaming constraint**: quota check is preflight-only. Mid-stream abort due to quota is NOT supported (would produce broken UX and partial content). Mid-stream abort is only triggered by: user cancel, provider error, or infrastructure limits.
 
@@ -285,7 +305,7 @@ Background/system tasks MUST NOT create `chat_turns` records. `chat_turns` idemp
 
 **ID**: `cpt-cf-mini-chat-component-authz-integration`
 
-- **authz_resolver (PDP)** - Platform AuthZ Resolver module. `mini_chat_service` calls it before every data-access operation to obtain authorization decisions and SQL-compilable constraints. See section 3.8.
+- **authz_resolver (PDP)** — Platform AuthZ Resolver module. The mini-chat domain service calls it (via PolicyEnforcer) before every data-access operation to obtain authorization decisions and SQL-compilable constraints. See section 3.8.
 
 
 ### 3.3 API Contracts
@@ -303,17 +323,33 @@ Covers public API from PRD: `cpt-cf-mini-chat-interface-public-api`
 | `GET` | `/v1/chats` | List chats for current user | stable |
 | `GET` | `/v1/chats/{id}` | Get chat metadata + recent messages | stable |
 | `DELETE` | `/v1/chats/{id}` | Delete chat (with retention cleanup) | stable |
-| `POST` | `/v1/chats/{id}:temporary` | Toggle temporary flag (24h TTL) | stable |
+| `POST` | `/v1/chats/{id}:temporary` | Toggle temporary flag (24h TTL) | P2 |
 | `POST` | `/v1/chats/{id}/messages:stream` | Send message, receive SSE stream | stable |
 | `POST` | `/v1/chats/{id}/attachments` | Upload file attachment | stable |
 | `GET` | `/v1/chats/{id}/turns/{request_id}` | Get authoritative turn status (read-only) | stable |
 | `POST` | `/v1/chats/{id}/turns/{request_id}:retry` | Retry last turn (new generation) | stable |
 | `PATCH` | `/v1/chats/{id}/turns/{request_id}` | Edit last turn (replace content + regenerate) | stable |
 | `DELETE` | `/v1/chats/{id}/turns/{request_id}` | Delete last turn (soft-delete) | stable |
+| `PUT` | `/v1/chats/{id}/messages/{msg_id}/reaction` | Set like/dislike reaction on an assistant message | stable |
+| `DELETE` | `/v1/chats/{id}/messages/{msg_id}/reaction` | Remove reaction from an assistant message | stable |
+
+**Create Chat** (`POST /v1/chats`):
+
+Request body:
+```json
+{
+  "title": "string (optional)",
+  "model": "string (optional, defaults to catalog default)"
+}
+```
+
+- `model`: If provided, MUST reference a valid model `name` in the model catalog. If absent, the system uses the first entry in the model catalog as the default. The model is stored on the chat and locked for all subsequent messages (see `cpt-cf-mini-chat-constraint-model-locked-per-chat`). Returns HTTP 400 if the model name is not in the catalog.
+
+Response includes the resolved `model` in chat metadata.
 
 **Streaming Contract** (`POST /v1/chats/{id}/messages:stream`) — **ID**: `cpt-cf-mini-chat-contract-sse-streaming`:
 
-The SSE protocol below is the **stable public contract** between `mini_chat_service` and UI clients. Provider-specific streaming events (OpenAI/Azure OpenAI Responses API) are translated internally by `llm_provider` / `mini_chat_service` and are never exposed to clients. See [Provider Event Translation](#provider-event-translation).
+The SSE protocol below is the **stable public contract** between the mini-chat module and UI clients. Provider-specific streaming events (OpenAI/Azure OpenAI Responses API) are translated internally by `llm_provider` / the domain service and are never exposed to clients. See [Provider Event Translation](#provider-event-translation).
 
 **Error model (Option A)**: If request validation, authorization, or quota preflight fails before any streaming begins, the system MUST return a normal JSON error response with the appropriate HTTP status and MUST NOT open an SSE stream. If a failure occurs after streaming has started, the system MUST terminate the stream with a terminal `event: error`.
 
@@ -498,7 +534,7 @@ ping*  (delta | tool | citations)*  (done | error)
 <a id="provider-event-translation"></a>
 #### Provider Event Translation
 
-Provider-specific streaming events are internal to `llm_provider` and `mini_chat_service`. They are never forwarded to clients. The translation layer maps provider events to the stable SSE protocol defined above.
+Provider-specific streaming events are internal to `llm_provider` and the domain service. They are never forwarded to clients. The translation layer maps provider events to the stable SSE protocol defined above.
 
 | Provider Event | Stable SSE Event | Notes |
 |----------------|-----------------|-------|
@@ -523,7 +559,7 @@ For streaming endpoints, failures before any streaming begins MUST be returned a
 | `feature_not_licensed` | 403 | Tenant lacks `ai_chat` feature |
 | `insufficient_permissions` | 403 | Subject lacks permission for the requested action (AuthZ Resolver denied) |
 | `chat_not_found` | 404 | Chat does not exist or not accessible under current authorization constraints |
-| `quota_exceeded` | 429 | User exceeded daily/monthly usage limit |
+| `quota_exceeded` | 429 | User exceeded premium-tier token rate limit (4-hourly, daily, or monthly); user is auto-downgraded to standard tier. Returned only when emergency flags force rejection or all models are disabled. |
 | `rate_limited` | 429 | Too many requests in time window |
 | `file_too_large` | 413 | Uploaded file exceeds size limit |
 | `unsupported_file_type` | 415 | File type not supported for upload |
@@ -545,11 +581,11 @@ For streaming endpoints, failures before any streaming begins MUST be returned a
 | outbound_gateway (platform) | Internal HTTP | Egress to LLM provider (OpenAI / Azure OpenAI) with credential injection |
 
 **Dependency Rules**:
-- `mini_chat_service` never calls the LLM provider (OpenAI / Azure OpenAI) directly; all external calls go through OAGW
+- The mini-chat module never calls the LLM provider (OpenAI / Azure OpenAI) directly; all external calls go through OAGW
 - `SecurityContext` (user_id, tenant_id) propagated through all in-process calls
-- `license_manager` runs as middleware before `mini_chat_service` is invoked
-- `mini_chat_service` calls `authz_resolver` before every database query; on PDP denial or PDP unreachable, fail-closed (deny access)
-- `mini_chat_service` emits audit events to `audit_service` after each turn; mini-chat does not store audit data locally
+- `license_manager` runs as middleware before the module is invoked
+- The domain service calls `authz_resolver` (via PolicyEnforcer) before every database query; on PDP denial or PDP unreachable, fail-closed (deny access)
+- The domain service emits audit events to `audit_service` after each turn; mini-chat does not store audit data locally
 
 ### 3.5 External Dependencies
 
@@ -562,7 +598,7 @@ Both providers expose a compatible API surface. OAGW routes requests to the conf
 | Responses API (streaming) | Chat completion with tool support | `POST /outbound/llm/responses:stream` | `POST https://api.openai.com/v1/responses` | `POST https://{resource}.openai.azure.com/openai/v1/responses` |
 | Responses API (non-streaming) | Thread summary generation, doc summary | `POST /outbound/llm/responses` | `POST https://api.openai.com/v1/responses` | `POST https://{resource}.openai.azure.com/openai/v1/responses` |
 | Files API | Upload user documents and images | `POST /outbound/llm/files` | `POST https://api.openai.com/v1/files` | `POST https://{resource}.openai.azure.com/openai/files` |
-| Vector Stores API | Manage per-tenant vector stores, add/remove files | `POST /outbound/llm/vector_stores/*` | `POST https://api.openai.com/v1/vector_stores/*` | `POST https://{resource}.openai.azure.com/openai/v1/vector_stores/*` |
+| Vector Stores API | Manage per-user vector stores, add/remove files | `POST /outbound/llm/vector_stores/*` | `POST https://api.openai.com/v1/vector_stores/*` | `POST https://{resource}.openai.azure.com/openai/v1/vector_stores/*` |
 | File Search (tool) | Retrieve document excerpts during chat | - (invoked as tool within Responses API call) | `file_search` tool | `file_search` tool (identical contract) |
 
 Note: Azure OpenAI path variants differ by rollout; OAGW owns the exact path mapping for each API.
@@ -584,13 +620,13 @@ Note: Azure OpenAI path variants differ by rollout; OAGW owns the exact path map
 
 OAGW MUST inject the required `api-version` query parameter when calling Azure OpenAI endpoints.
 
-**OAGW throttling scope**: OAGW handles provider-side rate limiting only - retry on provider 429 (with `Retry-After` respect, max 1 retry), circuit breaker when provider error rate exceeds threshold, and global concurrency cap as an SRE safety valve. Product-level quota enforcement (per-user, per-tenant, model downgrade) is NOT an OAGW concern - it is handled entirely by `mini_chat_service` / `quota_service` before any outbound call (see constraint `cpt-cf-mini-chat-constraint-quota-before-outbound`).
+**OAGW throttling scope**: OAGW handles provider-side rate limiting only - retry on provider 429 (with `Retry-After` respect, max 1 retry), circuit breaker when provider error rate exceeds threshold, and global concurrency cap as an SRE safety valve. Product-level quota enforcement (per-user, per-tenant, model downgrade) is NOT an OAGW concern — it is handled entirely by the domain service / `quota_service` before any outbound call (see constraint `cpt-cf-mini-chat-constraint-quota-before-outbound`).
 
 #### PostgreSQL
 
 | Usage | Purpose |
 |-------|---------|
-| Primary datastore | Chats, messages, attachments, summaries, quota counters, tenant vector store mappings |
+| Primary datastore | Chats, messages, attachments, summaries, quota counters, user vector store mappings |
 
 ### 3.6 Interactions & Sequences
 
@@ -603,8 +639,8 @@ sequenceDiagram
     participant UI
     participant AG as api_gateway
     participant AuthZ as authz_resolver (PDP)
-    participant CS as mini_chat_service (PEP)
-    participant DB as chat_store
+    participant CS as mini-chat module (PEP)
+    participant DB as Postgres
     participant OG as outbound_gateway
     participant OAI as OpenAI / Azure OpenAI
 
@@ -630,16 +666,16 @@ sequenceDiagram
     end
 
     CS->>CS: Build ContextPlan (system prompt + summary + doc summaries + recent msgs + user msg)
-    CS->>CS: Preflight (reserve) quota check (estimate tokens from ContextPlan + max_output -> allow / downgrade / reject)
+    CS->>CS: Preflight (reserve) quota check (resolve model from chat.model, check premium quota across 4h/daily/monthly -> allow at tier / downgrade to standard)
 
-    alt quota exhausted
+    alt all models disabled (emergency flags)
         CS-->>AG: 429 quota_exceeded (JSON error response; no SSE stream is opened)
         AG-->>UI: 429
     end
 
     Note over CS, OAI: Single provider call per user turn. file_search is enabled as a tool within the same streaming Responses API request.
 
-    CS->>OG: POST /outbound/llm/responses:stream (tools include file_search, store=tenant_store)
+    CS->>OG: POST /outbound/llm/responses:stream (tools include file_search, store=user_store, filtered to chat attachments)
     OG->>OAI: Responses API (streaming, tool calling enabled)
     OAI-->>OG: SSE tokens
     OG-->>CS: Token stream
@@ -667,8 +703,8 @@ sequenceDiagram
 sequenceDiagram
     participant UI
     participant AG as api_gateway
-    participant CS as mini_chat_service
-    participant DB as chat_store
+    participant CS as mini-chat module
+    participant DB as Postgres
     participant OG as outbound_gateway
     participant OAI as OpenAI / Azure OpenAI
 
@@ -679,7 +715,7 @@ sequenceDiagram
     OG->>OAI: Files API upload
     OAI-->>OG: file_id
     OG-->>CS: file_id
-    CS->>OG: POST /outbound/llm/vector_stores/{tenant_store}/files (add file)
+    CS->>OG: POST /outbound/llm/vector_stores/{user_store}/files (add file)
     OG->>OAI: Add file to vector store
     OAI-->>OG: OK
     OG-->>CS: OK
@@ -708,7 +744,7 @@ Attachment kind is derived from `content_type`: MIME types matching `image/png`,
 sequenceDiagram
     participant UI
     participant AG as api_gateway
-    participant CS as mini_chat_service
+    participant CS as mini-chat module
     participant LP as llm_provider
     participant OG as outbound_gateway
     participant OAI as OpenAI / Azure OpenAI
@@ -741,8 +777,8 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant CS as mini_chat_service
-    participant DB as chat_store
+    participant CS as mini-chat module
+    participant DB as Postgres
     participant OG as outbound_gateway
     participant OAI as OpenAI / Azure OpenAI
 
@@ -762,9 +798,9 @@ sequenceDiagram
 
 Summary quality gate (P1): the system MUST detect and mitigate obviously-bad summaries without ML-based evaluation.
 
-- After generating a summary, `mini_chat_service` MUST validate the candidate summary text.
-- If summary length < `X` OR entropy < `Y`, `mini_chat_service` MUST attempt regeneration.
-- If regeneration fails quality checks or the provider call fails, `mini_chat_service` MUST fall back by keeping the previous summary unchanged and MUST NOT mark the message batch as compressed.
+- After generating a summary, the domain service MUST validate the candidate summary text.
+- If summary length < `X` OR entropy < `Y`, the domain service MUST attempt regeneration.
+- If regeneration fails quality checks or the provider call fails, the domain service MUST fall back by keeping the previous summary unchanged and MUST NOT mark the message batch as compressed.
 
 `X` and `Y` are configurable thresholds. Entropy is a deterministic proxy computed as normalized token entropy over whitespace-delimited tokens:
 
@@ -786,8 +822,9 @@ Observability:
 | id | UUID | Chat identifier |
 | tenant_id | UUID | Owning tenant |
 | user_id | UUID | Owning user |
+| model | VARCHAR(64) | Model selected for this chat, locked at creation. Must reference a valid entry in the model catalog. Defaults to catalog default if not specified at creation. |
 | title | VARCHAR(255) | Chat title (user-set or auto-generated) |
-| is_temporary | BOOLEAN | If true, auto-deleted after 24h |
+| is_temporary | BOOLEAN | If true, auto-deleted after 24h (P2; default false at P1) |
 | created_at | TIMESTAMPTZ | Creation time |
 | updated_at | TIMESTAMPTZ | Last activity time |
 | deleted_at | TIMESTAMPTZ | Soft delete timestamp (nullable) |
@@ -797,6 +834,8 @@ Observability:
 **Constraints**: NOT NULL on `tenant_id`, `user_id`, `created_at`
 
 **Indexes**: `(tenant_id, user_id, updated_at DESC)` for listing chats
+
+**Secure ORM**: `#[secure(tenant_col = "tenant_id", owner_col = "user_id", resource_col = "id", no_type)]`
 
 #### Table: messages
 
@@ -825,6 +864,8 @@ Observability:
 **Constraints**: NOT NULL on `chat_id`, `role`, `content`, `created_at`. FK `chat_id` -> `chats.id` ON DELETE CASCADE. UNIQUE on `(chat_id, request_id)` WHERE `request_id IS NOT NULL`.
 
 **Indexes**: `(chat_id, created_at)` for loading recent messages
+
+**Secure ORM**: No independent `#[secure]` — accessed through parent chat. Queries are filtered by `chat_id` obtained from a scoped chat query.
 
 #### Table: chat_turns
 
@@ -870,6 +911,8 @@ Soft-delete rules:
 - Soft-deleted turns remain in storage for audit traceability.
 - The "latest turn" for mutation eligibility is the turn with the greatest `(started_at, id)` where `deleted_at IS NULL`.
 
+**Secure ORM**: No independent `#[secure]` — accessed through parent chat. Queries are filtered by `chat_id` obtained from a scoped chat query.
+
 #### Table: attachments
 
 **ID**: `cpt-cf-mini-chat-dbtable-attachments`
@@ -898,6 +941,8 @@ Soft-delete rules:
 
 **Constraints**: NOT NULL on `tenant_id`, `chat_id`, `filename`, `status`, `attachment_kind`, `created_at`. FK `chat_id` -> `chats.id` ON DELETE CASCADE. CHECK `attachment_kind IN ('document', 'image')`.
 
+**Secure ORM**: No independent `#[secure]` — accessed through parent chat. Owner isolation inherited from chat-level scoping (`chat_id` obtained from a scoped chat query).
+
 #### Table: thread_summaries
 
 **ID**: `cpt-cf-mini-chat-dbtable-thread-summaries`
@@ -915,30 +960,36 @@ Soft-delete rules:
 
 **Constraints**: UNIQUE on `chat_id`. FK `chat_id` -> `chats.id` ON DELETE CASCADE.
 
-#### Table: tenant_vector_stores
+**Secure ORM**: No independent `#[secure]` — accessed through parent chat.
 
-**ID**: `cpt-cf-mini-chat-dbtable-tenant-vector-stores`
+#### Table: user_vector_stores
+
+**ID**: `cpt-cf-mini-chat-dbtable-user-vector-stores`
 
 | Column | Type | Description |
 |--------|------|-------------|
-| tenant_id | UUID | Tenant identifier |
+| id | UUID | Record identifier |
+| tenant_id | UUID | Owning tenant |
+| user_id | UUID | Owning user (one store per user) |
 | vector_store_id | VARCHAR(128) | Provider vector store ID (OpenAI `vs_*` or Azure OpenAI equivalent) |
 | provider | VARCHAR(32) | Provider identifier: `openai` or `azure_openai` |
 | created_at | TIMESTAMPTZ | Creation time |
 
-**PK**: `tenant_id`
+**PK**: `id`
 
-**Constraints**: NOT NULL on `vector_store_id`, `provider`, `created_at`. One vector store per tenant.
+**Constraints**: UNIQUE on `(tenant_id, user_id)`. NOT NULL on `vector_store_id`, `provider`, `created_at`. One vector store per user within a tenant.
 
-Creation protocol (P1): `mini_chat_service` uses a get-or-create flow with database uniqueness as the race arbiter.
+**Secure ORM**: `#[secure(owner_col = "user_id", resource_col = "id", no_type)]`
 
-1. Attempt to read the row by `tenant_id`.
+Creation protocol (P1): the domain service uses a get-or-create flow with database uniqueness as the race arbiter.
+
+1. Attempt to read the row by `(tenant_id, user_id)`.
 2. If not present, create the vector store via OAGW and attempt INSERT.
 3. If INSERT fails due to unique violation (concurrent creator), re-read the row and use the existing `vector_store_id`. Best-effort delete the newly created provider vector store to avoid orphans.
 
-**P1**: run a periodic reconcile/orphan reaper job (for example nightly) to reconcile provider state with `tenant_vector_stores`:
-- If a provider vector store exists but is not referenced in DB -> delete it.
-- If a DB row exists but the provider vector store is missing -> recreate the vector store and update the DB row.
+**P1**: run a periodic reconcile/orphan reaper job (for example nightly) to reconcile provider state with `user_vector_stores`:
+- If a provider vector store exists but is not referenced in DB → delete it.
+- If a DB row exists but the provider vector store is missing → recreate the vector store and update the DB row.
 
 #### Table: quota_usage
 
@@ -951,14 +1002,16 @@ Creation protocol (P1): `mini_chat_service` uses a get-or-create flow with datab
 | id | UUID | Record identifier |
 | tenant_id | UUID | Tenant |
 | user_id | UUID | User |
-| period_type | VARCHAR(16) | `daily` or `monthly` |
+| period_type | VARCHAR(16) | `4h`, `daily`, or `monthly` |
 | period_start | DATE | Start of the period |
 | input_tokens | BIGINT | Total input tokens consumed |
 | output_tokens | BIGINT | Total output tokens consumed |
 | file_search_calls | INTEGER | Number of file search tool calls |
 | web_search_calls | INTEGER | Number of web search calls (P2+) |
 | rag_retrieval_calls | INTEGER | Number of internal RAG retrieval calls (P2+) |
-| premium_model_calls | INTEGER | Calls to premium models |
+| premium_tier_calls | INTEGER | Calls to premium-tier models (e.g., GPT-5.x) |
+| balanced_tier_calls | INTEGER | Calls to balanced-tier models (e.g., GPT-5 Mini) |
+| cost_efficient_tier_calls | INTEGER | Calls to cost-efficient-tier models (e.g., GPT-5 Nano) |
 | image_inputs | INTEGER | Number of image attachments included in Responses API calls (default 0) |
 | image_upload_bytes | BIGINT | Total bytes of uploaded images (default 0) |
 | updated_at | TIMESTAMPTZ | Last update time |
@@ -970,6 +1023,28 @@ Commit semantics: quota updates MUST be atomic per period record. Implementation
 **Constraints**: UNIQUE on `(tenant_id, user_id, period_type, period_start)`.
 
 **Indexes**: `(tenant_id, user_id, period_type, period_start)` for quota lookups
+
+**Secure ORM**: `#[secure(tenant_col = "tenant_id", owner_col = "user_id", resource_col = "id", no_type)]`
+
+#### Table: message_reactions
+
+**ID**: `cpt-cf-mini-chat-dbtable-message-reactions`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Reaction identifier |
+| message_id | UUID | Parent message (FK → messages.id) |
+| user_id | UUID | Reacting user |
+| reaction | VARCHAR(16) | `like` or `dislike` |
+| created_at | TIMESTAMPTZ | Reaction creation time |
+
+**PK**: `id`
+
+**Constraints**: UNIQUE on `(message_id, user_id)`. NOT NULL on `message_id`, `user_id`, `reaction`, `created_at`. FK `message_id` → `messages.id` ON DELETE CASCADE. CHECK `reaction IN ('like', 'dislike')`.
+
+**Indexes**: `(message_id)` for lookups by message
+
+**Secure ORM**: No independent `#[secure]` — accessed through parent chat. The reaction endpoints require the message's parent chat to be loaded via a scoped query first (same pattern as messages, attachments, and chat_turns).
 
 #### Projection Table: tenant_closure
 
@@ -987,7 +1062,7 @@ Schema is defined in the [Authorization Design](../../../docs/arch/authorization
 
 **ID**: `cpt-cf-mini-chat-design-authz-pep`
 
-Mini Chat acts as a Policy Enforcement Point (PEP) per the platform's PDP/PEP authorization model defined in [Authorization Design](../../../docs/arch/authorization/DESIGN.md). The `mini_chat_service` builds evaluation requests, sends them to the AuthZ Resolver (PDP), and compiles returned constraints into SQL WHERE clauses.
+Mini Chat acts as a Policy Enforcement Point (PEP) per the platform's PDP/PEP authorization model defined in [Authorization Design](../../../docs/arch/authorization/DESIGN.md). The domain service (via PolicyEnforcer) builds evaluation requests, sends them to the AuthZ Resolver (PDP), and compiles returned constraints into `AccessScope` which Secure ORM (`#[derive(Scopable)]`) applies as SQL WHERE clauses.
 
 Policy (P1): chat content is owner-only. For all content operations, authorization MUST enforce:
 
@@ -1002,7 +1077,7 @@ The authorized resource is **Chat**. Sub-resources (Message, Attachment, ThreadS
 
 | Attribute | Value |
 |-----------|-------|
-| GTS Type ID | `gts.x.cf.mini_chat.chat.v1~` |
+| GTS Type ID | `gts.cf.mini_chat._.chat.v1` |
 | Primary table | `chats` |
 | Authorization granularity | Chat-level (sub-resources inherit) |
 
@@ -1032,19 +1107,21 @@ The authorized resource is **Chat**. Sub-resources (Message, Attachment, ThreadS
 | `GET /v1/chats` | `list` | absent | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `GET /v1/chats/{id}` | `read` | present | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `DELETE /v1/chats/{id}` | `delete` | present | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
-| `POST /v1/chats/{id}:temporary` | `update` | present | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `POST /v1/chats/{id}:temporary` (P2) | `update` | present | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `POST /v1/chats/{id}/messages:stream` | `send_message` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `POST /v1/chats/{id}/attachments` | `upload` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `GET /v1/chats/{id}/turns/{request_id}` | `read_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `POST /v1/chats/{id}/turns/{request_id}:retry` | `retry_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `PATCH /v1/chats/{id}/turns/{request_id}` | `edit_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 | `DELETE /v1/chats/{id}/turns/{request_id}` | `delete_turn` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `PUT /v1/chats/{id}/messages/{msg_id}/reaction` | `react` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
+| `DELETE /v1/chats/{id}/messages/{msg_id}/reaction` | `delete_reaction` | present (chat_id) | `true` | `eq(owner_tenant_id)` + `eq(user_id)` |
 
 **Notes**:
-- `send_message`, `upload`, `retry_turn`, `edit_turn`, and `delete_turn` are actions on the Chat resource, not on Message or Turn sub-resources. The `resource.id` is the chat's ID.
+- `send_message`, `upload`, `retry_turn`, `edit_turn`, `delete_turn`, `react`, and `delete_reaction` are actions on the Chat resource, not on Message or Turn sub-resources. The `resource.id` is the chat's ID.
 - For streaming (`send_message`, `retry_turn`, `edit_turn`), authorization is evaluated once at SSE connection establishment. The entire streaming session operates under the initial authorization decision. No per-message re-authorization.
 - For `create`, the PEP passes `resource.properties.owner_tenant_id` and `resource.properties.user_id` from the SecurityContext. The PDP validates permission without returning constraints.
-- Turn mutation endpoints (`retry_turn`, `edit_turn`, `delete_turn`) additionally enforce latest-turn and terminal-state checks in `mini_chat_service` after authorization succeeds (see section 3.9).
+- Turn mutation endpoints (`retry_turn`, `edit_turn`, `delete_turn`) additionally enforce latest-turn and terminal-state checks in the domain service after authorization succeeds (see section 3.9).
 
 #### Evaluation Request/Response Examples
 
@@ -1059,7 +1136,7 @@ PEP -> PDP Request:
     "properties": { "tenant_id": "tenant-xyz-789" }
   },
   "action": { "name": "list" },
-  "resource": { "type": "gts.x.cf.mini_chat.chat.v1~" },
+  "resource": { "type": "gts.cf.mini_chat._.chat.v1" },
   "context": {
     "tenant_context": {
       "mode": "root_only",
@@ -1119,7 +1196,7 @@ PEP -> PDP Request:
   },
   "action": { "name": "read" },
   "resource": {
-    "type": "gts.x.cf.mini_chat.chat.v1~",
+    "type": "gts.cf.mini_chat._.chat.v1",
     "id": "chat-456"
   },
   "context": {
@@ -1183,7 +1260,7 @@ PEP -> PDP Request:
   },
   "action": { "name": "create" },
   "resource": {
-    "type": "gts.x.cf.mini_chat.chat.v1~",
+    "type": "gts.cf.mini_chat._.chat.v1",
     "properties": {
       "owner_tenant_id": "tenant-xyz-789",
       "user_id": "user-abc-123"
@@ -1207,11 +1284,11 @@ PDP -> PEP Response:
 { "decision": true }
 ```
 
-PEP proceeds with INSERT. No constraints needed for create.
+PEP proceeds with INSERT. No constraints needed for create. The `model` field from the request body (if provided) is validated against the model catalog and stored on the chat record.
 
 **Example 4: Send Message** (`POST /v1/chats/{id}/messages:stream`)
 
-Same authorization flow as Example 2 (Get Chat), but with `"action": { "name": "send_message" }` and `"resource.id"` set to the chat ID. Authorization is evaluated once before the SSE stream is established. The constraints are applied to the query that loads the chat and its messages from `chat_store`.
+Same authorization flow as Example 2 (Get Chat), but with `"action": { "name": "send_message" }` and `"resource.id"` set to the chat ID. Authorization is evaluated once before the SSE stream is established. The constraints are applied to the query that loads the chat and its messages from infra/storage repositories.
 
 #### Fail-Closed Behavior
 
@@ -1235,7 +1312,7 @@ Mini Chat recognizes the following token scopes for third-party application narr
 |-------|---------|
 | `ai:chat` | All chat operations (umbrella scope) |
 | `ai:chat:read` | `list`, `read` actions only |
-| `ai:chat:write` | `create`, `update`, `delete`, `send_message`, `upload`, `retry_turn`, `edit_turn`, `delete_turn` actions |
+| `ai:chat:write` | `create`, `update`, `delete`, `send_message`, `upload`, `retry_turn`, `edit_turn`, `delete_turn`, `react`, `delete_reaction` actions |
 
 First-party applications (UI) use `token_scopes: ["*"]`. Third-party integrations receive narrowed scopes. Scope enforcement is handled by the PDP - the PEP includes `token_scopes` in the evaluation request context.
 
@@ -1327,9 +1404,64 @@ A turn is a user-message + assistant-response pair identified by `request_id` in
 
 **Errors**: same as retry (except no streaming).
 
+#### Message Reaction API
+
+**ID**: `cpt-cf-mini-chat-contract-message-reaction`
+
+##### Set Reaction
+
+**Endpoint**: `PUT /v1/chats/{id}/messages/{msg_id}/reaction`
+
+**Request body**:
+```json
+{
+  "reaction": "like|dislike"
+}
+```
+
+**Response** (success): `200 OK` with:
+```json
+{
+  "message_id": "uuid",
+  "reaction": "like|dislike",
+  "created_at": "timestamptz"
+}
+```
+
+**Rules**:
+- Only assistant messages may receive reactions. If `msg_id` refers to a user or system message, reject with `400 Bad Request`.
+- The message MUST belong to a chat owned by the requesting user (standard chat-level PEP scoping).
+- PUT is idempotent: if a reaction already exists for this `(message_id, user_id)`, it is replaced (upsert semantics).
+
+**Errors**:
+
+| Code | HTTP Status | Condition |
+|------|-------------|-----------|
+| `chat_not_found` | 404 | Chat does not exist or not accessible |
+| `message_not_found` | 404 | Message does not exist in the chat |
+| `invalid_reaction_target` | 400 | Target message is not an assistant message |
+
+##### Remove Reaction
+
+**Endpoint**: `DELETE /v1/chats/{id}/messages/{msg_id}/reaction`
+
+**Request body**: none
+
+**Response** (success): `200 OK` with:
+```json
+{
+  "message_id": "uuid",
+  "deleted": true
+}
+```
+
+If no reaction exists, return `200 OK` with `"deleted": true` (idempotent delete).
+
+**Errors**: same as Set Reaction (excluding `invalid_reaction_target`).
+
 #### Summary Interaction on Turn Mutation
 
-Since only the last turn can be retried, edited, or deleted, existing thread summaries typically remain valid (summaries cover older messages, not the latest turn). In the uncommon case where a `thread_summary` exists whose `summarized_up_to` references a message within the mutated turn, the summary is considered stale. `mini_chat_service` MUST mark the summary for lazy recomputation on the next turn that triggers the summary threshold. The system MUST NOT proactively regenerate the summary on mutation alone.
+Since only the last turn can be retried, edited, or deleted, existing thread summaries typically remain valid (summaries cover older messages, not the latest turn). In the uncommon case where a `thread_summary` exists whose `summarized_up_to` references a message within the mutated turn, the summary is considered stale. The domain service MUST mark the summary for lazy recomputation on the next turn that triggers the summary threshold. The system MUST NOT proactively regenerate the summary on mutation alone.
 
 #### Audit Events for Turn Mutations
 
@@ -1348,16 +1480,16 @@ These events are emitted to platform `audit_service` following the same emission
 ### P1 Scope Boundaries
 
 **Included in P1**:
-- Single-tenant vector store per tenant (not per workspace)
+- Single vector store per user (not per workspace or per chat); retrieval logically scoped to current chat's attachments
 - Thread summary as only compression mechanism
 - On-upload document summary via File Search (Variant 1 from draft)
 - Image upload and image-aware chat via multimodal Responses API input (PNG/JPEG/WebP); images stored via Files API, not indexed in vector stores
 - Retry, edit, and delete for the last turn only (tail-only mutation; see section 3.9)
-- Quota enforcement: daily + monthly per user (tokens + image counters)
-- Temporary chats with 24h scheduled cleanup
+- Quota enforcement: 4-hourly + daily + monthly per user; token-based rate limits for premium models tracked in real-time; standard models unlimited; image counters enforced separately
 - File Search per-message call limit is configurable per deployment (default: 2 tool calls per message)
 
 **Deferred to P2+**:
+- Temporary chats with 24h scheduled cleanup
 - Projects / chat sharing
 - Full-text search across chats
 - Non-OpenAI-compatible provider support (e.g., Anthropic, Google) - OpenAI and Azure OpenAI are both supported at P1 via a shared API surface
@@ -1376,13 +1508,13 @@ Chat content may contain PII or sensitive data. Mini Chat treats messages and su
 - Audit events: structured records emitted to platform `audit_service`
 
 **Retention**:
-- Temporary chats are scheduled for cleanup after 24h and MUST be deleted within 25h (PRD SLA).
-- Non-temporary chats are retained until explicit deletion by default, subject to operator-configured retention policies.
+- Chats are retained until explicit deletion by default, subject to operator-configured retention policies.
 - Soft-deleted chats (`deleted_at` set) are hard-purged by a periodic cleanup job after a configurable grace period.
+- Temporary chat auto-deletion (24h TTL) is deferred to P2.
 
 **Audit content handling (P1)**:
 - Audit events include the minimal content required for security and incident response.
-- `mini_chat_service` MUST redact secret patterns (tokens, keys, credentials) before sending content to `audit_service`.
+- The mini-chat module MUST redact secret patterns (tokens, keys, credentials) before sending content to `audit_service`.
 - Redaction MUST be testable and based on a bounded allowlist of rule classes.
 
 | Rule class | Example (non-exhaustive) | Action |
@@ -1403,7 +1535,7 @@ Chat content may contain PII or sensitive data. Mini Chat treats messages and su
 
 ### Context Plan Assembly Rules
 
-On each user message, `mini_chat_service` assembles a `ContextPlan` in this order:
+On each user message, the domain service assembles a `ContextPlan` in this order:
 
 1. **System prompt** - fixed instructions for the assistant. The system prompt is configuration and is not persisted as a `messages` row. For debugging, the prompt version SHOULD be recorded on the assistant message (for example in `features_used` or provider metadata).
 2. **Thread summary** - if exists, replaces older history
@@ -1416,7 +1548,7 @@ On each user message, `mini_chat_service` assembles a `ContextPlan` in this orde
 - Images are referenced by provider file ID.
 - Images are never summarized on upload (no background summary task for images at P1).
 - Images do not participate in file_search tool calls and are not added to vector stores.
-- If the effective model does not support image input, `mini_chat_service` rejects before context assembly (see `cpt-cf-mini-chat-constraint-model-image-capability`).
+- If the effective model does not support image input, the domain service rejects before context assembly (see `cpt-cf-mini-chat-constraint-model-image-capability`).
 
 If the total exceeds the input token budget, truncation happens in reverse priority: old messages first, then doc summaries, then retrieval excerpts. Summary and system prompt are never truncated. Image attachments on the current turn are not truncated (they are subject to per-message count limits enforced at upload/preflight, not at context assembly).
 
@@ -1429,6 +1561,55 @@ File Search is invoked when:
 
 Limits: per-message file_search tool call limit is configurable per deployment (default: 2); max calls per day/user tracked in `quota_usage`.
 
+### File Search Retrieval Scope
+
+**Physical store**: one vector store per user (see `user_vector_stores` table). All document attachments uploaded by a user across all their chats are indexed in the same physical vector store.
+
+**Logical retrieval scope (P1)**: file search is scoped to the current chat. When constructing the `file_search` tool call for the Responses API request, the domain service filters to include only provider file IDs from attachments belonging to the current `chat_id` (where `attachment_kind = document` and `status = ready`). The per-chat filter is applied at the Responses API request level via the `file_search` tool's file ID filter parameter (or equivalent provider mechanism).
+
+This means:
+- Chat A with documents D1, D2 → file_search queries only D1, D2
+- Chat B with documents D3 → file_search queries only D3
+- No cross-chat document leakage within the same user's vector store
+
+### Model Catalog Configuration
+
+**ID**: `cpt-cf-mini-chat-design-model-catalog`
+
+The model catalog is an ordered list of available models defined in deployment configuration. Each entry specifies the model identifier, tier label, and capability flags. The domain service uses the catalog to resolve model selection, validate user requests, and execute the downgrade cascade.
+
+**Catalog structure** (deployment config):
+
+```yaml
+model_catalog:
+  - name: "gpt-5.2"
+    tier: premium
+    image_capable: true
+  - name: "gpt-5-mini"
+    tier: balanced
+    image_capable: true
+  - name: "gpt-5-nano"
+    tier: cost_efficient
+    image_capable: false
+```
+
+**Fields per entry**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Model identifier passed to the provider (e.g., `gpt-5.2`) |
+| `tier` | `premium` \| `balanced` \| `cost_efficient` | Named tier for quota accounting and downgrade ordering |
+| `image_capable` | boolean | Whether the model supports multimodal image input |
+
+**Rules**:
+
+- The catalog MUST contain at least one model.
+- Tier ordering for the downgrade cascade is fixed: `premium` → `balanced` → `cost_efficient`. If a tier has no entry in the catalog, it is skipped in the cascade. Only premium-tier models have token-based rate limits; balanced and cost-efficient tiers have unlimited token usage.
+- The first entry in the catalog is the default model for new chats when the user does not specify one.
+- When a user selects a model at chat creation, the domain service MUST validate the model name exists in the catalog. Unknown models MUST be rejected with HTTP 400.
+- The `image_capable` flag replaces the previous `image_capable_models` list. The domain service resolves capability from the catalog entry for the effective model.
+- The catalog is read at startup and reloaded on configuration change. Runtime model resolution uses the in-memory catalog.
+
 ### Three-Tier Rate Limiting & Throttling
 
 **ID**: `cpt-cf-mini-chat-design-throttling-tiers`
@@ -1437,14 +1618,14 @@ Rate limiting and quota enforcement are split into three tiers with strict owner
 
 | Tier | Owner | What It Controls | Examples                                                                                              |
 |------|-------|-----------------|-------------------------------------------------------------------------------------------------------|
-| **Product quota** | `quota_service` (in `mini_chat_service`) | Per-user daily/monthly token budgets, premium/standard model allocation, file_search call limits, auto-downgrade | "Premium calls exhausted -> downgrade to gpt-5-mini"; "Daily limit reached -> 429 `quota_exceeded`" |
+| **Product quota** | `quota_service` (in the domain service) | Per-user token-based rate limits for premium models (4-hourly, daily, monthly) tracked in real-time; standard models unlimited; file_search call limits; downgrade cascade | "Premium-tier 4h/daily/monthly quota exhausted → downgrade to balanced tier (always available)"; "Standard models have unlimited token usage" |
 | **Platform rate limit** | `api_gateway` middleware | Per-user/per-IP request rate, concurrent stream caps, abuse protection | "20 rps per user"; "Max 5 concurrent SSE streams"                                                     |
 | **Provider rate limit** | OAGW | Provider 429 handling, `Retry-After` respect, circuit breaker, global concurrency cap | "OpenAI 429 -> wait `Retry-After` -> retry once -> propagate 429 upstream"                            |
 
 **Key rules**:
-- Product quota decisions happen BEFORE the request reaches OAGW. If quota is exhausted, the request never leaves `mini_chat_service`.
+- Product quota decisions happen BEFORE the request reaches OAGW. If quota is exhausted, the request never leaves the module.
 - OAGW does NOT know about tenants, users, licenses, or premium status. It handles only provider-level concerns (retry, circuit breaker, concurrency cap).
-- Provider 429 from OAGW is propagated to `mini_chat_service`, which maps it to `rate_limited` (429) for the client with a meaningful error message.
+- Provider 429 from OAGW is propagated to the domain service, which maps it to `rate_limited` (429) for the client with a meaningful error message.
 - Mid-stream quota abort is NOT supported - quota is checked at preflight only. Mid-stream abort is only triggered by: user cancel, provider error, or infrastructure limits (see `cpt-cf-mini-chat-constraint-quota-before-outbound`).
 
 **Quota counting flow**:
@@ -1452,7 +1633,7 @@ Rate limiting and quota enforcement are split into three tiers with strict owner
 ```text
 Preflight (reserve) (before LLM call):
   estimate = tokens(ContextPlan) + max_output_tokens
-  if estimate > remaining_quota -> downgrade model or reject
+  if estimate > remaining_premium_quota (any period) -> downgrade to standard tier
 
 Commit (after done event):
   actual = response.usage.input_tokens + response.usage.output_tokens
@@ -1489,7 +1670,7 @@ Every request sent to the LLM provider via `llm_provider` MUST include two ident
 }
 ```
 
-These fields are for observability only - they do not provide tenant isolation (that is enforced via per-tenant vector stores and scoped queries). The provider aggregates usage per API key/project (OpenAI) or per deployment/resource (Azure OpenAI), so `user` and `metadata` are the only way to attribute requests within a shared credential.
+These fields are for observability only — they do not provide tenant isolation (that is enforced via per-user vector stores and scoped queries). The provider aggregates usage per API key/project (OpenAI) or per deployment/resource (Azure OpenAI), so `user` and `metadata` are the only way to attribute requests within a shared credential.
 
 Primary cost analytics (per-tenant, per-user) MUST be computed internally from response usage data (see `cpt-cf-mini-chat-fr-cost-metrics`). The provider's dashboard is not a billing backend.
 
@@ -1539,7 +1720,7 @@ Mini Chat MUST instrument Prometheus metrics on all critical paths so that suppo
   - `provider`: `openai|azure_openai`
   - `model`: limited set of configured model identifiers
   - `endpoint`: limited enumerated set
-  - `decision`, `period`, `trigger`, `tool`, `phase`, `result`, `status`
+  - `decision`, `period` (`4h|daily|monthly`), `trigger`, `tool`, `phase`, `result`, `status`
 
 #### Required metric series (P1)
 
@@ -1568,17 +1749,18 @@ The following metric series MUST be exposed (types and label sets shown). These 
 
 ##### Quota and cost control
 
-- `mini_chat_quota_preflight_total{decision,model}` (counter; `decision`: `allow|downgrade|reject`)
-- `mini_chat_quota_preflight_v2_total{kind,decision,model}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`)
+- `mini_chat_quota_preflight_total{decision,model,tier}` (counter; `decision`: `allow|downgrade|reject`; `tier`: `premium|balanced|cost_efficient`)
+- `mini_chat_quota_preflight_v2_total{kind,decision,model,tier}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`; `tier`: `premium|balanced|cost_efficient`)
 - `mini_chat_quota_preflight_v2_total` exists to add `{kind}` without changing the label set of `mini_chat_quota_preflight_total`.
-- `mini_chat_quota_reserve_total{period}` (counter; `period`: `daily|monthly`)
+- `mini_chat_quota_tier_downgrade_total{from_tier,to_tier}` (counter; tracks each tier-to-tier downgrade event)
+- `mini_chat_quota_reserve_total{period}` (counter; `period`: `4h|daily|monthly`)
 - `mini_chat_quota_commit_total{period}` (counter)
 - `mini_chat_quota_overshoot_total{period}` (counter; `actual > estimate`)
 - `mini_chat_quota_negative_total{period}` (counter; remaining below 0 or below configured negative threshold)
 - `mini_chat_quota_estimated_tokens` (histogram; `input_estimate + max_output_tokens`)
 - `mini_chat_quota_actual_tokens` (histogram; `usage.input_tokens + usage.output_tokens`)
 - `mini_chat_quota_overshoot_tokens` (histogram; `max(actual-estimate,0)`)
-- `mini_chat_quota_reserved_tokens{period}` (gauge; only if a pending/reserved concept exists)
+- `mini_chat_quota_reserved_tokens{period}` (gauge; `period`: `4h|daily|monthly`; only if a pending/reserved concept exists)
 
 ##### Tools and retrieval
 
@@ -1624,12 +1806,12 @@ The following metric series MUST be exposed (types and label sets shown). These 
 
 ##### Image quota enforcement
 
-- `mini_chat_quota_preflight_v2_total{kind,decision,model}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`)
-- `mini_chat_quota_image_commit_total{period}` (counter; `period`: `daily|monthly`)
+- `mini_chat_quota_preflight_v2_total{kind,decision,model,tier}` (counter; `kind`: `text|image`; `decision`: `allow|downgrade|reject`; `tier`: `premium|balanced|cost_efficient`)
+- `mini_chat_quota_image_commit_total{period}` (counter; `period`: `4h|daily|monthly`)
 
 ##### Cleanup and drift
 
-- `mini_chat_cleanup_job_runs_total{kind}` (counter; `kind`: `delete_chat|temporary_cleanup|reconcile`)
+- `mini_chat_cleanup_job_runs_total{kind}` (counter; `kind`: `delete_chat|reconcile`; `temporary_cleanup` deferred to P2)
 - `mini_chat_cleanup_attempts_total{op,result}` (counter; `op`: `vs_remove|file_delete`; `result`: `ok|not_found_ok|retryable_fail|fatal_fail`)
 - `mini_chat_cleanup_orphan_found_total{kind}` (counter; `kind`: `provider_file|vs_entry`)
 - `mini_chat_cleanup_orphan_fixed_total{kind}` (counter)
@@ -1642,7 +1824,7 @@ The following metric series MUST be exposed (types and label sets shown). These 
 - `mini_chat_audit_redaction_hits_total{pattern}` (counter; `pattern` MUST be from a bounded allowlist)
 - `mini_chat_audit_emit_latency_ms` (histogram)
 
-##### DB health (chat_store)
+##### DB health (infra/storage)
 
 - `mini_chat_db_query_latency_ms{query}` (histogram; `query` from a bounded allowlist)
 - `mini_chat_db_errors_total{query,code}` (counter)
@@ -1766,7 +1948,7 @@ When a chat is deleted:
 1. Soft-delete the chat record (`deleted_at` set)
 2. Mark all attachments for cleanup (`cleanup_status=pending`) and return immediately (no synchronous provider cleanup in the HTTP request)
 3. A background cleanup worker performs idempotent retries:
-  - For document attachments: remove file from tenant vector store via OAGW, then delete provider file via OAGW
+  - For document attachments: remove file from user's vector store via OAGW, then delete provider file via OAGW
   - For image attachments: delete provider file via OAGW (no vector store removal needed)
   - Cleanup worker rules:
     - Cleanup worker MUST treat "not found" for vector store file removal as success
@@ -1774,7 +1956,7 @@ When a chat is deleted:
     - Recommended order remains: remove from vector store, then delete provider file
     - Cleanup MUST tolerate missing vector store (for example recreated by orphan reaper) and proceed to delete provider file when possible
 4. Partial failures are recorded per attachment (`cleanup_attempts`, `last_cleanup_error`) and retried with backoff
-5. Temporary chats follow the same flow, triggered by a scheduled job after 24h
+5. (P2) Temporary chats will follow the same flow, triggered by a scheduled job after 24h
 
 P1 operational requirement: run a periodic reconcile job (for example nightly) to reduce provider drift and manual cleanup.
 
