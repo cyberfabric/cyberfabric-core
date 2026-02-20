@@ -99,8 +99,8 @@
       "patterns": ["modules/file-parser/*"]
     },
     {
-      "reason": "Ignore module 'serverless_runtime' (not SDLC-documented yet: missing required PRD/DESIGN and ID prefix alignment).",
-      "patterns": ["modules/serverless_runtime/*"]
+      "reason": "Ignore module 'serverless-runtime' (not SDLC-documented yet: missing required PRD/DESIGN and ID prefix alignment).",
+      "patterns": ["modules/serverless-runtime/*"]
     }
   ],
   "systems": [
