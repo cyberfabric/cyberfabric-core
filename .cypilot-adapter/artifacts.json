@@ -97,6 +97,10 @@
     {
       "reason": "Ignore module 'file-parser' (not SDLC-documented yet: missing required PRD/DESIGN).",
       "patterns": ["modules/file-parser/*"]
+    },
+    {
+      "reason": "Draft ADR files for service-jobs (pre-cypilot conversion, retained for reference).",
+      "patterns": ["modules/service_jobs/docs/ADR-*-fdd-*"]
     }
   ],
   "systems": [
