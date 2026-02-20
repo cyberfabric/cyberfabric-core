@@ -123,7 +123,7 @@ The system supports various conversation patterns including traditional linear c
 - [ ] `p1` - **ID**: `cpt-chat-engine-fr-create-session`
 
 <!-- fdd-id-content -->
-The system **MUST** create a new session with a specified session type and client ID. The system notifies the webhook backend of the new session and receives available capabilities for that session type. The capabilities determine which features are enabled (file attachments, session switching, summarization, etc.).
+The system **MUST** create a new session with a specified session type and client ID. The system binds each session to the requesting user (`user_id`) and tenant (`tenant_id`), both extracted from the JWT bearer token — they are never accepted from the request body. The system notifies the webhook backend of the new session and receives available capabilities for that session type. The capabilities determine which features are enabled (file attachments, session switching, summarization, etc.).
 
 **Actors**: `cpt-chat-engine-actor-client`, `cpt-chat-engine-actor-webhook-backend`
 <!-- fdd-id-content -->
@@ -812,7 +812,7 @@ The system **SHOULD** support WebSocket protocol as an alternative to HTTP strea
 
 #### NFR-001: Response Time
 
-**ID**: `cpt-chat-engine-nfr-response-time`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-response-time`
 
 <!-- fdd-id-content -->
 Message routing latency must be less than 100ms at p95, measured from receiving client message to forwarding to webhook backend (excluding backend processing time). Session creation must complete within 200ms at p95, including database write and backend notification.
@@ -820,7 +820,7 @@ Message routing latency must be less than 100ms at p95, measured from receiving 
 
 #### NFR-002: Availability
 
-**ID**: `cpt-chat-engine-nfr-availability`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-availability`
 
 <!-- fdd-id-content -->
 System must maintain 99.9% uptime for session management operations (create, retrieve, delete sessions). During webhook backend failures, the system must support degraded mode with read-only access to session history. Planned maintenance windows must be scheduled during low-traffic periods with advance notice.
@@ -828,7 +828,7 @@ System must maintain 99.9% uptime for session management operations (create, ret
 
 #### NFR-003: Scalability
 
-**ID**: `cpt-chat-engine-nfr-scalability`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-scalability`
 
 <!-- fdd-id-content -->
 System must support at least 10,000 concurrent active sessions per instance. Message throughput must support at least 1,000 messages per second per instance. System must support horizontal scaling by adding instances without shared state constraints.
@@ -836,7 +836,7 @@ System must support at least 10,000 concurrent active sessions per instance. Mes
 
 #### NFR-004: Data Persistence
 
-**ID**: `cpt-chat-engine-nfr-data-persistence`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-data-persistence`
 
 <!-- fdd-id-content -->
 All messages must be persisted to database before sending acknowledgment to client. Zero message loss is required during system failures, network interruptions, or backend failures. Database writes must use ACID transactions to ensure consistency.
@@ -844,7 +844,7 @@ All messages must be persisted to database before sending acknowledgment to clie
 
 #### NFR-005: Streaming Performance
 
-**ID**: `cpt-chat-engine-nfr-streaming`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-streaming`
 
 <!-- fdd-id-content -->
 Streaming latency overhead (time between receiving chunk from backend and forwarding to client) must be less than 10ms at p95. First byte of streamed response must arrive at client within 200ms of backend starting to stream. Streaming must support backpressure to handle slow clients.
@@ -852,15 +852,15 @@ Streaming latency overhead (time between receiving chunk from backend and forwar
 
 #### NFR-006: Authentication
 
-**ID**: `cpt-chat-engine-nfr-authentication`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-authentication`
 
 <!-- fdd-id-content -->
-System must authenticate all client requests using secure authentication mechanisms. Session access must be restricted to authorized clients (session owner or share token holders). Client IDs must be validated on every request.
+System must authenticate all client requests using JWT bearer tokens. Each token must carry `client_id`, `user_id`, and `tenant_id` claims, all extracted server-side and never accepted from request body. Session access must be restricted to the owning user (`user_id` match) within the owning tenant (`tenant_id` match), or to share token holders for read-only access. All data queries must be scoped by `tenant_id` to ensure tenant isolation.
 <!-- fdd-id-content -->
 
 #### NFR-007: Data Integrity
 
-**ID**: `cpt-chat-engine-nfr-data-integrity`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-data-integrity`
 
 <!-- fdd-id-content -->
 Message tree structure must maintain referential integrity at all times. Orphaned messages (messages with non-existent parent) are not allowed. Parent-child relationships must be immutable once created. Database constraints must enforce tree structure integrity.
@@ -868,7 +868,7 @@ Message tree structure must maintain referential integrity at all times. Orphane
 
 #### NFR-008: Backend Isolation
 
-**ID**: `cpt-chat-engine-nfr-backend-isolation`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-backend-isolation`
 
 <!-- fdd-id-content -->
 Webhook backend failures must not affect other sessions using different backends. Request timeout must be configurable per session type with a default of 30 seconds. Backend errors must be isolated and logged without cascading to other system components.
@@ -876,7 +876,7 @@ Webhook backend failures must not affect other sessions using different backends
 
 #### NFR-009: File Size Limits
 
-**ID**: `cpt-chat-engine-nfr-file-size`
+- [ ] `p1` - **ID**: `cpt-chat-engine-nfr-file-size`
 
 <!-- fdd-id-content -->
 System must enforce file size limits with a default of 10MB per individual file. Total attachments per message must be limited to 50MB. File size validation occurs at client upload time (enforced by file storage service) and limits are configurable per session type.
@@ -884,7 +884,7 @@ System must enforce file size limits with a default of 10MB per individual file.
 
 #### NFR-010: Search Performance
 
-**ID**: `cpt-chat-engine-nfr-search`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-search`
 
 <!-- fdd-id-content -->
 Session history search must return results within 1 second at p95 for sessions with up to 10,000 messages. Cross-session search must return results within 3 seconds at p95 for clients with up to 1,000 sessions. Search must support pagination for large result sets.
@@ -892,7 +892,7 @@ Session history search must return results within 1 second at p95 for sessions w
 
 #### NFR-011: WebSocket Performance
 
-**ID**: `cpt-chat-engine-nfr-websocket-performance`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-websocket-performance`
 
 <!-- fdd-id-content -->
 When WebSocket is enabled, connection establishment must complete within 500ms at p95. Message routing latency over WebSocket must be less than 50ms at p95 (lower than HTTP's 100ms target). Heartbeat interval must be 30 seconds with automatic reconnection using exponential backoff (maximum 60 seconds). The system must support at least 5,000 concurrent WebSocket connections per instance.
@@ -900,7 +900,7 @@ When WebSocket is enabled, connection establishment must complete within 500ms a
 
 #### NFR-012: WebSocket Reliability
 
-**ID**: `cpt-chat-engine-nfr-websocket-reliability`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-websocket-reliability`
 
 <!-- fdd-id-content -->
 When WebSocket is enabled, connections must support automatic reconnection with state restoration after network interruptions. Message delivery guarantees must match HTTP protocol (at-least-once for operations, exactly-once for streaming). The system must handle graceful connection closure with pending operation completion or cancellation. Connection timeout must be 5 minutes for idle connections, configurable per deployment.
@@ -908,7 +908,7 @@ When WebSocket is enabled, connections must support automatic reconnection with 
 
 #### NFR-013: Message History Handling
 
-**ID**: `cpt-chat-engine-nfr-message-history`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-message-history`
 
 <!-- fdd-id-content -->
 System must support sessions with up to 10,000 messages without performance degradation. Message history forwarding to webhook backends must complete within 2 seconds at p95 for sessions with 1,000 messages. Backends must implement conversation memory management strategies when approaching context window limits (typically 4,000-100,000 tokens depending on LLM model). System must provide message count and estimated token count in session metadata to help backends make memory management decisions.
@@ -916,7 +916,7 @@ System must support sessions with up to 10,000 messages without performance degr
 
 #### NFR-014: Lifecycle Operation Performance
 
-**ID**: `cpt-chat-engine-nfr-lifecycle-performance`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-lifecycle-performance`
 
 <!-- fdd-id-content -->
 Lifecycle operations (soft delete, restore, archive) must complete within 500ms at p95 for sessions with up to 10,000 messages. Hard delete operations may take up to 5 seconds at p95 for large sessions. Restoration must preserve complete session state including message tree structure, metadata, and file references. Lifecycle state transitions must be atomic.
@@ -924,7 +924,7 @@ Lifecycle operations (soft delete, restore, archive) must complete within 500ms 
 
 #### NFR-015: Retention Policy Enforcement SLA
 
-**ID**: `cpt-chat-engine-nfr-retention-sla`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-retention-sla`
 
 <!-- fdd-id-content -->
 Automatic retention policy enforcement must run at least daily. Sessions must transition to permanent deletion within 24 hours of reaching their retention period expiry. Policy processing must handle at least 10,000 sessions per run without impacting production query performance (p95 latency increase <10%). Failed operations must retry and alert on repeated failures.
@@ -932,7 +932,7 @@ Automatic retention policy enforcement must run at least daily. Sessions must tr
 
 #### NFR-016: Recovery Requirements
 
-**ID**: `cpt-chat-engine-nfr-recovery`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-recovery`
 
 <!-- fdd-id-content -->
 Recovery objectives for Chat Engine persistent data:
@@ -947,7 +947,7 @@ Recovery objectives for Chat Engine persistent data:
 
 #### NFR-017: Developer Experience
 
-**ID**: `cpt-chat-engine-nfr-developer-experience`
+- [ ] `p2` - **ID**: `cpt-chat-engine-nfr-developer-experience`
 
 <!-- fdd-id-content -->
 Chat Engine's primary users are Application Developers and Webhook Backend Developers. Integration quality is a core product metric:
