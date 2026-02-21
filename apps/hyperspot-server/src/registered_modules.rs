@@ -7,6 +7,7 @@ use api_egress as _;
 use api_gateway as _;
 use authn_resolver as _;
 use authz_resolver as _;
+use credstore as _;
 #[cfg(not(feature = "oop-example"))]
 use file_parser as _;
 use grpc_hub as _;

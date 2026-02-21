@@ -1,0 +1,38 @@
+[package]
+name = "cf-credstore"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CredStore gateway module"
+repository.workspace = true
+readme = "README.md"
+keywords = ["cyberfabric"]
+
+[lib]
+name = "credstore"
+
+[lints]
+workspace = true
+
+[dependencies]
+credstore-sdk = { package = "cf-credstore-sdk", version = "0.1.0", path = "../credstore-sdk" }
+tenant-resolver-sdk = { workspace = true }
+types-registry-sdk = { workspace = true }
+
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+inventory = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+modkit = { workspace = true }
+modkit-security = { workspace = true }
+modkit-macros = { workspace = true }
