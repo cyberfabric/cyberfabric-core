@@ -610,7 +610,7 @@ The claim mapping is configured via [jwt.claim_mapping](#jwtclaim_mapping) and [
 |-----------------------|---------------------|------------------|-------|
 | `subject_id` | `sub` | `claim_mapping.subject_id` | Required, unique subject identifier |
 | `subject_type` | (vendor-defined) | `claim_mapping.subject_type` | Optional, GTS type ID (e.g., `gts.x.core.security.subject_user.v1~`) |
-| `subject_tenant_id` | (vendor-defined) | `claim_mapping.subject_tenant_id` | Optional, Subject Owner Tenant |
+| `subject_tenant_id` | (vendor-defined) | `claim_mapping.subject_tenant_id` | Optional, Subject Tenant |
 | `token_scopes` | `scope` (space-separated) | `claim_mapping.token_scopes` | Array of scopes, split on spaces |
 | `bearer_token` | Original from `Authorization` header | N/A | Optional, for PDP forwarding |
 
