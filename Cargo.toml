@@ -295,6 +295,8 @@ tower-http = { version = "0.6", features = [
 ] }
 uuid = { version = "1.19", features = ["serde"] }
 governor = "0.10"
+prometheus = "0.14"
+prometheus-axum-middleware = "0.1"
 
 # OpenAPI documentation (only for api-gateway)
 utoipa = { version = "5.4", features = [
@@ -458,6 +460,7 @@ pptx-to-md = "0.4"
 # Additional testing utilities
 tokio-test = "0.4"
 temp-env = "0.3"
+serial_test = "3.2"
 
 # Additional utilities
 nanoid = "0.4"

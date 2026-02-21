@@ -113,18 +113,44 @@ impl ConfigProvider for AppConfig {
     fn get_module_config(&self, module_name: &str) -> Option<&serde_json::Value> {
         self.modules.get(module_name)
     }
+
+    fn app_config(&self) -> Option<&AppConfig> {
+        Some(self)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct ServerConfig {
     pub home_dir: PathBuf, // will be normalized to absolute path
+    /// Prometheus metrics configuration
+    pub prometheus: PrometheusConfig,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             home_dir: super::host::paths::default_home_dir().join(".cyberfabric"),
+            prometheus: PrometheusConfig::default(),
+        }
+    }
+}
+
+/// Prometheus metrics configuration
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct PrometheusConfig {
+    /// Enable Prometheus metrics collection and endpoint
+    pub enabled: bool,
+    /// Application name used as metrics prefix (e.g., "hyperspot" -> "`hyperspot_http_requests_total`")
+    pub app_name: String,
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_name: "hyperspot".to_owned(),
         }
     }
 }
@@ -139,6 +165,39 @@ impl ServerConfig {
         .context("home_dir normalization failed")?;
 
         std::fs::create_dir_all(&self.home_dir).context("Failed to create home_dir")?;
+
+        Ok(())
+    }
+}
+
+impl PrometheusConfig {
+    /// Validates that `app_name` conforms to Prometheus metric naming rules.
+    ///
+    /// Prometheus metric names must match: [a-zA-Z_][a-zA-Z0-9_]*
+    /// - First character: letter (a-z, A-Z) or underscore (_)
+    /// - Subsequent characters: letter, digit, or underscore
+    ///
+    /// Invalid characters like hyphens will cause runtime panics when registering metrics.
+    ///
+    /// # Errors
+    /// Returns an error if `app_name` is empty or contains invalid characters.
+    fn validate_app_name(&self) -> Result<()> {
+        let re = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$")?;
+
+        ensure!(
+            !self.app_name.is_empty(),
+            "server.prometheus.app_name cannot be empty"
+        );
+
+        ensure!(
+            re.is_match(&self.app_name),
+            "server.prometheus.app_name '{}' contains invalid characters. \
+             Prometheus metric names must start with a letter or underscore, \
+             followed by letters, digits, or underscores. \
+             Invalid characters include hyphens (-), dots (.), colons (:), spaces, etc. \
+             Example valid names: 'hyperspot', 'my_app', 'app_gateway_v2'",
+            self.app_name
+        );
 
         Ok(())
     }
@@ -292,6 +351,15 @@ impl AppConfig {
             .normalize_home_dir_inplace()
             .context("Failed to resolve server.home_dir")?;
 
+        // Validate app_name for Prometheus compatibility (only if enabled).
+        if config.server.prometheus.enabled {
+            config
+                .server
+                .prometheus
+                .validate_app_name()
+                .context("Invalid Prometheus metrics configuration")?;
+        }
+
         // Merge module files if modules_dir is specified.
         if let Some(dir) = config.modules_dir.as_ref() {
             merge_module_files(&mut config.modules, dir)?;
@@ -318,6 +386,12 @@ impl AppConfig {
             c.server
                 .normalize_home_dir_inplace()
                 .context("Failed to resolve server.home_dir (defaults)")?;
+            if c.server.prometheus.enabled {
+                c.server
+                    .prometheus
+                    .validate_app_name()
+                    .context("Invalid Prometheus metrics configuration")?;
+            }
             Ok(c)
         }
     }
@@ -1342,6 +1416,99 @@ server:
         // Optional sections default to None
         assert!(config.database.is_none());
         assert!(config.modules.is_empty());
+    }
+
+    #[test]
+    fn test_app_name_validation_valid() {
+        let valid_names = vec![
+            "hyperspot",
+            "my_app",
+            "app_gateway_v2",
+            "_internal",
+            "A1",
+            "CamelCase",
+            "snake_case_name",
+        ];
+
+        for name in valid_names {
+            let config = PrometheusConfig {
+                enabled: true,
+                app_name: name.to_owned(),
+            };
+            assert!(
+                config.validate_app_name().is_ok(),
+                "Expected '{name}' to be valid"
+            );
+        }
+    }
+
+    #[test]
+    fn test_app_name_validation_invalid() {
+        let invalid_cases = vec![
+            ("my-app", "hyphen"),
+            ("app.gateway", "dot"),
+            ("my app", "space"),
+            ("123app", "starts with digit"),
+            ("app@gateway", "special char"),
+            ("app:name", "colon"),
+            ("", "empty string"),
+        ];
+
+        for (name, reason) in invalid_cases {
+            let config = PrometheusConfig {
+                enabled: true,
+                app_name: name.to_owned(),
+            };
+            let result = config.validate_app_name();
+            assert!(
+                result.is_err(),
+                "Expected '{name}' to be invalid ({reason})"
+            );
+
+            // Verify error message is descriptive
+            let err_msg = result.unwrap_err().to_string();
+            if !name.is_empty() {
+                assert!(
+                    err_msg.contains(name),
+                    "Error should mention the invalid value"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_load_config_rejects_invalid_app_name() {
+        let tmp = tempdir().unwrap();
+        let cfg_path = tmp.path().join("cfg.yaml");
+
+        let yaml = r#"
+server:
+  home_dir: "~/.test"
+  prometheus:
+    enabled: true
+    app_name: "my-app"
+"#;
+        fs::write(&cfg_path, yaml).unwrap();
+
+        let result = AppConfig::load_layered(&cfg_path);
+        assert!(result.is_err(), "Should reject invalid app_name");
+
+        // Format with {:#} to get the full error chain including causes
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("my-app") && err_msg.contains("invalid"),
+            "Error message should be clear: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_default_app_name_is_valid() {
+        let config = PrometheusConfig::default();
+        assert!(
+            config.validate_app_name().is_ok(),
+            "Default app_name '{}' must be valid",
+            config.app_name
+        );
     }
 
     #[test]
