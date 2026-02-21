@@ -1,6 +1,6 @@
 [package]
 name = "cf-api-gateway"
-version = "0.1.4"
+version = "0.1.5"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -21,7 +21,7 @@ workspace = true
 modkit = { workspace = true }
 modkit-http = { workspace = true }
 modkit-security = { workspace = true }
-authn-resolver-sdk = { package = "cf-authn-resolver-sdk", version = "0.1.1", path = "../authn-resolver/authn-resolver-sdk" }
+authn-resolver-sdk = { package = "cf-authn-resolver-sdk", version = "0.1.2", path = "../authn-resolver/authn-resolver-sdk" }
 modkit-macros = { workspace = true }
 inventory = { workspace = true }
 anyhow = { workspace = true }
