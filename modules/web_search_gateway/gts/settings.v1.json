@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gts.x.web_search.settings.v1",
+  "title": "TenantWebSearchConfig",
+  "description": "Tenant-level web search provider configuration",
+  "type": "object",
+  "required": ["default_provider", "enabled_providers"],
+  "properties": {
+    "default_provider": {
+      "type": "string",
+      "description": "Default provider ID for the tenant (must be in enabled_providers)"
+    },
+    "enabled_providers": {
+      "type": "array",
+      "description": "List of enabled providers with tenant-specific settings",
+      "items": { "$ref": "#/$defs/TenantProviderConfig" },
+      "minItems": 1
+    },
+    "auto_failover": {
+      "type": "boolean",
+      "description": "Enable automatic failover to next priority provider on failure",
+      "default": true
+    },
+    "rate_limit_override": {
+      "$ref": "#/$defs/RateLimitOverride"
+    },
+    "quota_override": {
+      "$ref": "#/$defs/QuotaOverride"
+    }
+  },
+  "$defs": {
+    "TenantProviderConfig": {
+      "type": "object",
+      "description": "Per-provider configuration for a tenant",
+      "required": ["provider_id", "enabled", "priority"],
+      "properties": {
+        "provider_id": {
+          "type": "string",
+          "description": "Provider identifier (e.g., 'tavily', 'serper')"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether this provider is enabled for the tenant"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Failover priority (lower = higher priority)",
+          "minimum": 0
+        },
+        "settings": {
+          "type": "object",
+          "description": "Provider-specific settings (e.g., API tier, search depth)"
+        }
+      }
+    },
+    "RateLimitOverride": {
+      "type": "object",
+      "description": "Tenant rate limit override (IETF RateLimit Draft compatible with burst support)",
+      "required": ["limit", "window"],
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of requests allowed in the window",
+          "minimum": 1
+        },
+        "window": {
+          "type": "integer",
+          "description": "Time window in seconds",
+          "minimum": 1
+        },
+        "burst": {
+          "type": "integer",
+          "description": "Maximum burst capacity (token bucket size). If not specified, defaults to limit",
+          "minimum": 1
+        }
+      }
+    },
+    "QuotaOverride": {
+      "type": "object",
+      "description": "Tenant quota override (IETF RateLimit Draft compatible)",
+      "required": ["limit", "window"],
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of requests allowed in the quota period",
+          "minimum": 0
+        },
+        "window": {
+          "type": "integer",
+          "description": "Quota period in seconds (e.g., 2592000 for 30 days)",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

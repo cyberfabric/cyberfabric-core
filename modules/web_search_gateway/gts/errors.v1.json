@@ -1,0 +1,67 @@
+[
+  {
+    "status": 400,
+    "title": "Provider Not Enabled",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.provider_not_enabled.v1"
+  },
+  {
+    "status": 400,
+    "title": "Capability Not Supported",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.capability_not_supported.v1"
+  },
+  {
+    "status": 400,
+    "title": "Validation Error",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.validation.v1"
+  },
+  {
+    "status": 400,
+    "title": "No Providers Configured",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.no_providers_configured.v1"
+  },
+  {
+    "status": 401,
+    "title": "Unauthorized",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.unauthorized.v1"
+  },
+  {
+    "status": 403,
+    "title": "Forbidden",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.forbidden.v1"
+  },
+  {
+    "status": 404,
+    "title": "Provider Not Found",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.provider_not_found.v1"
+  },
+  {
+    "status": 429,
+    "title": "Rate Limit Exceeded",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.rate_limited.v1"
+  },
+  {
+    "status": 429,
+    "title": "Quota Exceeded",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.quota_exceeded.v1"
+  },
+  {
+    "status": 500,
+    "title": "Internal Error",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.internal.v1"
+  },
+  {
+    "status": 502,
+    "title": "Provider Error",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.provider_error.v1"
+  },
+  {
+    "status": 503,
+    "title": "All Providers Unavailable",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.providers_unavailable.v1"
+  },
+  {
+    "status": 504,
+    "title": "Request Timeout",
+    "code": "gts.hx.core.errors.err.v1~hx.web_search.timeout.v1"
+  }
+]

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gts.x.web_search.search_request.v1",
+  "title": "SearchRequest",
+  "description": "Web search request parameters",
+  "type": "object",
+  "required": ["query"],
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Search query text",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "search_type": {
+      "$ref": "#/$defs/SearchType"
+    },
+    "provider_id": {
+      "type": "string",
+      "description": "Specific provider GTS ID, or tenant default if omitted"
+    },
+    "options": {
+      "$ref": "#/$defs/SearchOptions"
+    }
+  },
+  "$defs": {
+    "SearchType": {
+      "type": "string",
+      "description": "Type of search to perform",
+      "enum": ["web", "news", "image", "video", "academic"],
+      "default": "web"
+    },
+    "SearchOptions": {
+      "type": "object",
+      "description": "Optional search parameters",
+      "properties": {
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum results to return",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "language": {
+          "type": "string",
+          "description": "ISO 639-1 language code",
+          "pattern": "^[a-z]{2}$"
+        },
+        "region": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 region code",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "safe_search": {
+          "$ref": "#/$defs/SafeSearchLevel"
+        },
+        "include_domains": {
+          "type": "array",
+          "description": "Domains to include in results",
+          "items": { "type": "string" }
+        },
+        "exclude_domains": {
+          "type": "array",
+          "description": "Domains to exclude from results",
+          "items": { "type": "string" }
+        },
+        "date_range": {
+          "$ref": "#/$defs/DateRange"
+        },
+        "bypass_cache": {
+          "type": "boolean",
+          "description": "Skip cache lookup",
+          "default": false
+        }
+      }
+    },
+    "SafeSearchLevel": {
+      "type": "string",
+      "description": "Safe search filtering level",
+      "enum": ["off", "moderate", "strict"],
+      "default": "moderate"
+    },
+    "DateRange": {
+      "type": "object",
+      "description": "Custom date range filter",
+      "minProperties": 1,
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date",
+          "description": "Start date (ISO 8601)"
+        },
+        "end": {
+          "type": "string",
+          "format": "date",
+          "description": "End date (ISO 8601)"
+        }
+      }
+    }
+  }
+}

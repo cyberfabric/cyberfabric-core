@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gts.x.web_search.search_response.v1",
+  "title": "SearchResponse",
+  "description": "Normalized web search response",
+  "type": "object",
+  "required": ["correlation_id", "results", "total_count", "metadata"],
+  "properties": {
+    "correlation_id": {
+      "type": "string",
+      "description": "Server-generated correlation ID"
+    },
+    "results": {
+      "type": "array",
+      "description": "Search results",
+      "items": { "$ref": "#/$defs/SearchResult" }
+    },
+    "total_count": {
+      "type": "integer",
+      "description": "Total number of results available",
+      "minimum": 0
+    },
+    "metadata": {
+      "$ref": "#/$defs/ResponseMetadata"
+    },
+    "provider_metadata": {
+      "type": "object",
+      "description": "Provider-specific metadata (pass-through)"
+    }
+  },
+  "$defs": {
+    "SearchResult": {
+      "type": "object",
+      "description": "Individual search result",
+      "required": ["title", "url", "source", "content_type"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Result title"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Result URL"
+        },
+        "source": {
+          "type": "string",
+          "description": "Originating source or provider of the result"
+        },
+        "content": {
+          "type": "string",
+          "description": "Result snippet or content preview"
+        },
+        "published_date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Publication date (ISO 8601)"
+        },
+        "score": {
+          "type": "number",
+          "description": "Relevance score (0.0-1.0 normalized)",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "content_type": {
+          "$ref": "#/$defs/ContentType"
+        },
+        "additional_links": {
+          "type": "array",
+          "description": "Related/nested links",
+          "items": { "$ref": "#/$defs/AdditionalLink" }
+        }
+      }
+    },
+    "ContentType": {
+      "type": "string",
+      "description": "Type of content",
+      "enum": ["web", "news", "image", "video", "academic"]
+    },
+    "AdditionalLink": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
+      },
+      "required": ["title", "url"]
+    },
+    "ResponseMetadata": {
+      "type": "object",
+      "description": "Response metadata",
+      "required": ["provider_used", "from_cache", "latency_ms", "search_type"],
+      "properties": {
+        "provider_used": {
+          "type": "string",
+          "description": "Provider that served the request"
+        },
+        "from_cache": {
+          "type": "boolean",
+          "description": "Whether result was served from cache"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "description": "Request latency in milliseconds"
+        },
+        "filters_applied": {
+          "type": "array",
+          "description": "Filters that were applied",
+          "items": { "type": "string" }
+        },
+        "filters_ignored": {
+          "type": "array",
+          "description": "Filters ignored (provider unsupported)",
+          "items": { "type": "string" }
+        },
+        "search_type": {
+          "type": "string",
+          "description": "Search type performed"
+        }
+      }
+    }
+  }
+}

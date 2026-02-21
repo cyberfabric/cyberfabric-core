@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gts.x.web_search.provider.v1",
+  "title": "Provider",
+  "description": "Web search provider types",
+  "type": "object",
+  "$defs": {
+    "ProviderInfo": {
+      "type": "object",
+      "description": "Provider information returned to clients",
+      "required": ["id", "name", "version", "capabilities", "health"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Provider GTS identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Provider display name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Provider plugin version"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Failover priority (lower = higher priority)"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/PluginCapabilities"
+        },
+        "health": {
+          "$ref": "#/$defs/HealthStatus"
+        }
+      }
+    },
+    "PluginCapabilities": {
+      "type": "object",
+      "description": "Provider capability declaration",
+      "required": ["search_types", "max_results_per_request"],
+      "properties": {
+        "search_types": {
+          "type": "array",
+          "description": "Supported search types",
+          "items": {
+            "type": "string",
+            "enum": ["web", "news", "image", "video", "academic"]
+          }
+        },
+        "supported_filters": {
+          "$ref": "#/$defs/SupportedFilters"
+        },
+        "max_results_per_request": {
+          "type": "integer",
+          "description": "Maximum results per request"
+        },
+        "data_residency": {
+          "type": "array",
+          "description": "Data residency regions",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "SupportedFilters": {
+      "type": "object",
+      "description": "Filters supported by the provider",
+      "properties": {
+        "language": { "type": "boolean", "default": false },
+        "region": { "type": "boolean", "default": false },
+        "safe_search": { "type": "boolean", "default": false },
+        "date_range": { "type": "boolean", "default": false },
+        "include_domains": { "type": "boolean", "default": false },
+        "exclude_domains": { "type": "boolean", "default": false }
+      }
+    },
+    "HealthStatus": {
+      "type": "object",
+      "description": "Provider health status",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Health status",
+          "enum": ["healthy", "degraded", "unhealthy", "unknown"]
+        },
+        "last_check": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last health check timestamp"
+        },
+        "error_rate": {
+          "type": "number",
+          "description": "Error rate (0.0-1.0)",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
