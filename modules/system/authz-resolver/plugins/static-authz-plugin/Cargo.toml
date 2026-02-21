@@ -1,6 +1,6 @@
 [package]
 name = "cf-static-authz-plugin"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -18,8 +18,8 @@ workspace = true
 
 [dependencies]
 # Local dependencies
-authz-resolver-sdk = { package = "cf-authz-resolver-sdk", version = "0.1.0", path = "../../authz-resolver-sdk" }
-types-registry-sdk = { package = "cf-types-registry-sdk", version = "0.1.3", path = "../../../types-registry/types-registry-sdk" }
+authz-resolver-sdk = { package = "cf-authz-resolver-sdk", version = "0.1.1", path = "../../authz-resolver-sdk" }
+types-registry-sdk = { package = "cf-types-registry-sdk", version = "0.1.4", path = "../../../types-registry/types-registry-sdk" }
 
 # ModKit dependencies
 modkit = { workspace = true }
