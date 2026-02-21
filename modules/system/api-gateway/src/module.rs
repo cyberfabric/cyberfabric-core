@@ -4,6 +4,8 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
+#[cfg(feature = "prometheus-metrics")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
@@ -59,6 +61,10 @@ pub struct ApiGateway {
     // Duplicate detection (per (method, path) and per handler id)
     pub(crate) registered_routes: DashMap<(Method, String), ()>,
     pub(crate) registered_handlers: DashMap<String, ()>,
+
+    // Prometheus metrics configuration from server config
+    #[cfg(feature = "prometheus-metrics")]
+    pub(crate) prometheus_enabled: AtomicBool,
 }
 
 impl Default for ApiGateway {
@@ -72,6 +78,8 @@ impl Default for ApiGateway {
             authn_client: Mutex::new(None),
             registered_routes: DashMap::new(),
             registered_handlers: DashMap::new(),
+            #[cfg(feature = "prometheus-metrics")]
+            prometheus_enabled: AtomicBool::new(false),
         }
     }
 }
@@ -89,6 +97,8 @@ impl ApiGateway {
             authn_client: Mutex::new(None),
             registered_routes: DashMap::new(),
             registered_handlers: DashMap::new(),
+            #[cfg(feature = "prometheus-metrics")]
+            prometheus_enabled: AtomicBool::new(false),
         }
     }
 
@@ -127,6 +137,10 @@ impl ApiGateway {
         public_routes.insert((Method::GET, "/healthz".to_owned()));
         public_routes.insert((Method::GET, "/docs".to_owned()));
         public_routes.insert((Method::GET, "/openapi.json".to_owned()));
+
+        // Mark Prometheus metrics endpoint as public (feature-gated)
+        #[cfg(feature = "prometheus-metrics")]
+        public_routes.insert((Method::GET, "/metrics".to_owned()));
 
         for spec in &self.openapi_registry.operation_specs {
             let spec = spec.value();
@@ -187,7 +201,7 @@ impl ApiGateway {
             .map(|e| e.value().clone())
             .collect();
 
-        // 11) License validation
+        // 12) License validation
         let license_map = middleware::license_validation::LicenseRequirementMap::from_specs(&specs);
         router = router.layer(from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
@@ -196,7 +210,7 @@ impl ApiGateway {
             },
         ));
 
-        // 10) Auth
+        // 11) Auth
         if config.auth_disabled {
             // Build security contexts for compatibility during migration
             let default_security_context = SecurityContext::builder()
@@ -231,10 +245,10 @@ impl ApiGateway {
             ));
         }
 
-        // 9) Error mapping (outer to auth so it can translate auth/handler errors)
+        // 10) Error mapping (outer to auth so it can translate auth/handler errors)
         router = router.layer(from_fn(modkit::api::error_layer::error_mapping_middleware));
 
-        // 8) Per-route rate limiting & in-flight limits
+        // 9) Per-route rate limiting & in-flight limits
         let rate_map = middleware::rate_limit::RateLimiterMap::from_specs(&specs, &config)?;
         router = router.layer(from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
@@ -243,7 +257,7 @@ impl ApiGateway {
             },
         ));
 
-        // 7) MIME type validation
+        // 8) MIME type validation
         let mime_map = middleware::mime_validation::build_mime_validation_map(&specs);
         router = router.layer(from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
@@ -252,23 +266,31 @@ impl ApiGateway {
             },
         ));
 
-        // 6) CORS (must be outer to auth/limits so OPTIONS preflight short-circuits)
+        // 7) CORS (must be outer to auth/limits so OPTIONS preflight short-circuits)
         if config.cors_enabled {
             router = router.layer(crate::cors::build_cors_layer(&config));
         }
 
-        // 5) Body limit
+        // 6) Body limit
         router = router.layer(RequestBodyLimitLayer::new(config.defaults.body_limit_bytes));
         router = router.layer(DefaultBodyLimit::max(config.defaults.body_limit_bytes));
 
-        // 4) Timeout
+        // 5) Timeout
         router = router.layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::GATEWAY_TIMEOUT,
             Duration::from_secs(30),
         ));
 
-        // 3) Record request_id into span + extensions (requires span to exist first => must be inner to Trace)
+        // 4) Record request_id into span + extensions (requires span to exist first => must be inner to Trace)
         router = router.layer(from_fn(middleware::request_id::push_req_id_to_extensions));
+
+        // 3) Prometheus metrics layer (feature-gated, after Trace so route info is available)
+        #[cfg(feature = "prometheus-metrics")]
+        {
+            if self.prometheus_enabled.load(Ordering::Relaxed) {
+                router = router.layer(crate::metrics::create_metrics_layer());
+            }
+        }
 
         // 2) Trace (outer to push_req_id_to_extensions)
         router = router.layer({
@@ -556,6 +578,17 @@ impl modkit::Module for ApiGateway {
             tracing::info!("AuthN Resolver client resolved from ClientHub");
         }
 
+        // Initialize Prometheus metrics (must be done before first request)
+        #[cfg(feature = "prometheus-metrics")]
+        {
+            if let Some(app_config) = ctx.config_provider().app_config()
+                && app_config.server.prometheus.enabled
+            {
+                crate::metrics::init_metrics(&app_config.server.prometheus.app_name);
+                self.prometheus_enabled.store(true, Ordering::Relaxed);
+            }
+        }
+
         Ok(())
     }
 }
@@ -579,15 +612,26 @@ impl modkit::contracts::ApiGatewayCapability for ApiGateway {
         Ok(router)
     }
 
+    #[cfg_attr(not(feature = "prometheus-metrics"), allow(unused_variables))]
     fn rest_finalize(
         &self,
-        _ctx: &modkit::context::ModuleCtx,
+        ctx: &modkit::context::ModuleCtx,
         mut router: axum::Router,
     ) -> anyhow::Result<axum::Router> {
         let config = self.get_cached_config();
 
         if config.enable_docs {
             router = self.add_openapi_routes(router)?;
+        }
+
+        // Register Prometheus metrics endpoint (feature-gated)
+        #[cfg(feature = "prometheus-metrics")]
+        {
+            if let Some(app_config) = ctx.config_provider().app_config()
+                && app_config.server.prometheus.enabled
+            {
+                router = router.route("/metrics", crate::metrics::metrics_endpoint());
+            }
         }
 
         // Apply middleware stack (including auth) to the final router

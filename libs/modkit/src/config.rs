@@ -33,6 +33,13 @@ pub enum ConfigError {
 pub trait ConfigProvider: Send + Sync {
     /// Returns raw JSON section for the module, if any.
     fn get_module_config(&self, module_name: &str) -> Option<&serde_json::Value>;
+
+    /// Returns the full app config for accessing server-level configuration.
+    /// This is used by system modules (like `api_gateway`) that need access to server-level settings.
+    #[cfg(feature = "bootstrap")]
+    fn app_config(&self) -> Option<&crate::bootstrap::AppConfig> {
+        None
+    }
 }
 
 /// Lenient configuration loader that falls back to defaults.

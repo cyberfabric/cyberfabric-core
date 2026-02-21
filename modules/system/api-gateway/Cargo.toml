@@ -51,15 +51,21 @@ utoipa = { workspace = true }
 http = { workspace = true }
 rust-embed = { workspace = true }
 
+prometheus = { workspace = true, optional = true }
+prometheus-axum-middleware = { workspace = true, optional = true }
+
 [dev-dependencies]
 futures-core = { workspace = true }
 uuid = { workspace = true }
+tenant-resolver-sdk = { workspace = true }
+serial_test = { workspace = true }
 
 [features]
 grpc = []
 debug-errors = []
 embed_elements = []
 otel = []
+prometheus-metrics = ["prometheus", "prometheus-axum-middleware", "modkit/bootstrap"]
 
 [build-dependencies]
 ureq = { workspace = true }

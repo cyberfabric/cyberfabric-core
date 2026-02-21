@@ -17,5 +17,8 @@ pub mod middleware;
 mod router_cache;
 mod web;
 
+#[cfg(feature = "prometheus-metrics")]
+pub mod metrics;
+
 // === RE-EXPORTS ===
 pub use config::{ApiGatewayConfig, CorsConfig};
