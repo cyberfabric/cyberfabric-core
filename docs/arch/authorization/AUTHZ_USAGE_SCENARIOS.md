@@ -6,7 +6,8 @@ Each scenario shows the full flow: HTTP request → PDP evaluation → SQL execu
 For the core authorization design, see [DESIGN.md](./DESIGN.md).
 
 All examples use a Task Management domain:
-- **Resource:** `tasks` table with `id`, `owner_tenant_id`, `title`, `status`
+- **Resource:** `tasks` table with `id`, `owner_tenant_id`, `owner_id`, `title`, `status`
+- **Owner:** `owner_id` references the subject (user) who owns/is assigned the task
 - **Resource Groups:** Projects (tasks belong to projects)
 - **Tenant Model:** Hierarchical multi-tenancy — see [TENANT_MODEL.md](./TENANT_MODEL.md) for details on topology, barriers, and closure tables
 
@@ -53,6 +54,12 @@ All examples use a Task Management domain:
       - [S21: LIST, tenant subtree and group subtree](#s21-list-tenant-subtree-and-group-subtree)
       - [S22: LIST, multiple access paths (OR)](#s22-list-multiple-access-paths-or)
       - [S23: Access denied](#s23-access-denied)
+    - [Subject Owner-Based Access](#subject-owner-based-access)
+      - [S24: LIST, owner-only access](#s24-list-owner-only-access)
+      - [S25: GET, owner-only access](#s25-get-owner-only-access)
+      - [S26: UPDATE, owner-only mutation](#s26-update-owner-only-mutation)
+      - [S27: DELETE, owner-only mutation](#s27-delete-owner-only-mutation)
+      - [S28: CREATE, owner-only](#s28-create-owner-only)
   - [TOCTOU Analysis](#toctou-analysis)
     - [When TOCTOU Matters](#when-toctou-matters)
     - [How Each Scenario Handles TOCTOU](#how-each-scenario-handles-toctou)
@@ -1789,6 +1796,343 @@ Authorization: Bearer <token>
 
 ---
 
+### Subject Owner-Based Access
+
+PEP supports `owner_id` as a standard resource property for per-subject ownership filtering. These scenarios demonstrate how `owner_id` constraints restrict access to resources owned by a specific user.
+
+**No projection tables** are needed — `owner_id` uses simple `eq` predicates compiled directly to SQL.
+
+**No prefetch** is needed — PDP always knows the subject's identity from `subject.id` in the evaluation request, so it can return `eq(owner_id, subject_id)` without PEP prefetching resource attributes. This is fundamentally different from "without tenant_closure" scenarios (S09–S11), where PEP must prefetch `owner_tenant_id` to tell PDP which specific tenant to validate.
+
+**`tenant_context` is omitted** from these requests. PDP infers the tenant context from `subject.properties.tenant_id` (see [DESIGN.md — tenant_context note](./DESIGN.md#request--response-example)). This is only safe when the subject's home tenant is the intended context; for cross-tenant access or service-to-service flows, supply `tenant_context` explicitly. PDP still returns `eq(owner_tenant_id, ...)` as defense-in-depth to ensure tenant isolation at the SQL level.
+
+---
+
+#### S24: LIST, owner-only access
+
+`GET /tasks`
+
+User requests only their own tasks. PDP restricts access to resources where `owner_id` matches the subject.
+
+**Use case:** Personal task list — "show only my tasks."
+
+**Request:**
+```http
+GET /tasks
+Authorization: Bearer <token>
+```
+
+**PEP → PDP Request:**
+```json
+{
+  "subject": {
+    "type": "gts.x.core.security.subject_user.v1~",
+    "id": "user-123",
+    "properties": { "tenant_id": "T1" }
+  },
+  "action": { "name": "list" },
+  "resource": { "type": "gts.x.core.tasks.task.v1~" },
+  "context": {
+    "require_constraints": true,
+    "capabilities": [],
+    "supported_properties": ["owner_tenant_id", "id", "owner_id"]
+  }
+}
+```
+
+**PDP → PEP Response:**
+
+Single constraint with two predicates (AND semantics) — tenant isolation (defense-in-depth) plus owner restriction:
+
+```json
+{
+  "decision": true,
+  "context": {
+    "constraints": [
+      {
+        "predicates": [
+          {
+            "type": "eq",
+            "resource_property": "owner_tenant_id",
+            "value": "T1"
+          },
+          {
+            "type": "eq",
+            "resource_property": "owner_id",
+            "value": "user-123"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**SQL:**
+```sql
+SELECT * FROM tasks
+WHERE owner_tenant_id = 'T1'
+  AND owner_id = 'user-123'
+```
+
+---
+
+#### S25: GET, owner-only access
+
+`GET /tasks/{id}`
+
+User requests a specific task; PDP constrains access to resources owned by the subject.
+
+**Use case:** View task details — accessible only if the user owns it.
+
+**Request:**
+```http
+GET /tasks/task-456
+Authorization: Bearer <token>
+```
+
+**PEP → PDP Request:**
+```json
+{
+  "subject": {
+    "type": "gts.x.core.security.subject_user.v1~",
+    "id": "user-123",
+    "properties": { "tenant_id": "T1" }
+  },
+  "action": { "name": "read" },
+  "resource": {
+    "type": "gts.x.core.tasks.task.v1~",
+    "id": "task-456"
+  },
+  "context": {
+    "require_constraints": true,
+    "capabilities": [],
+    "supported_properties": ["owner_tenant_id", "id", "owner_id"]
+  }
+}
+```
+
+**PDP → PEP Response:**
+```json
+{
+  "decision": true,
+  "context": {
+    "constraints": [
+      {
+        "predicates": [
+          {
+            "type": "eq",
+            "resource_property": "owner_tenant_id",
+            "value": "T1"
+          },
+          {
+            "type": "eq",
+            "resource_property": "owner_id",
+            "value": "user-123"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**SQL:**
+```sql
+SELECT * FROM tasks
+WHERE id = 'task-456'
+  AND owner_tenant_id = 'T1'
+  AND owner_id = 'user-123'
+```
+
+**Result interpretation:**
+- 1 row → return task
+- 0 rows → **404 Not Found** (task doesn't exist, wrong tenant, or user doesn't own it)
+
+---
+
+#### S26: UPDATE, owner-only mutation
+
+`PUT /tasks/{id}`
+
+User updates a task; PDP constrains the mutation to resources owned by the subject. The `owner_id` constraint in the WHERE clause provides TOCTOU protection — if ownership changed between check and execution, the update atomically fails.
+
+**Use case:** User can only edit their own tasks.
+
+**Request:**
+```http
+PUT /tasks/task-456
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"status": "done"}
+```
+
+**PEP → PDP Request:**
+```json
+{
+  "subject": {
+    "type": "gts.x.core.security.subject_user.v1~",
+    "id": "user-123",
+    "properties": { "tenant_id": "T1" }
+  },
+  "action": { "name": "update" },
+  "resource": {
+    "type": "gts.x.core.tasks.task.v1~",
+    "id": "task-456"
+  },
+  "context": {
+    "require_constraints": true,
+    "capabilities": [],
+    "supported_properties": ["owner_tenant_id", "id", "owner_id"]
+  }
+}
+```
+
+**PDP → PEP Response:**
+```json
+{
+  "decision": true,
+  "context": {
+    "constraints": [
+      {
+        "predicates": [
+          {
+            "type": "eq",
+            "resource_property": "owner_tenant_id",
+            "value": "T1"
+          },
+          {
+            "type": "eq",
+            "resource_property": "owner_id",
+            "value": "user-123"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**SQL:**
+```sql
+UPDATE tasks
+SET status = 'done'
+WHERE id = 'task-456'
+  AND owner_tenant_id = 'T1'
+  AND owner_id = 'user-123'
+```
+
+**Result interpretation:**
+- 1 row affected → success
+- 0 rows affected → **404 Not Found** (task doesn't exist, wrong tenant, or user doesn't own it)
+
+---
+
+#### S27: DELETE, owner-only mutation
+
+`DELETE /tasks/{id}`
+
+DELETE follows the same pattern as UPDATE (S26). PDP returns `eq(owner_id)` + `eq(owner_tenant_id)` constraints, PEP applies them in the DELETE's WHERE clause.
+
+**SQL:**
+```sql
+DELETE FROM tasks
+WHERE id = 'task-456'
+  AND owner_tenant_id = 'T1'
+  AND owner_id = 'user-123'
+```
+
+**Result interpretation:**
+- 1 row affected → success
+- 0 rows affected → **404 Not Found** (task doesn't exist, wrong tenant, or user doesn't own it)
+
+TOCTOU protection is identical to S26: if `owner_id` or `owner_tenant_id` changed between check and DELETE, the WHERE clause won't match → 0 rows → **404**.
+
+---
+
+#### S28: CREATE, owner-only
+
+`POST /tasks`
+
+User creates a new task. PEP sets `owner_id` from `SecurityContext.subject_id` — the subject owns the resource they create. PDP validates both `owner_tenant_id` and `owner_id` via constraints, preventing the caller from creating resources assigned to a different user.
+
+**Use case:** User creates a task assigned to themselves.
+
+**Request:**
+```http
+POST /tasks
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"title": "New Task"}
+```
+
+**PEP resolves owner from SecurityContext:**
+
+PEP reads `subject_id` (user-123) and `subject_tenant_id` (T1) from `SecurityContext`. These become `owner_id` and `owner_tenant_id` for the new resource — same pattern as S06 for tenant context.
+
+**PEP → PDP Request:**
+```json
+{
+  "subject": {
+    "type": "gts.x.core.security.subject_user.v1~",
+    "id": "user-123",
+    "properties": { "tenant_id": "T1" }
+  },
+  "action": { "name": "create" },
+  "resource": {
+    "type": "gts.x.core.tasks.task.v1~",
+    "properties": {
+      "owner_tenant_id": "T1",
+      "owner_id": "user-123"
+    }
+  },
+  "context": {
+    "require_constraints": true,
+    "capabilities": [],
+    "supported_properties": ["owner_tenant_id", "id", "owner_id"]
+  }
+}
+```
+
+**PDP → PEP Response:**
+```json
+{
+  "decision": true,
+  "context": {
+    "constraints": [
+      {
+        "predicates": [
+          {
+            "type": "eq",
+            "resource_property": "owner_tenant_id",
+            "value": "T1"
+          },
+          {
+            "type": "eq",
+            "resource_property": "owner_id",
+            "value": "user-123"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**PEP compiles constraints**, then validates the INSERT against them:
+
+**SQL:**
+```sql
+INSERT INTO tasks (id, owner_tenant_id, owner_id, title, status)
+VALUES ('task-new', 'T1', 'user-123', 'New Task', 'pending')
+```
+
+**Note:** PDP returns constraints for CREATE using the same flow as other operations. PEP validates that the INSERT's `owner_tenant_id` and `owner_id` match the constraints. This prevents the caller from creating resources in unauthorized tenants or assigned to other users.
+
+---
+
 ## TOCTOU Analysis
 
 [Time-of-check to time-of-use (TOCTOU)](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) is a class of race condition where a security check is performed at one point, but the protected action occurs later when conditions may have changed.
@@ -1824,6 +2168,16 @@ TOCTOU is a security concern only for **mutations** (UPDATE, DELETE). For **read
 | S16, S17 | UPDATE | ✅ | `in_group` / `in_group_subtree` | ✅ Atomic SQL check |
 | S18 | GET | ❌ | `eq` (tenant) | N/A (read-only) |
 | S19 | LIST | membership only | `in_group` (expanded) | ✅ Atomic SQL check |
+
+**Subject owner-based scenarios:**
+
+| Scenario | Operation | Constraint | TOCTOU Protection |
+|----------|-----------|------------|-------------------|
+| S24 | LIST | `eq` (owner) | N/A (read-only) |
+| S25 | GET | `eq` (owner) | N/A (read-only) |
+| S26 | UPDATE | `eq` (owner) | ✅ Atomic SQL check |
+| S27 | DELETE | `eq` (owner) | ✅ Atomic SQL check |
+| S28 | CREATE | `eq` (owner) | N/A (no existing resource) |
 
 ### Key Insight: Prefetch + Constraint for Mutations
 

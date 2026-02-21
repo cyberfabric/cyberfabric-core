@@ -45,17 +45,38 @@ In Cyber Fabric's architecture:
 ### Core Terms
 
 - **Access Token** - Credential presented by the client to authenticate requests. Format is not restricted — can be opaque token (validated via introspection) or self-contained JWT. The key requirement: it must enable authentication and subject identification.
-- **Subject / Principal** - Actor initiating the request (user or API client), identified via access token
-- **Tenant** - Domain of ownership/responsibility and policy (billing, security, data isolation). See [TENANT_MODEL.md](./TENANT_MODEL.md)
-- **Subject Owner Tenant** - Tenant the subject belongs to (owning tenant of the subject)
-- **Context Tenant** - Tenant scope root for the operation (may differ from subject owner tenant in cross-tenant scenarios)
-- **Resource Owner Tenant** - Actual tenant owning the resource (`owner_tenant_id`)
-- **Resource** - Object with owner tenant identifier
-- **Resource Group** - Optional container for resources, used for access control. See [RESOURCE_GROUP_MODEL.md](./RESOURCE_GROUP_MODEL.md)
-- **Permission** - `{ resource_type, action }` - allowed operation identifier
+- **Subject** - Authenticated caller identity (user or API client) initiating the request, identified via access token (`sub` claim in OIDC/JWT terminology). *Note:* Some systems (e.g., AWS IAM) use the term **principal** for the same concept.
+- **Tenant** - Domain of ownership/responsibility and policy (billing, security, data isolation). See [TENANT_MODEL.md](./TENANT_MODEL.md).
+- **Subject Tenant** - Tenant the subject belongs to (home tenant).
+- **Context Tenant** - Tenant scope root for the operation (may differ from subject tenant in cross-tenant scenarios)
+- **Resource Tenant** - Tenant that owns the resource (data partition / isolation boundary).
+- **Resource Owner Subject** - Optional subject bound to a resource instance for per-subject scoping (e.g., "my tasks"). Relationship semantics are domain-specific (creator, assignee, etc.) and do not imply administrative control.
+- **Resource** - Object being accessed. Every resource belongs to a tenant and may optionally have a subject owner. Identified by type (GTS ID) and instance ID.
+- **Resource Group** - Optional container for resources, used for access control. See [RESOURCE_GROUP_MODEL.md](./RESOURCE_GROUP_MODEL.md).
+- **Permission** - `{ resource_type, action }` - allowed operation identifier.
 - **Access Constraints** - Structured predicates returned by the PDP for query-time enforcement. NOT policies (stored vendor-side) or "grants" (OAuth flows, Zanzibar tuples), but compiled, time-bound enforcement artifacts computed at evaluation time.
 - **Security Context** - Result of successful authentication containing subject identity, tenant information, and optionally the original bearer token. Flows from authentication to authorization. Required fields: `subject_id`, `subject_tenant_id`, `token_scopes`. Optional fields: `subject_type`, `bearer_token`.
 - **Token Scopes** - Capability restrictions extracted from the access token. Act as a "ceiling" on what an application can do, regardless of user's actual permissions. See [Token Scopes](#token-scopes).
+
+#### Ownership Model
+
+In a multi-tenant system, resource access is defined along **two orthogonal dimensions**:
+
+**Tenancy (mandatory, isolation boundary)**  
+Every resource belongs to exactly one tenant (`owner_tenant_id`). This is the primary data boundary.
+PEP MUST always enforce a tenant predicate in queries to prevent cross-tenant data leakage, regardless of policy decisions.
+
+**Subject scoping (optional, per-subject filtering)**  
+A resource may optionally be associated with a specific subject within the tenant via `owner_id`.
+This enables "my resources" views (e.g., "show only my tasks"). Tenant-level shared objects may have empty `owner_id`. It aligns with AuthZEN's `resource.properties.ownerID` resource property convention (see [AuthZEN interop spec](https://authzen-interop.net/docs/scenarios/todo-1.1/)).
+
+**Important semantics**
+- `owner_tenant_id` is the isolation / partition key; `owner_id` is a nullable scoping attribute.
+- `owner_id` MUST refer to a subject that belongs to the same tenant as `owner_tenant_id`.
+- "Owner" here does **not** imply administrative control; it is used for scoping in policies/constraints.
+
+**Policy usage**
+PDP policies may rely on tenancy only (tenant-wide access) or combine it with subject scoping (owner-only access). If a domain requires multiple subject relationships (e.g., creator vs assignee), model them as separate resource properties (e.g., `creator_id`, `assignee_id`) and express policies/constraints on those properties instead of overloading `owner_id`.
 
 ### Request Flow
 
@@ -450,7 +471,7 @@ use secrecy::Secret;
 SecurityContext {
     subject_id: String,                    // required - from `sub` claim or IdP response
     subject_type: Option<GtsTypeId>,       // optional - vendor-specific subject type
-    subject_tenant_id: TenantId,           // required - Subject Owner Tenant
+    subject_tenant_id: TenantId,           // required - Subject Tenant
     token_scopes: Vec<String>,             // required - capability restrictions (["*"] for first-party)
     bearer_token: Option<Secret<String>>,  // optional - original token for forwarding to PDP
 }
@@ -462,7 +483,7 @@ SecurityContext {
 |-------|----------|-------------|---------|
 | `subject_id` | Yes | Unique identifier for the subject | All authorization decisions |
 | `subject_type` | No | GTS type identifier (e.g., `gts.x.core.security.subject_user.v1~`) | PDP for role/permission mapping |
-| `subject_tenant_id` | Yes | Subject Owner Tenant — tenant the subject belongs to. Used as default `owner_tenant_id` for CREATE when the API has no explicit tenant field (see S06 in [AUTHZ_USAGE_SCENARIOS.md](./AUTHZ_USAGE_SCENARIOS.md)) | PDP for tenant context, PEP for resource ownership |
+| `subject_tenant_id` | Yes | Subject Tenant — tenant the subject belongs to. Used as default `owner_tenant_id` for CREATE when the API has no explicit tenant field (see S06 in [AUTHZ_USAGE_SCENARIOS.md](./AUTHZ_USAGE_SCENARIOS.md)) | PDP for tenant context, PEP for resource ownership |
 | `token_scopes` | Yes | Capability restrictions from token (see [Token Scopes](#token-scopes)) | PDP for scope narrowing |
 | `bearer_token` | No | Original bearer token (wrapped in `Secret` from [secrecy](https://crates.io/crates/secrecy) crate) | PDP validation, external API calls |
 
@@ -646,13 +667,25 @@ The PEP MUST:
 Constraints are designed for **data-scoping policies** — policies that can be expressed as SQL WHERE predicates. This includes:
 
 - **Tenant isolation** — `owner_tenant_id = :tenant` or subtree membership
+- **Subject scoping** — `owner_id = :subject_id` (resource belongs to a specific subject)
 - **Resource group membership** — resource belongs to specific groups
-- **Ownership** — `created_by = :subject_id`
 - **Attribute-based filtering** — equality/IN checks on resource properties
 
 Some policies cannot be expressed as SQL constraints (e.g., time-based access, IP restrictions, rate limiting, external data dependencies). For these, PDP returns `decision: false` or enforcement happens at a different layer (API Gateway, middleware).
 
 **Design rationale:** Constraints solve the specific problem of efficient, paginated queries with authorization. Other policy types are orthogonal and handled at appropriate layers in the stack.
+
+#### Scope Determination
+
+No protocol-level differentiator is needed to tell PDP whether to apply subject scoping (`owner_id`) vs tenant-only scoping. PDP determines this from its own policy using information already present in the request:
+- `subject` — identity and attributes for role/permission lookup
+- `action.name` — semantic operation (e.g., `list`, `read`, `update`)
+- `resource.type` — resource-specific policy rules
+- `context.supported_properties` — declares that PEP **can** enforce `owner_id`, not that it **wants** to; this is a capability signal, not an intent signal
+
+Adding a scope hint (e.g., `"scope_mode": "owner"`) would leak authorization logic into PEP, violating PDP/PEP separation. The PEP declares what it can enforce; the PDP decides what to enforce.
+
+For "my resources" endpoints (e.g., `GET /tasks/my`), PEP can either use a semantic `action.name` that PDP policies recognize (e.g., `list_own`), or apply `owner_id` as an application-level filter on top of authorization constraints — this is a UI filter, not an authorization decision.
 
 ---
 
@@ -760,7 +793,7 @@ Content-Type: application/json
     "token_scopes": ["read:events", "write:tasks"],  // SecurityContext.token_scopes
     "require_constraints": true,   // handler config: LIST requires constraints
     "capabilities": ["tenant_hierarchy"],  // module config: has tenant_closure table
-    "supported_properties": ["owner_tenant_id", "topic_id", "id"],  // handler config: properties PEP can map to SQL
+    "supported_properties": ["owner_tenant_id", "topic_id", "id", "owner_id"],  // handler config: properties PEP can map to SQL
     "bearer_token": "eyJhbGciOiJSUzI1NiIs..."  // SecurityContext.bearer_token: Secret<String> (optional, see notes below)
   }
 }
@@ -1151,19 +1184,37 @@ The PEP declares its supported properties in every authorization request via `co
 
 The `resource_property` in predicates corresponds to `resource.properties` in the request. Each module (PEP) defines a mapping from property names to physical SQL columns. PDP uses property names — **it doesn't know the database schema**.
 
-**Example mapping for Event Manager:**
+#### Standard Properties
+
+The authorization model defines three well-known resource properties with reserved names. These align with common authorization patterns: `owner_tenant_id` for multi-tenancy isolation, `id` for row-level access, and `owner_id` for per-subject ownership.
+
+PEP maps these to entity columns via the `#[secure(...)]` macro:
+
+| Property | Purpose | Macro Attribute | Required |
+|----------|---------|-----------------|----------|
+| `owner_tenant_id` | Tenant that owns the resource (multi-tenancy isolation) | `tenant_col = "column"` | Yes (or `no_tenant`) |
+| `id` | Resource primary key (row-level access) | `resource_col = "column"` | Yes (or `no_resource`) |
+| `owner_id` | Subject who owns the resource (e.g. per-user filtering) | `owner_col = "column"` | Yes (or `no_owner`) |
+
+Modules may also declare custom properties via `pep_prop(property_name = "column")`.
+
+#### Example: Event Manager
+
+**Property mapping:**
 
 | Resource Property | SQL Column |
 |-------------------|------------|
 | `owner_tenant_id` | `events.tenant_id` |
-| `topic_id` | `events.topic_id` |
+| `owner_id` | `events.creator_id` |
 | `id` | `events.id` |
+| `topic_id` | `events.topic_id` |
 
 **How PEP compiles predicates to SQL:**
 
 | Predicate | SQL |
 |-----------|-----|
 | `{ "type": "eq", "resource_property": "topic_id", "value": "v" }` | `events.topic_id = 'v'` |
+| `{ "type": "eq", "resource_property": "owner_id", "value": "user-123" }` | `events.creator_id = 'user-123'` |
 | `{ "type": "in", "resource_property": "owner_tenant_id", "values": ["t1", "t2"] }` | `events.tenant_id IN ('t1', 't2')` |
 | `{ "type": "in_tenant_subtree", "resource_property": "owner_tenant_id", ... }` | `events.tenant_id IN (SELECT descendant_id FROM tenant_closure WHERE ...)` |
 | `{ "type": "in_group", "resource_property": "id", "group_ids": ["g1", "g2"] }` | `events.id IN (SELECT resource_id FROM resource_group_membership WHERE ...)` |
@@ -1190,7 +1241,7 @@ The `require_constraints` field (separate from capabilities array) controls PEP 
 
 **Usage:**
 - For LIST operations: typically `true` (constraints needed for SQL WHERE)
-- For CREATE operations: typically `false` (no query, just permission check), but can be `true` if PEP wants to enforce constraints locally
+- For CREATE operations: typically `true` (PEP validates INSERT against constraints — tenant isolation, ownership). It can be `false` if PEP trusts the PDP decision alone and skips local constraint validation (see S12 in [AUTHZ_USAGE_SCENARIOS.md](./AUTHZ_USAGE_SCENARIOS.md)).
 - For GET/UPDATE/DELETE: depends on whether PEP wants SQL-level enforcement or trusts PDP decision
 
 #### Capabilities Array
