@@ -125,12 +125,22 @@ impl ApiGateway {
         // Always mark built-in health check routes as public
         public_routes.insert((Method::GET, "/health".to_owned()));
         public_routes.insert((Method::GET, "/healthz".to_owned()));
-        public_routes.insert((Method::GET, "/docs".to_owned()));
-        public_routes.insert((Method::GET, "/openapi.json".to_owned()));
+
+        let binding = self.get_cached_config();
+        let prefix = &binding.prefix_path;
+
+        let docs_path = middleware::common::prefixed_path(prefix, "/docs");
+        let openapi_path = middleware::common::prefixed_path(prefix, "/openapi.json");
+
+        public_routes.insert((Method::GET, docs_path));
+        public_routes.insert((Method::GET, openapi_path));
 
         for spec in &self.openapi_registry.operation_specs {
             let spec = spec.value();
-            let route_key = (spec.method.clone(), spec.path.clone());
+
+            let path = spec.path.clone();
+
+            let route_key = (spec.method.clone(), path);
 
             if spec.authenticated {
                 authenticated_routes.insert(route_key.clone());
@@ -189,6 +199,7 @@ impl ApiGateway {
 
         // 11) License validation
         let license_map = middleware::license_validation::LicenseRequirementMap::from_specs(&specs);
+
         router = router.layer(from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let map = license_map.clone();
@@ -244,7 +255,8 @@ impl ApiGateway {
         ));
 
         // 7) MIME type validation
-        let mime_map = middleware::mime_validation::build_mime_validation_map(&specs);
+        let mime_map =
+            middleware::mime_validation::build_mime_validation_map(&specs);
         router = router.layer(from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let map = mime_map.clone();
@@ -583,17 +595,33 @@ impl modkit::contracts::ApiGatewayCapability for ApiGateway {
         &self,
         _ctx: &modkit::context::ModuleCtx,
         mut router: axum::Router,
+        mut module_router: axum::Router,
     ) -> anyhow::Result<axum::Router> {
         let config = self.get_cached_config();
 
         if config.enable_docs {
-            router = self.add_openapi_routes(router)?;
+            module_router = self.add_openapi_routes(module_router)?;
         }
 
         // Apply middleware stack (including auth) to the final router
         tracing::debug!("Applying middleware stack to finalized router");
         let authn_client = self.authn_client.lock().clone();
-        router = self.apply_middleware_stack(router, authn_client)?;
+        module_router = self.apply_middleware_stack(module_router, authn_client)?;
+        let raw_prefix = config.prefix_path.trim();
+        let trimmed = raw_prefix.trim_end_matches('/');
+        let prefix = if trimmed.is_empty() {
+            None
+        } else if trimmed.starts_with('/') {
+            Some(trimmed.to_owned())
+        } else {
+            Some(format!("/{trimmed}"))
+        };
+
+        router = if let Some(prefix) = prefix {
+            router.merge(Router::new().nest(&prefix, module_router))
+        } else {
+            router.merge(module_router)
+        };
 
         // Keep the finalized router to be used by `serve()`
         *self.final_router.lock() = Some(router.clone());

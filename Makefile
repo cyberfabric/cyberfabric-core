@@ -1,6 +1,6 @@
 CI := 1
 
-OPENAPI_URL ?= http://127.0.0.1:8087/openapi.json
+OPENAPI_URL ?= http://127.0.0.1:8087/cf/openapi.json
 OPENAPI_OUT ?= docs/api/api.json
 
 # E2E Docker args

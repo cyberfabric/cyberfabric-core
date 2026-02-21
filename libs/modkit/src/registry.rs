@@ -1074,6 +1074,7 @@ mod tests {
             &self,
             _ctx: &crate::context::ModuleCtx,
             router: axum::Router,
+            _module_router: axum::Router,
         ) -> anyhow::Result<axum::Router> {
             Ok(router)
         }

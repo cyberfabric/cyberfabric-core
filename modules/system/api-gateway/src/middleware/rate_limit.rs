@@ -66,6 +66,7 @@ impl RateLimiterMap {
                 ),
                 |r| (r.rps, r.burst, r.in_flight),
             );
+
             let key = (spec.method.clone(), spec.path.clone());
             buckets.insert(
                 key.clone(),
@@ -91,6 +92,14 @@ pub async fn rate_limit_middleware(map: RateLimiterMap, mut req: Request, next: 
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| req.uri().path().to_owned(), |p| p.as_str().to_owned());
+
+    let nestedpath = req.extensions().get::<axum::extract::NestedPath>();
+
+    let path = nestedpath
+        .and_then(|np| path.strip_prefix(np.as_str()))
+        .unwrap_or(&path)
+        .to_owned();
+
     let key = (method, path);
 
     if let Some(bucker_map_entry) = map.buckets.get(&key) {

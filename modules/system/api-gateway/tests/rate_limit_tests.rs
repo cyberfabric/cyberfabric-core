@@ -153,13 +153,14 @@ async fn test_rate_limit_enforcement() {
 
     let module = RateLimitedModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     // Build the final router with middleware
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Note: Full HTTP testing would require starting a server and making real requests

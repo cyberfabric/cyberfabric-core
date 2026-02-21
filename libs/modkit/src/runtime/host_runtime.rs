@@ -414,6 +414,8 @@ impl HostRuntime {
                     source,
                 })?;
 
+        let mut module_router = Router::new();
+
         // 2) Register all REST providers (in the current discovery order)
         for e in self.registry.modules() {
             if let Some(rest) = e.caps.query::<RestApiCap>() {
@@ -423,22 +425,22 @@ impl HostRuntime {
                         source: err,
                     }
                 })?;
-                router = rest
-                    .register_rest(&ctx, router, registry)
-                    .map_err(|source| RegistryError::RestRegister {
-                        module: e.name,
-                        source,
-                    })?;
+                module_router =
+                    rest.register_rest(&ctx, module_router, registry)
+                        .map_err(|source| RegistryError::RestRegister {
+                            module: e.name,
+                            source,
+                        })?;
             }
         }
 
         // 3) Host finalize: attach /openapi.json and /docs, persist Router if needed (no server start)
-        router = host.rest_finalize(&host_ctx, router).map_err(|source| {
-            RegistryError::RestFinalize {
+        router = host
+            .rest_finalize(&host_ctx, router, module_router)
+            .map_err(|source| RegistryError::RestFinalize {
                 module: host_entry.name,
                 source,
-            }
-        })?;
+            })?;
 
         Ok(router)
     }

@@ -141,13 +141,14 @@ async fn test_cors_layer_builds_with_config() {
 
     let module = CorsTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     // Build the final router with CORS middleware
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Verify router builds successfully with CORS enabled
@@ -162,12 +163,13 @@ async fn test_cors_permissive_mode() {
 
     let module = CorsTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Verify permissive CORS builds successfully
@@ -197,12 +199,13 @@ async fn test_cors_disabled() {
 
     let module = CorsTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Verify router builds without CORS layer

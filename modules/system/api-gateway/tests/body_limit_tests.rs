@@ -112,12 +112,13 @@ async fn test_body_limit_configured() {
 
     let module = BodyLimitTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Verify router builds with custom body limit
@@ -137,12 +138,13 @@ async fn test_body_limit_with_cors() {
 
     let module = BodyLimitTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Both CORS and body limit should be active
@@ -177,12 +179,13 @@ async fn test_default_body_limit() {
 
     let module = BodyLimitTestModule;
     let router = Router::new();
-    let router = module
-        .register_rest(&ctx, router, &api_gateway)
+    let module_router = Router::new();
+    let module_router = module
+        .register_rest(&ctx, module_router, &api_gateway)
         .expect("Failed to register routes");
 
     let _final_router = api_gateway
-        .rest_finalize(&ctx, router)
+        .rest_finalize(&ctx, router, module_router)
         .expect("Failed to finalize router");
 
     // Verify default body limit is applied (16MB)

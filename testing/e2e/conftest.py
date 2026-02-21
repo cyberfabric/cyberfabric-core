@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent / "helpers"))
 @pytest.fixture
 def base_url():
     """Provide base URL for the API from E2E_BASE_URL env var."""
-    return os.getenv("E2E_BASE_URL", "http://localhost:8086")
+    return os.getenv("E2E_BASE_URL", "http://localhost:8086/cf")
 
 
 @pytest.fixture

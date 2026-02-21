@@ -86,6 +86,7 @@ pub trait ApiGatewayCapability: Send + Sync + 'static {
         &self,
         ctx: &crate::context::ModuleCtx,
         router: Router,
+        module_router: Router,
     ) -> anyhow::Result<Router>;
 
     // Return OpenAPI registry of the module, e.g., to register endpoints

@@ -20,6 +20,7 @@ pub fn build_mime_validation_map(specs: &[OperationSpec]) -> MimeValidationMap {
     for spec in specs {
         if let Some(ref allowed) = spec.allowed_request_content_types {
             let key = (spec.method.clone(), spec.path.clone());
+
             map.insert(key, allowed.clone());
         }
     }
@@ -94,6 +95,13 @@ pub async fn mime_validation_middleware(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| req.uri().path().to_owned(), |p| p.as_str().to_owned());
+
+    let nestedpath = req.extensions().get::<axum::extract::NestedPath>();
+
+    let path = nestedpath
+        .and_then(|np| path.strip_prefix(np.as_str()))
+        .unwrap_or(&path)
+        .to_owned();
 
     // Check if this operation has MIME validation configured
     let Some(allowed_types) = validation_map.get(&(method.clone(), path.clone())) else {

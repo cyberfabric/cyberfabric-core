@@ -196,6 +196,7 @@ impl ApiGatewayCapability for TestApiGatewayModule {
         &self,
         _ctx: &modkit::context::ModuleCtx,
         router: axum::Router,
+        _module_router: axum::Router,
     ) -> anyhow::Result<axum::Router> {
         Ok(router)
     }

@@ -4,12 +4,16 @@ fn default_require_auth_by_default() -> bool {
     true
 }
 
+fn default_prefix_path() -> String {
+    "/cf".to_owned()
+}
+
 fn default_body_limit_bytes() -> usize {
     16 * 1024 * 1024
 }
 
 /// API gateway configuration - reused from `api_gateway` module
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ApiGatewayConfig {
@@ -41,6 +45,25 @@ pub struct ApiGatewayConfig {
     /// If true, routes without explicit security requirement still require authentication (AuthN-only).
     #[serde(default = "default_require_auth_by_default")]
     pub require_auth_by_default: bool,
+
+    #[serde(default = "default_prefix_path")]
+    pub prefix_path: String,
+}
+
+impl Default for ApiGatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_addr: String::new(),
+            enable_docs: false,
+            cors_enabled: false,
+            cors: None,
+            openapi: OpenApiConfig::default(),
+            defaults: Defaults::default(),
+            auth_disabled: false,
+            require_auth_by_default: default_require_auth_by_default(),
+            prefix_path: default_prefix_path(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

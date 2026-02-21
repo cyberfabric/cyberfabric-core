@@ -19,7 +19,7 @@ pub struct LicenseRequirementMap {
 
 impl LicenseRequirementMap {
     #[must_use]
-    pub fn from_specs(specs: &[OperationSpec]) -> Self {
+    pub fn from_specs(specs: &[OperationSpec])  -> Self {
         let requirements = DashMap::new();
 
         for spec in specs {
@@ -53,6 +53,14 @@ pub async fn license_validation_middleware(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| req.uri().path().to_owned(), |p| p.as_str().to_owned());
+
+    let nestedpath = req.extensions().get::<axum::extract::NestedPath>();
+
+    let path = nestedpath
+        .and_then(|np| path.strip_prefix(np.as_str()))
+        .unwrap_or(&path)
+        .to_owned();
+
 
     let Some(required) = map.get(&method, &path) else {
         return next.run(req).await;
