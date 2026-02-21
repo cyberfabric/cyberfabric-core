@@ -6,6 +6,9 @@ use crate::domain::credential::CredentialResolver;
 use crate::domain::error::DomainError;
 use crate::domain::model::{PassthroughMode, PathSuffixMode};
 use crate::domain::plugin::AuthContext;
+use crate::infra::proxy::{actions, resources};
+use authz_resolver_sdk::PolicyEnforcer;
+use authz_resolver_sdk::pep::AccessRequest;
 use futures_util::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use modkit_security::SecurityContext;
@@ -30,6 +33,8 @@ pub struct DataPlaneServiceImpl {
     auth_registry: AuthPluginRegistry,
     rate_limiter: RateLimiter,
     request_timeout: Duration,
+    /// Enforces authorization policy before proxying each request.
+    policy_enforcer: PolicyEnforcer,
 }
 
 impl DataPlaneServiceImpl {
@@ -39,6 +44,7 @@ impl DataPlaneServiceImpl {
     pub fn new(
         cp: Arc<dyn ControlPlaneService>,
         credential_resolver: Arc<dyn CredentialResolver>,
+        policy_enforcer: PolicyEnforcer,
     ) -> anyhow::Result<Self> {
         let http_client = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
@@ -57,6 +63,7 @@ impl DataPlaneServiceImpl {
             auth_registry,
             rate_limiter,
             request_timeout: REQUEST_TIMEOUT,
+            policy_enforcer,
         })
     }
 
@@ -76,6 +83,18 @@ impl DataPlaneService for DataPlaneServiceImpl {
         req: http::Request<Body>,
     ) -> Result<http::Response<Body>, DomainError> {
         let instance_uri = req.uri().to_string();
+
+        self.policy_enforcer
+            .access_scope_with(
+                &ctx,
+                &resources::PROXY,
+                actions::INVOKE,
+                None,
+                &AccessRequest::new()
+                    .require_constraints(false)
+                    .context_tenant_id(ctx.subject_tenant_id()),
+            )
+            .await?;
 
         // Normalize and parse alias and path_suffix from URI.
         let (alias, path_suffix) = {

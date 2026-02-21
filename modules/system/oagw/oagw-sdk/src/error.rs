@@ -49,6 +49,10 @@ pub enum ServiceGatewayError {
 
     #[error("{detail}")]
     RequestTimeout { detail: String, instance: String },
+
+    /// The caller is authenticated but not authorized to perform the requested action.
+    #[error("access forbidden: {detail}")]
+    Forbidden { detail: String },
 }
 
 /// Errors produced by the streaming helpers.

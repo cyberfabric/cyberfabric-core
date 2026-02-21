@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use oagw::test_support::{
-    APIKEY_AUTH_PLUGIN_ID, AppHarness, MockBody, MockGuard, MockResponse, parse_resource_gts,
+    APIKEY_AUTH_PLUGIN_ID, AppHarness, CapturingAuthZResolverClient, DenyingAuthZResolverClient,
+    MockBody, MockGuard, MockResponse, parse_resource_gts,
 };
 
 // 10.1: E2E — create upstream, create route, proxy chat completion, verify round-trip.
@@ -612,4 +615,147 @@ async fn e2e_upstream_timeout_returns_504() {
         .await;
 
     resp.assert_header("x-oagw-error-source", "gateway");
+}
+
+// 10.11: E2E — proxy request denied by AuthZ returns 403 Forbidden.
+#[tokio::test]
+async fn e2e_authz_forbidden_returns_403() {
+    let h = AppHarness::builder()
+        .with_authz_client(Arc::new(DenyingAuthZResolverClient))
+        .build()
+        .await;
+
+    // Create upstream and route so the denial is purely from AuthZ, not routing.
+    let resp = h
+        .api_v1()
+        .post_upstream()
+        .with_body(serde_json::json!({
+            "server": {
+                "endpoints": [{"host": "127.0.0.1", "port": h.mock_port(), "scheme": "http"}]
+            },
+            "protocol": "gts.x.core.oagw.protocol.v1~x.core.oagw.http.v1",
+            "alias": "e2e-forbidden",
+            "enabled": true,
+            "tags": []
+        }))
+        .expect_status(201)
+        .await;
+    let upstream_id = resp.json()["id"].as_str().unwrap().to_string();
+
+    let (_, upstream_uuid) = parse_resource_gts(&upstream_id).unwrap();
+    h.api_v1()
+        .post_route()
+        .with_body(serde_json::json!({
+            "upstream_id": upstream_uuid,
+            "match": {
+                "http": {
+                    "methods": ["GET"],
+                    "path": "/v1/models"
+                }
+            },
+            "enabled": true,
+            "tags": [],
+            "priority": 0
+        }))
+        .expect_status(201)
+        .await;
+
+    // Proxy request should be denied before reaching the upstream.
+    let resp = h
+        .api_v1()
+        .proxy_get("e2e-forbidden", "v1/models")
+        .expect_status(403)
+        .await;
+
+    resp.assert_header("x-oagw-error-source", "gateway");
+
+    let body = resp.json();
+    assert_eq!(body["status"], 403);
+    assert_eq!(body["title"], "Forbidden");
+    assert_eq!(
+        body["type"],
+        "gts.x.core.errors.err.v1~x.oagw.authz.forbidden.v1"
+    );
+}
+
+// 10.12: E2E — proxy authz evaluation request carries caller's tenant context.
+#[tokio::test]
+async fn e2e_authz_request_carries_tenant_context() {
+    let capturing = Arc::new(CapturingAuthZResolverClient::new());
+
+    let mut guard = MockGuard::new();
+    guard.mock(
+        "GET",
+        "/v1/test",
+        MockResponse {
+            status: 200,
+            headers: vec![],
+            body: MockBody::Json(serde_json::json!({"ok": true})),
+        },
+    );
+
+    let h = AppHarness::builder()
+        .with_authz_client(capturing.clone())
+        .build()
+        .await;
+
+    let resp = h
+        .api_v1()
+        .post_upstream()
+        .with_body(serde_json::json!({
+            "server": {
+                "endpoints": [{"host": "127.0.0.1", "port": h.mock_port(), "scheme": "http"}]
+            },
+            "protocol": "gts.x.core.oagw.protocol.v1~x.core.oagw.http.v1",
+            "alias": "e2e-authz-ctx",
+            "enabled": true,
+            "tags": []
+        }))
+        .expect_status(201)
+        .await;
+    let upstream_id = resp.json()["id"].as_str().unwrap().to_string();
+
+    let route_path = guard.path("/v1/test");
+    let (_, upstream_uuid) = parse_resource_gts(&upstream_id).unwrap();
+    h.api_v1()
+        .post_route()
+        .with_body(serde_json::json!({
+            "upstream_id": upstream_uuid,
+            "match": {
+                "http": {
+                    "methods": ["GET"],
+                    "path": route_path
+                }
+            },
+            "enabled": true,
+            "tags": [],
+            "priority": 0
+        }))
+        .expect_status(201)
+        .await;
+
+    h.api_v1()
+        .proxy_get("e2e-authz-ctx", &route_path[1..])
+        .expect_status(200)
+        .await;
+
+    let requests = capturing.recorded();
+    assert!(
+        !requests.is_empty(),
+        "expected at least one captured evaluation request"
+    );
+
+    let req = &requests[0];
+    let tenant_ctx = req
+        .context
+        .tenant_context
+        .as_ref()
+        .expect("expected tenant_context in evaluation request");
+    assert_eq!(
+        tenant_ctx.root_id,
+        Some(h.security_context().subject_tenant_id()),
+        "tenant_context.root_id should match subject_tenant_id"
+    );
+    assert_eq!(req.resource.resource_type, "gts.x.core.oagw.proxy.v1~");
+    assert_eq!(req.action.name, "invoke");
 }

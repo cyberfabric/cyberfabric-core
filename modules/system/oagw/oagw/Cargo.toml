@@ -30,6 +30,7 @@ tracing = "0.1"
 gts = { workspace = true }
 utoipa = { workspace = true }
 types-registry-sdk = { workspace = true }
+authz-resolver-sdk = { workspace = true }
 # CP deps
 dashmap = "6.1"
 thiserror = "2.0"

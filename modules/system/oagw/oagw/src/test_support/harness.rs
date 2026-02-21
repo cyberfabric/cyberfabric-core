@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use authz_resolver_sdk::AuthZResolverClient;
 use modkit::client_hub::ClientHub;
 use modkit_security::SecurityContext;
 use oagw_sdk::api::ServiceGatewayClientV1;
@@ -53,6 +54,7 @@ impl AppHarness {
 pub struct AppHarnessBuilder {
     credentials: Vec<(String, String)>,
     request_timeout: Option<Duration>,
+    authz_client: Option<Arc<dyn AuthZResolverClient>>,
 }
 
 impl AppHarnessBuilder {
@@ -63,6 +65,12 @@ impl AppHarnessBuilder {
 
     pub fn with_request_timeout(mut self, timeout: Duration) -> Self {
         self.request_timeout = Some(timeout);
+        self
+    }
+
+    /// Override the AuthZ client used by the data plane (useful for authz tests).
+    pub fn with_authz_client(mut self, client: Arc<dyn AuthZResolverClient>) -> Self {
+        self.authz_client = Some(client);
         self
     }
 
@@ -77,6 +85,9 @@ impl AppHarnessBuilder {
         let mut dp_builder = TestDpBuilder::new();
         if let Some(timeout) = self.request_timeout {
             dp_builder = dp_builder.with_request_timeout(timeout);
+        }
+        if let Some(client) = self.authz_client {
+            dp_builder = dp_builder.with_authz_client(client);
         }
 
         let app_state = build_test_app_state(&hub, cp_builder, dp_builder);

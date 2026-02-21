@@ -18,6 +18,7 @@ COPY rust-toolchain.toml ./
 
 # Copy all workspace members
 COPY apps/hyperspot-server ./apps/hyperspot-server
+COPY apps/gts-docs-validator ./apps/gts-docs-validator
 COPY libs ./libs
 COPY modules ./modules
 COPY examples ./examples

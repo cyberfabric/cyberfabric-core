@@ -259,6 +259,7 @@ fn domain_err_to_sdk(err: DomainError) -> ServiceGatewayError {
         DomainError::RequestTimeout { detail, instance } => {
             ServiceGatewayError::RequestTimeout { detail, instance }
         }
+        DomainError::Forbidden { detail } => ServiceGatewayError::Forbidden { detail },
     }
 }
 

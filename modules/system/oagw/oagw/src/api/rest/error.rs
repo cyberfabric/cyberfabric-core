@@ -31,6 +31,7 @@ pub(crate) const ERR_UPSTREAM_DISABLED: &str =
 pub(crate) const ERR_CONNECTION_TIMEOUT: &str =
     "gts.x.core.errors.err.v1~x.oagw.timeout.connection.v1";
 pub(crate) const ERR_REQUEST_TIMEOUT: &str = "gts.x.core.errors.err.v1~x.oagw.timeout.request.v1";
+pub(crate) const ERR_FORBIDDEN: &str = "gts.x.core.errors.err.v1~x.oagw.authz.forbidden.v1";
 
 // ---------------------------------------------------------------------------
 // DomainError → Problem helpers
@@ -55,6 +56,7 @@ fn gts_type(err: &DomainError) -> &str {
         DomainError::UpstreamDisabled { .. } => ERR_UPSTREAM_DISABLED,
         DomainError::ConnectionTimeout { .. } => ERR_CONNECTION_TIMEOUT,
         DomainError::RequestTimeout { .. } => ERR_REQUEST_TIMEOUT,
+        DomainError::Forbidden { .. } => ERR_FORBIDDEN,
     }
 }
 
@@ -79,6 +81,7 @@ fn http_status_code(err: &DomainError) -> StatusCode {
         DomainError::ConnectionTimeout { .. } | DomainError::RequestTimeout { .. } => {
             StatusCode::GATEWAY_TIMEOUT
         }
+        DomainError::Forbidden { .. } => StatusCode::FORBIDDEN,
     }
 }
 
@@ -99,6 +102,7 @@ fn error_title(err: &DomainError) -> &str {
         DomainError::UpstreamDisabled { .. } => "Upstream Disabled",
         DomainError::ConnectionTimeout { .. } => "Connection Timeout",
         DomainError::RequestTimeout { .. } => "Request Timeout",
+        DomainError::Forbidden { .. } => "Forbidden",
     }
 }
 
@@ -119,7 +123,8 @@ fn error_instance(err: &DomainError) -> &str {
         DomainError::NotFound { .. }
         | DomainError::Conflict { .. }
         | DomainError::UpstreamDisabled { .. }
-        | DomainError::Internal { .. } => "",
+        | DomainError::Internal { .. }
+        | DomainError::Forbidden { .. } => "",
     }
 }
 
@@ -297,6 +302,9 @@ mod tests {
             },
             DomainError::Internal {
                 message: "test".into(),
+            },
+            DomainError::Forbidden {
+                detail: "test".into(),
             },
         ];
         for err in errors {

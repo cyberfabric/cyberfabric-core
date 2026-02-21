@@ -58,6 +58,10 @@ pub enum DomainError {
 
     #[error("{detail}")]
     RequestTimeout { detail: String, instance: String },
+
+    /// The request was denied by the authorization policy.
+    #[error("access forbidden: {detail}")]
+    Forbidden { detail: String },
 }
 
 impl DomainError {
@@ -94,6 +98,14 @@ impl DomainError {
             message: message.into(),
         }
     }
+
+    /// Construct a [`DomainError::Forbidden`] with the given detail message.
+    #[must_use]
+    pub fn forbidden(detail: impl Into<String>) -> Self {
+        Self::Forbidden {
+            detail: detail.into(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +118,33 @@ impl From<RepositoryError> for DomainError {
             RepositoryError::NotFound { entity, id } => Self::NotFound { entity, id },
             RepositoryError::Conflict(detail) => Self::Conflict { detail },
             RepositoryError::Internal(message) => Self::Internal { message },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// From<EnforcerError>
+// ---------------------------------------------------------------------------
+
+/// Convert an authorization enforcer error into a domain error.
+impl From<authz_resolver_sdk::EnforcerError> for DomainError {
+    fn from(e: authz_resolver_sdk::EnforcerError) -> Self {
+        use authz_resolver_sdk::EnforcerError;
+
+        tracing::error!(error = %e, "OAGW authorization check failed");
+        match e {
+            EnforcerError::Denied { deny_reason } => {
+                let detail = deny_reason
+                    .map(|r| format!("{}: {}", r.error_code, r.details.unwrap_or_default()))
+                    .unwrap_or_else(|| "access denied by policy".to_string());
+                Self::Forbidden { detail }
+            }
+            EnforcerError::CompileFailed(_) => Self::Internal {
+                message: "authorization constraint compilation failed".to_string(),
+            },
+            EnforcerError::EvaluationFailed(_) => Self::Internal {
+                message: "authorization evaluation failed".to_string(),
+            },
         }
     }
 }
