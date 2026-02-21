@@ -795,20 +795,30 @@ Plugins can be built-in or custom Starlark scripts.
 
 #### Plugin Identification
 
-All plugins are identified using **anonymous GTS identifiers** in the API, but stored as UUIDs in the database.
+All plugins are identified using **GTS identifiers** in the API layer. The database stores **UUID only** — no GTS prefix. Both builtin and custom plugins have rows in `oagw_plugin` and are referenced uniformly by UUID in plugin join tables.
 
 **Builtin Plugins** (system-provided):
 
 - API: Named GTS identifier `gts.x.core.oagw.{type}_plugin.v1~x.core.oagw.{name}.v1`
-- Hardcoded in Rust, no database storage
-- Example: `gts.x.core.oagw.transform_plugin.v1~x.core.oagw.logging.v1`
+
+- Implementation hardcoded in Rust; plugin metadata **seeded into `oagw_plugin`** on startup/migration with deterministic UUIDs (UUID v5 derived from GTS name)
+- Stored with `builtin = true` in `oagw_plugin`; `source_code` is `NULL`
+- Seeded under a **system tenant** (`SYSTEM_TENANT_ID`, reserved non-nil UUID used only for builtin plugin rows)
+- ORM scoping: when resolving plugins through the secure ORM (`AccessScope` / `SecureConn`), include `SYSTEM_TENANT_ID` in the tenant scope (in addition to the request tenant hierarchy) so builtin plugin rows are visible
+- Can be attached to upstreams/routes via plugin join tables with per-binding `config`, just like custom plugins
+- Application maps GTS name ↔ deterministic UUID for the API surface
+- Example API: `gts.x.core.oagw.transform_plugin.v1~x.core.oagw.logging.v1`
+- Example DB: `a1b2c3d4-0000-5000-8000-000000000001` (deterministic UUID for `logging.v1`)
 
 **Custom Plugins** (tenant-defined Starlark):
 
 - API: Anonymous GTS identifier `gts.x.core.oagw.{type}_plugin.v1~{uuid}`
-- Database: UUID only (without GTS prefix)
-- Example API: `gts.x.core.oagw.guard_plugin.v1~550e8400-e29b-41d4-a716-446655440000`
+- Database: UUID only (without GTS prefix), stored in `oagw_plugin.id` with `builtin = false`
+- `source_code` contains the Starlark script
+- Example API: `gts.x.core.oagw.plugin.guard.v1~550e8400-e29b-41d4-a716-446655440000`
 - Example DB: `550e8400-e29b-41d4-a716-446655440000`
+
+**Uniform storage**: Both builtin and custom plugins are referenced by `plugin_id` (`CHAR(36)`) with FK to `oagw_plugin.id` in the join tables (`oagw_upstream_plugin`, `oagw_route_plugin`). This enables per-binding configuration for all plugin types through a single code path.
 
 #### Plugin Lifecycle Management
 
@@ -819,13 +829,18 @@ All plugins are identified using **anonymous GTS identifiers** in the API, but s
 - **Deletion**: Only unlinked plugins can be deleted
 - **Garbage Collection**: Unlinked plugins are automatically deleted after TTL (default: 30 days)
 
+A periodic GC job marks plugins eligible by setting `gc_eligible_at` when they become unlinked, and deletes plugin rows once `gc_eligible_at` is in the past.
+
 **Builtin Plugins**:
 
-- **Versioning**: Version in GTS identifier (v1, v2, etc.)
-- **Updates**: Deployed with OAGW releases
-- **Backward Compatibility**: Old versions remain available
+- **Seeding**: Rows inserted into `oagw_plugin` on startup/migration; idempotent (upsert by deterministic UUID)
+- **Immutable**: `builtin = true` rows cannot be updated or deleted via the Management API
+- **Versioning**: Version in GTS identifier (v1, v2, etc.); new versions get new deterministic UUIDs
+- **Updates**: Metadata (config_schema, phases) updated by migration when OAGW releases new versions
+- **Backward Compatibility**: Old versions remain available; deprecated builtins are kept for compatibility but should no longer be referenced by newly created upstreams/routes
+- **Garbage Collection**: Builtin plugins are excluded from GC (`builtin = true` filter)
 
-**Plugin Reference in Configuration**:
+**Plugin Reference in API** (GTS identifiers):
 
 ```json
 {
@@ -840,12 +855,23 @@ All plugins are identified using **anonymous GTS identifiers** in the API, but s
 }
 ```
 
+**Plugin Reference in Database** (UUID only, both builtin and custom):
+
+```sql
+-- oagw_upstream_plugin join table
+-- Both builtin and custom plugins are stored here, referenced by UUID.
+INSERT INTO oagw_upstream_plugin (upstream_id, plugin_id, position, config) VALUES
+  ('upstream-uuid', 'a1b2c3d4-0000-5000-8000-000000000001', 0, '{"log_level":"debug"}'),  -- builtin: logging.v1
+  ('upstream-uuid', '550e8400-e29b-41d4-a716-446655440000', 1, '{"max_body_size":1048576}'); -- custom: Starlark guard
+```
+
 **Resolution Algorithm**:
 
-1. Parse GTS identifier to extract instance part (after `~`)
-2. If instance is UUID → extract UUID, lookup in `oagw_plugin` table
-3. If instance is named (e.g., `x.core.oagw.logging.v1`) → lookup in builtin registry
+1. Parse GTS identifier from API request to extract instance part (after `~`)
+2. If instance is a named identifier (e.g., `x.core.oagw.logging.v1`) → derive deterministic UUID (UUID v5 with GTS-specific namespace), lookup in `oagw_plugin` table
+3. If instance is already a UUID → lookup in `oagw_plugin` table directly
 4. Plugin type in GTS schema must match `plugin_type` in database
+5. All plugins (builtin and custom) are stored in `oagw_plugin` and referenced uniformly by UUID in join tables
 
 #### Plugin Layering
 
@@ -1380,20 +1406,10 @@ For detailed resource identification and binding model, see [ADR: Resource Ident
         "items": {
           "type": "array",
           "items": {
-            "oneOf": [
-              {
-                "type": "string",
-                "format": "gts-identifier",
-                "description": "Builtin plugin GTS identifier"
-              },
-              {
-                "type": "string",
-                "format": "uuid",
-                "description": "Custom plugin UUID"
-              }
-            ]
+            "type": "string",
+            "format": "gts-identifier"
           },
-          "description": "List of plugins applied to this upstream service. Builtin plugins referenced by GTS ID, custom plugins by UUID."
+          "description": "List of plugin GTS identifiers applied to this upstream service."
         }
       }
     },
@@ -1648,7 +1664,7 @@ Examples:
             "format": "gts-identifier"
           },
           "default": [ ],
-          "description": "List of plugins applied to this route."
+          "description": "List of plugin GTS identifiers applied to this route."
         }
       }
     },
@@ -1838,7 +1854,7 @@ Examples:
 
 Auth plugins handle outbound authentication to upstream services. Only one auth plugin per upstream.
 
-**Note**: This schema describes builtin auth plugin metadata. Custom auth plugins are stored in `oagw_plugin` table with UUID identification.
+**Note**: Both builtin and custom auth plugins have rows in `oagw_plugin`. Builtin plugins are seeded with deterministic UUIDs and `builtin = true`; custom plugins are tenant-created with `builtin = false`.
 
 **Builtin Plugin Metadata**:
 
@@ -2440,8 +2456,24 @@ Content-Type: application/problem+json
 Where:
 
 - `{alias}` - Upstream alias (e.g., `api.openai.com` or `my-internal-service`)
-- `{path_suffix}` - Path to match against route's `match.http.path` pattern
-- `{query_parameters}` - Query params validated against route's `match.http.query_allowlist`
+- `{path_suffix}` - Path to match against route match keys (HTTP path rules or gRPC service/method)
+- `{query_parameters}` - Query params validated against the route's HTTP query allowlist (HTTP routes only)
+
+#### Request Classification (HTTP vs gRPC) and Route Matching
+
+At request time, the proxy handler resolves `{alias}` to an upstream first, then uses the upstream's `protocol` to determine which route match keys to apply.
+
+- If `upstream.protocol` is HTTP, match routes using HTTP match keys (method allowlist + longest path prefix).
+- If `upstream.protocol` is gRPC, match routes using gRPC match keys (`(service, method)` parsed from the gRPC request path `/{service}/{method}`).
+
+`Content-Type` may be validated as an additional safety check, but is not required for selecting the match strategy.
+
+Route matching then uses the corresponding match representation:
+
+- **HTTP**: method allowlist + longest path prefix match
+- **gRPC**: `(service, method)` match (as carried by the gRPC request)
+
+In the persistence model this corresponds to `oagw_route.match_type` selecting the match key table (`oagw_route_http_match` vs `oagw_route_grpc_match`) as defined in [ADR: OAGW Storage Schema — Cross-Database Design](./docs/adr-storage-schema.md).
 
 #### API Call Examples
 
@@ -2508,357 +2540,7 @@ target endpoint.
 
 ## Database Persistence
 
-### Data Model
-
-OAGW uses three main tables for configuration storage, all tenant-scoped via `tenant_id`.
-
-#### Resource Identification Pattern
-
-All resources use **anonymous GTS identifiers** in the REST API but store UUIDs in the database:
-
-| Resource | API Identifier                            | Database | Example API                                                            | Example DB                             |
-|----------|-------------------------------------------|----------|------------------------------------------------------------------------|----------------------------------------|
-| Upstream | `gts.x.core.oagw.upstream.v1~{uuid}`      | UUID     | `gts.x.core.oagw.upstream.v1~7c9e6679-7425-40de-944b-e07fc1f90ae7`     | `7c9e6679-7425-40de-944b-e07fc1f90ae7` |
-| Route    | `gts.x.core.oagw.route.v1~{uuid}`         | UUID     | `gts.x.core.oagw.route.v1~550e8400-e29b-41d4-a716-446655440000`        | `550e8400-e29b-41d4-a716-446655440000` |
-| Plugin   | `gts.x.core.oagw.{type}_plugin.v1~{uuid}` | UUID     | `gts.x.core.oagw.guard_plugin.v1~6ba7b810-9dad-11d1-80b4-00c04fd430c8` | `6ba7b810-9dad-11d1-80b4-00c04fd430c8` |
-
-**API Layer**: Parses anonymous GTS identifier, extracts UUID after `~`, uses UUID for database operations.
-
-**Exception**: Builtin plugins use named GTS identifiers (e.g., `gts.x.core.oagw.transform_plugin.v1~x.core.oagw.logging.v1`) and are not stored in database.
-
-#### Entity Relationship
-
-```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│    Upstream     │       │      Route      │       │     Plugin      │
-├─────────────────┤       ├─────────────────┤       ├─────────────────┤
-│ id (PK)         │◄──────│ upstream_id(FK) │       │ id (PK)         │
-│ tenant_id       │       │ id (PK)         │       │ tenant_id       │
-│ alias           │       │ tenant_id       │       │ plugin_type     │
-│ server (JSONB)  │       │ match (JSONB)   │       │ config_schema   │
-│ protocol        │       │ plugins (JSONB) │       │ source_code     │
-│ auth (JSONB)    │       │ rate_limit      │       │ ...             │
-│ headers (JSONB) │       │ ...             │       └─────────────────┘
-│ plugins (JSONB) │       └─────────────────┘
-│ rate_limit      │
-│ ...             │
-└─────────────────┘
-```
-
-#### Upstream Table
-
-```sql
-
-CREATE TABLE oagw_upstream
-(
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id  UUID         NOT NULL REFERENCES tenant (id),
-
-    -- Identity
-    alias      VARCHAR(255) NOT NULL,
-    tags       TEXT[] DEFAULT '{}', -- Tenant-local tags; effective tags may include inherited tags at read time
-
-    -- Server configuration (JSONB for flexibility)
-    server     JSONB        NOT NULL,
-    -- Example: {"endpoints": [{"scheme": "https", "host": "api.openai.com", "port": 443}]}
-
-    protocol   VARCHAR(100) NOT NULL,
-    -- Example: "gts.x.core.oagw.protocol.v1~x.core.oagw.http.v1"
-
-    -- Auth configuration (JSONB)
-    auth       JSONB,
-    -- Example: {"type": "...", "sharing": "inherit", "config": {"header": "Authorization", ...}}
-
-    -- Header transformation rules
-    headers    JSONB,
-
-    -- Plugin references
-    plugins    JSONB,
-    -- Example: {"sharing": "inherit", "items": ["gts.x.core.oagw.transform_plugin.v1~x.core.oagw.logging.v1"]}
-
-    -- Rate limiting
-    rate_limit JSONB,
-    -- Example: {"sharing": "enforce", "rate": 10000, "window": "minute", "scope": "tenant"}
-
-    -- Metadata
-    enabled    BOOLEAN          DEFAULT TRUE,
-    created_at TIMESTAMPTZ      DEFAULT NOW(),
-    updated_at TIMESTAMPTZ      DEFAULT NOW(),
-    created_by UUID REFERENCES principal (id),
-    updated_by UUID REFERENCES principal (id),
-
-    -- Constraints
-    CONSTRAINT uq_upstream_tenant_alias UNIQUE (tenant_id, alias)
-);
-
--- Indexes
-CREATE INDEX idx_upstream_tenant ON oagw_upstream (tenant_id);
-CREATE INDEX idx_upstream_alias ON oagw_upstream (alias);
-CREATE INDEX idx_upstream_tags ON oagw_upstream USING GIN(tags);
-CREATE INDEX idx_upstream_enabled ON oagw_upstream (tenant_id, enabled) WHERE enabled = TRUE;
-
--- Note: Upstreams are addressed in API as anonymous GTS identifiers:
--- Example: gts.x.core.oagw.upstream.v1~7c9e6679-7425-40de-944b-e07fc1f90ae7
--- The UUID after ~ maps to this table's id column
-```
-
-#### Route Table
-
-```sql
-CREATE TABLE oagw_route
-(
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id   UUID  NOT NULL REFERENCES tenant (id),
-    upstream_id UUID  NOT NULL REFERENCES oagw_upstream (id) ON DELETE CASCADE,
-
-    -- Tags for categorization
-    tags        TEXT[] DEFAULT '{}',
-
-    -- Match rules (JSONB, one of http/grpc)
-    match       JSONB NOT NULL,
-    -- HTTP example: {"http": {"methods": ["GET", "POST"], "path": "/v1/chat/completions", ...}}
-    -- gRPC example: {"grpc": {"service": "foo.v1.UserService", "method": "GetUser"}}
-
-    -- Plugin references
-    plugins     JSONB,
-
-    -- Rate limiting (route-level)
-    rate_limit  JSONB,
-
-    -- Metadata
-    enabled     BOOLEAN          DEFAULT TRUE,
-    priority    INTEGER          DEFAULT 0, -- Higher priority routes match first
-    created_at  TIMESTAMPTZ      DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ      DEFAULT NOW(),
-    created_by  UUID REFERENCES principal (id),
-    updated_by  UUID REFERENCES principal (id)
-);
-
--- Indexes
-CREATE INDEX idx_route_tenant ON oagw_route (tenant_id);
-CREATE INDEX idx_route_upstream ON oagw_route (upstream_id);
-CREATE INDEX idx_route_enabled ON oagw_route (tenant_id, enabled) WHERE enabled = TRUE;
-CREATE INDEX idx_route_priority ON oagw_route (upstream_id, priority DESC);
-
--- Partial index for HTTP route matching
-CREATE INDEX idx_route_http_path ON oagw_route ((match -> 'http' - >> 'path')) 
-    WHERE match ? 'http';
-
--- Note: Routes are addressed in API as anonymous GTS identifiers:
--- Example: gts.x.core.oagw.route.v1~550e8400-e29b-41d4-a716-446655440000
--- The UUID after ~ maps to this table's id column
-```
-
-#### Plugin Table
-
-```sql
-CREATE TABLE oagw_plugin
-(
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      UUID         NOT NULL REFERENCES tenant (id),
-
-    -- Human-readable name (unique per tenant)
-    name           VARCHAR(255) NOT NULL,
-    description    TEXT,
-
-    -- Plugin classification
-    plugin_type    VARCHAR(20)  NOT NULL CHECK (plugin_type IN ('auth', 'guard', 'transform')),
-
-    -- For transform plugins: which phases are supported
-    phases         TEXT[] DEFAULT '{}',
-    -- Example: ['on_request', 'on_response', 'on_error']
-
-    -- Configuration schema (JSON Schema)
-    config_schema  JSONB        NOT NULL,
-
-    -- Starlark source (required for custom plugins)
-    source_code    TEXT         NOT NULL,
-
-    -- Lifecycle management
-    enabled        BOOLEAN          DEFAULT TRUE,
-    last_used_at   TIMESTAMPTZ,
-    -- Updated when upstream/route references this plugin
-    -- NULL if never used
-
-    gc_eligible_at TIMESTAMPTZ,
-    -- Set to (NOW() + TTL) when plugin becomes unlinked
-    -- NULL if plugin is linked to any upstream/route
-    -- Background job deletes plugins where gc_eligible_at < NOW()
-
-    -- Metadata
-    created_at     TIMESTAMPTZ      DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ      DEFAULT NOW(),
-    created_by     UUID REFERENCES principal (id),
-    updated_by     UUID REFERENCES principal (id),
-
-    -- Constraints
-    CONSTRAINT uq_plugin_tenant_name UNIQUE (tenant_id, name)
-);
-
--- Indexes
-CREATE INDEX idx_plugin_tenant ON oagw_plugin (tenant_id);
-CREATE INDEX idx_plugin_type ON oagw_plugin (plugin_type);
-CREATE INDEX idx_plugin_enabled ON oagw_plugin (tenant_id, enabled) WHERE enabled = TRUE;
-CREATE INDEX idx_plugin_gc ON oagw_plugin (gc_eligible_at) WHERE gc_eligible_at IS NOT NULL;
-
--- Note: Plugins are addressed in API as anonymous GTS identifiers:
--- Example: gts.x.core.oagw.guard_plugin.v1~550e8400-e29b-41d4-a716-446655440000
--- The UUID after ~ maps to this table's id column
-```
-
-### Common Queries
-
-#### Find Upstream by Alias (with tenant hierarchy and enabled inheritance)
-
-```sql
--- Find first matching upstream walking tenant hierarchy from child to root
--- Returns upstream even if disabled (calling code must check enabled field and reject with 503)
--- Respects ancestor disable: if ancestor disabled this alias, descendant cannot enable it
--- $1: alias, $2: tenant_hierarchy array [child_id, parent_id, ..., root_id]
-
-WITH upstream_chain AS (SELECT u.*, array_position($2, u.tenant_id) as pos
-                        FROM oagw_upstream u
-                        WHERE u.alias = $1
-                          AND u.tenant_id = ANY ($2))
-SELECT c.*
-FROM upstream_chain c
-WHERE NOT EXISTS (
-    -- Check if any ancestor (higher in hierarchy) has disabled this alias
-    SELECT 1
-    FROM upstream_chain ancestor
-    WHERE ancestor.pos > c.pos -- ancestor is higher in hierarchy (closer to root)
-      AND ancestor.enabled = FALSE)
-ORDER BY c.pos LIMIT 1;
-```
-
-**Clarification**: this query selects the routing winner only (closest alias match).
-Effective policy resolution must also evaluate ancestor rows for the same alias and apply any `sharing: enforce` constraints.
-
-#### List Upstreams for Tenant (with shadowing and enabled inheritance)
-
-```sql
--- Returns upstreams visible to tenant, respecting:
--- 1. Shadowing: closest tenant's upstream wins
--- 2. Enabled inheritance: if any ancestor disabled the upstream, it's not visible
--- 3. Disabled upstreams are included (operators can see/manage disabled resources)
--- $1: tenant_hierarchy array, $2: limit, $3: offset
-
-WITH ranked_upstreams AS (SELECT u.*,
-                                 array_position($1, u.tenant_id)         as pos,
-                                 -- Check if any ancestor has disabled this alias
-                                 EXISTS (SELECT 1
-                                         FROM oagw_upstream ancestor
-                                         WHERE ancestor.alias = u.alias
-                                           AND ancestor.tenant_id = ANY ($1)
-                                           AND array_position($1, ancestor.tenant_id) > array_position($1, u.tenant_id)
-                                           AND ancestor.enabled = FALSE) as ancestor_disabled
-                          FROM oagw_upstream u
-                          WHERE u.tenant_id = ANY ($1))
-SELECT DISTINCT
-ON (alias) *
-FROM ranked_upstreams
-WHERE ancestor_disabled = FALSE
-ORDER BY alias, pos
-    LIMIT $2
-OFFSET $3;
-```
-
-**Clarification**: list/discovery returns the visible winner per alias.
-Ancestor `sharing: enforce` constraints can still affect runtime effective configuration.
-For tags, effective discovery should use additive union across hierarchy (`ancestor ∪ descendant`) rather than mutating ancestor rows.
-
-#### Find Matching Route for Request
-
-```sql
--- Match route by upstream, HTTP method, and path prefix
--- $1: upstream_id, $2: method (e.g., 'POST'), $3: request path
-SELECT *
-FROM oagw_route
-WHERE upstream_id = $1
-          AND enabled = TRUE
-          AND match - > 'http' - > 'methods'
-    ? $2
-  AND $3 LIKE (match -
-    >'http'->>'path' || '%')
-ORDER BY
-    priority DESC,
-    length (match ->'http'->>'path') DESC -- Longest path wins
-    LIMIT 1;
-```
-
-#### Resolve Effective Configuration
-
-```sql
--- Fetch upstream and route config for merge resolution
--- $1: upstream_id, $2: route_id
-SELECT u.auth       as upstream_auth,
-       u.rate_limit as upstream_rate_limit,
-       u.plugins    as upstream_plugins,
-       u.headers    as upstream_headers,
-       r.rate_limit as route_rate_limit,
-       r.plugins    as route_plugins,
-       u.tenant_id  as upstream_tenant_id,
-       r.tenant_id  as route_tenant_id
-FROM oagw_upstream u
-         JOIN oagw_route r ON r.upstream_id = u.id
-WHERE u.id = $1
-  AND r.id = $2;
-```
-
-#### List Routes by Upstream
-
-```sql
--- $1: upstream_id, $2: limit, $3: offset
-SELECT *
-FROM oagw_route
-WHERE upstream_id = $1
-  AND enabled = TRUE
-ORDER BY priority DESC, created_at
-    LIMIT $2
-OFFSET $3;
-```
-
-#### Track Plugin Usage
-
-```sql
--- Find all plugins referenced by upstreams and routes
--- Used to update last_used_at and gc_eligible_at
-WITH referenced_plugins AS (SELECT DISTINCT jsonb_array_elements_text(plugins - > 'items') as plugin_ref
-                            FROM oagw_upstream
-                            WHERE plugins IS NOT NULL
-
-                            UNION
-
-                            SELECT DISTINCT jsonb_array_elements_text(plugins - > 'items') as plugin_ref
-                            FROM oagw_route
-                            WHERE plugins IS NOT NULL),
-     plugin_uuids AS (SELECT substring(plugin_ref from '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}') ::UUID as plugin_id
-                      FROM referenced_plugins
-                      WHERE plugin_ref ~ '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-    )
--- Update linked plugins (clear gc_eligible_at, update last_used_at)
-UPDATE oagw_plugin
-SET gc_eligible_at = NULL,
-    last_used_at   = NOW()
-WHERE id IN (SELECT plugin_id FROM plugin_uuids);
-
--- Mark unlinked plugins for garbage collection
--- $1: TTL in seconds (default: 2592000 = 30 days)
-UPDATE oagw_plugin
-SET gc_eligible_at = NOW() + ($1 || ' seconds')::INTERVAL
-WHERE id NOT IN (SELECT plugin_id FROM plugin_uuids WHERE plugin_id IS NOT NULL)
-  AND gc_eligible_at IS NULL;
-```
-
-#### Delete Garbage-Collected Plugins
-
-```sql
--- Background job: delete plugins past their GC eligibility date
-DELETE
-FROM oagw_plugin
-WHERE gc_eligible_at IS NOT NULL
-  AND gc_eligible_at < NOW();
-```
+The OAGW database schema and query patterns are defined in [ADR: OAGW Storage Schema — Cross-Database Design](./docs/adr-storage-schema.md).
 
 ## Metrics and Observability
 
@@ -3069,10 +2751,10 @@ Structured JSON logs sent to stdout, ingested by centralized logging system (e.g
 
 #### [ ] F-P0-002: DB Schema + SeaORM Entities (Upstream, Route)
 
-- Add migrations for `oagw_upstream` and `oagw_route` tables (tenant-scoped, UUID PKs, `enabled`, tags, JSONB config columns).
+- Add migrations for `oagw_upstream` and `oagw_route` tables (tenant-scoped, UUID PKs, `enabled`, tags, JSONB config columns), plus route match tables (`oagw_route_http_match`, `oagw_route_grpc_match`) and `oagw_route_method`.
 - Implement SeaORM entities with `#[derive(Scopable)]` and `SecureConn`-scoped repositories (no raw SQL; SQL in DESIGN is illustrative).
 - Enforce constraints/indexes needed for MVP: `UNIQUE (tenant_id, alias)`, indexes for `(tenant_id, enabled)` and route `(upstream_id, priority)`.
-- Include minimal query helpers: find upstream by alias, list upstreams, find route by (upstream_id, method, path prefix).
+- Include minimal query helpers: find upstream by alias, list upstreams, find HTTP route by (upstream_id, method, longest path prefix).
 
 #### [ ] F-P0-003: Types Registry Registration (Schemas + Builtins)
 
@@ -3090,7 +2772,7 @@ Structured JSON logs sent to stdout, ingested by centralized logging system (e.g
 
 #### [ ] F-P0-005: Management API - Route CRUD (HTTP Only)
 
-- Implement `/api/oagw/v1/routes` CRUD for HTTP match rules: methods allowlist, path prefix, query allowlist, `path_suffix_mode`, priority (requires F-P0-002).
+- Implement `/api/oagw/v1/routes` CRUD for HTTP match rules: methods allowlist (`oagw_route_method`), path prefix (`oagw_route_http_match.path_prefix`), query allowlist, `path_suffix_mode`, priority (requires F-P0-002).
 - Enforce upstream ownership link (`route.upstream_id` must belong to same tenant in MVP mode).
 - Validate route invariants: non-empty methods, path starts with `/`, priority integer ordering semantics.
 - Add minimal list pagination (`$top`/`$skip` only; full OData in p3).
