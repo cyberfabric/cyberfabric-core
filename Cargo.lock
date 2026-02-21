@@ -1023,6 +1023,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "cf-credstore"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "cf-credstore-sdk",
+ "cf-modkit",
+ "cf-modkit-macros",
+ "cf-modkit-security",
+ "cf-tenant-resolver-sdk",
+ "cf-types-registry-sdk",
+ "inventory",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "cf-credstore-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "cf-modkit",
+ "cf-modkit-security",
+ "gts",
+ "gts-macros",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "cf-file-parser"
 version = "0.1.3"
 dependencies = [
@@ -3489,6 +3528,7 @@ dependencies = [
  "cf-api-gateway",
  "cf-authn-resolver",
  "cf-authz-resolver",
+ "cf-credstore",
  "cf-file-parser",
  "cf-grpc-hub",
  "cf-modkit",

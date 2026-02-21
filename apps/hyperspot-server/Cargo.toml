@@ -47,6 +47,7 @@ static-authz-plugin = { package = "cf-static-authz-plugin", path = "../../module
 file_parser = { package = "cf-file-parser", path = "../../modules/file-parser" }
 nodes_registry = { package = "cf-nodes-registry", path = "../../modules/system/nodes-registry/nodes-registry" }
 simple_user_settings = { package = "cf-simple-user-settings", path = "../../modules/simple-user-settings/simple-user-settings" }
+credstore = { package = "cf-credstore", path = "../../modules/credstore/credstore" }
 
 anyhow = { workspace = true }
 tokio = { workspace = true }
